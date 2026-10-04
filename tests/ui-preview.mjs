@@ -9,6 +9,32 @@ const browser = await chromium.launch({
 });
 try {
   const page = await browser.newPage();
+  if (!process.env.TEST_ALLOW_UNCONFIGURED) {
+    let failures = 0;
+    await page.route("**/api/receivers", (route) => {
+      if (failures++ === 0)
+        return route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: '{"error":"Temporary failure"}',
+        });
+      return route.continue();
+    });
+    await page.goto(process.env.TEST_APP_URL || "http://localhost:8787");
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Повторяем подключение" })
+      .waitFor();
+    await page
+      .locator("#receiver option")
+      .nth(2)
+      .waitFor({ state: "attached" });
+    await page.getByRole("alert").waitFor({ state: "hidden" });
+    await page.unroute("**/api/receivers");
+    console.log(
+      "PASS catalog recovers from temporary HTTP failure without reload",
+    );
+  }
   for (const [name, width, height] of [
     ["desktop", 1440, 1000],
     ["mobile", 390, 844],

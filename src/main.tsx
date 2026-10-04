@@ -201,40 +201,71 @@ function App() {
     ...passband(mode, filterWidth),
   };
   useEffect(() => {
+    let disposed = false,
+      attempt = 0;
+    let catalogTimer: ReturnType<typeof setTimeout> | undefined;
+    let request: AbortController | undefined;
+    const catalogError =
+      "Каталог серверов временно недоступен. Повторяем подключение…";
+    async function loadCatalog() {
+      if (!gatewayConfigured || disposed) return;
+      clearTimeout(catalogTimer);
+      request?.abort();
+      const controller = new AbortController();
+      request = controller;
+      try {
+        const response = await fetch(gateway.http + "/api/receivers", {
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(20000),
+          ]),
+        });
+        if (
+          !response.ok ||
+          !response.headers.get("content-type")?.includes("application/json")
+        )
+          throw Error("Gateway API unavailable");
+        const rows: Receiver[] = await response.json();
+        if (!Array.isArray(rows)) throw Error("Invalid receiver catalog");
+        if (disposed || controller.signal.aborted) return;
+        attempt = 0;
+        setReceivers(rows);
+        if (rows.length && !rows.some((r) => r.id === receiverRef.current)) {
+          receiverRef.current = rows[0].id;
+          setReceiver(rows[0].id);
+        }
+        setError((current) => (current === catalogError ? "" : current));
+      } catch {
+        if (disposed || controller.signal.aborted) return;
+        setError(catalogError);
+        catalogTimer = setTimeout(
+          () => void loadCatalog(),
+          Math.min(30000, 2000 * 2 ** Math.min(attempt++, 4)),
+        );
+      }
+    }
     if (!gatewayConfigured)
       setError(
         "Приёмник временно недоступен: администратор ещё не подключил шлюз.",
       );
-    else
-      fetch(gateway.http + "/api/receivers", {
-        signal: AbortSignal.timeout(20000),
-      })
-        .then((r) => {
-          if (
-            !r.ok ||
-            !r.headers.get("content-type")?.includes("application/json")
-          )
-            throw Error("Gateway API unavailable");
-          return r.json();
-        })
-        .then((rows: Receiver[]) => {
-          if (!Array.isArray(rows)) throw Error("Invalid receiver catalog");
-          setReceivers(rows);
-          if (rows.length && !rows.some((r) => r.id === receiver))
-            setReceiver(rows[0].id);
-        })
-        .catch(() => setError("Шлюз недоступен"));
+    else void loadCatalog();
     const t = setInterval(() => {
       setCounts({ ...stats.current });
       setClock(Date.now());
     }, 500);
     const online = () => {
       setOffline(!navigator.onLine);
-      if (navigator.onLine) manager.current?.reconnectNow();
+      if (navigator.onLine) {
+        void loadCatalog();
+        manager.current?.reconnectNow();
+      }
     };
     window.addEventListener("online", online);
     window.addEventListener("offline", online);
     return () => {
+      disposed = true;
+      clearTimeout(catalogTimer);
+      request?.abort();
       clearInterval(t);
       window.removeEventListener("online", online);
       window.removeEventListener("offline", online);
