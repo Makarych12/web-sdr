@@ -32,6 +32,7 @@ type Gesture = {
 export function useSpectrumGesture(options: Options) {
   const latest = useRef(options);
   latest.current = options;
+  const lastWheel = useRef(0);
   const points = useRef(new Map<number, number>()),
     gesture = useRef<Gesture | null>(null);
   const position = (g: Gesture, x: number) =>
@@ -56,8 +57,9 @@ export function useSpectrumGesture(options: Options) {
       };
     }
     if (points.current.size === 2 && gesture.current) {
-      const g = gesture.current,
-        [a, b] = [...points.current.values()];
+      const g = gesture.current;
+      g.view = { ...latest.current.view };
+      const [a, b] = [...points.current.values()];
       g.pinched = true;
       g.pinch = {
         distance: Math.max(1, Math.abs(b - a)),
@@ -67,6 +69,31 @@ export function useSpectrumGesture(options: Options) {
       };
     }
   }
+  const pending = useRef<{
+    frequency?: number;
+    center: number;
+    zoom?: number;
+  } | null>(null);
+  const frame = useRef(0);
+  function flush() {
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
+    const p = pending.current;
+    pending.current = null;
+    if (!p) return;
+    if (p.frequency !== undefined) latest.current.onTune(p.frequency, p.center);
+    else latest.current.onView(p.center, p.zoom!);
+  }
+  function queue(value: { frequency?: number; center: number; zoom?: number }) {
+    pending.current = value;
+    if (!frame.current) frame.current = requestAnimationFrame(flush);
+  }
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
   function move(e: PointerEvent<HTMLElement>) {
     if (!points.current.has(e.pointerId) || !gesture.current) return;
     points.current.set(e.pointerId, e.clientX);
@@ -86,29 +113,31 @@ export function useSpectrumGesture(options: Options) {
       );
       const span = p.span / 2 ** (zoom - p.zoom),
         fraction = ((a + b) / 2 - g.left) / g.width;
-      latest.current.onView(p.anchor - (fraction - 0.5) * span, zoom);
+      queue({ center: p.anchor - (fraction - 0.5) * span, zoom });
       return;
     }
     if (Math.abs(e.clientX - g.startX) > 5) g.moved = true;
     if (!g.moved) return;
     if (g.mode === "pan")
-      latest.current.onView(
-        g.view.start +
+      queue({
+        center:
+          g.view.start +
           g.view.span / 2 -
           ((e.clientX - g.startX) / g.width) * g.view.span,
-        g.zoom,
-      );
+        zoom: g.zoom,
+      });
     else
-      latest.current.onTune(
-        position(g, e.clientX),
-        g.view.start + g.view.span / 2,
-      );
+      queue({
+        frequency: position(g, e.clientX),
+        center: g.view.start + g.view.span / 2,
+      });
   }
   function end(e: PointerEvent<HTMLElement>, cancelled = false) {
     const g = gesture.current;
     if (!points.current.has(e.pointerId) || !g) return;
     points.current.delete(e.pointerId);
     if (!points.current.size) {
+      flush();
       if (!cancelled && !g.pinched) {
         if (!g.moved || g.mode === "tune")
           latest.current.onTune(
@@ -128,6 +157,8 @@ export function useSpectrumGesture(options: Options) {
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
       const o = latest.current;
+      if (!e.shiftKey && performance.now() - lastWheel.current < 80) return;
+      lastWheel.current = performance.now();
       if (e.shiftKey) {
         o.onView(
           o.view.start +

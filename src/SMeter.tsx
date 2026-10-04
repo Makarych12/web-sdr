@@ -12,7 +12,7 @@ export function SMeter({ rssi }: { rssi: number | null }) {
       const v = target.current;
       if (v === null) {
         level.current = peak.current = -127;
-        setDisplay({ level: -127, peak: -127 });
+        setDisplay((previous) => previous.level === -127 && previous.peak === -127 ? previous : { level: -127, peak: -127 });
         return;
       }
       level.current += (v - level.current) * (v > level.current ? 0.7 : 0.12);

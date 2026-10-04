@@ -25,10 +25,7 @@ try {
       .getByRole("alert")
       .filter({ hasText: "Повторяем подключение" })
       .waitFor();
-    await page
-      .locator("#receiver option")
-      .nth(2)
-      .waitFor({ state: "attached" });
+    await page.waitForFunction(() => +document.querySelector(".receiver-choice")?.dataset.count > 2);
     await page.getByRole("alert").waitFor({ state: "hidden" });
     await page.unroute("**/api/receivers");
     console.log(
@@ -44,10 +41,7 @@ try {
     await page.setViewportSize({ width, height });
     await page.goto(process.env.TEST_APP_URL || "http://localhost:8787");
     if (!process.env.TEST_ALLOW_UNCONFIGURED)
-      await page
-        .locator("#receiver option")
-        .nth(2)
-        .waitFor({ state: "attached" });
+      await page.waitForFunction(() => +document.querySelector(".receiver-choice")?.dataset.count > 2);
     else {
       await page.locator(".digital-frequency").waitFor();
       assert.ok(await page.locator(".hero-cta").isDisabled());
@@ -85,7 +79,7 @@ try {
       "location",
     );
     await page.getByRole("link", { name: "О проекте", exact: true }).click();
-    await page.waitForTimeout(700);
+    await page.waitForFunction(() => document.querySelector('nav a[href="#about"]')?.getAttribute("aria-current") === "location");
     assert.equal(
       await page
         .getByRole("link", { name: "О проекте", exact: true })

@@ -18,13 +18,13 @@ class FakeSocket {
   }
   close() {
     this.readyState = 3;
-    this.onclose?.({});
+    this.onclose?.({ code: 1006, reason: "test disconnect", wasClean: false });
   }
   message(v: any) {
     this.onmessage?.({ data: JSON.stringify(v) });
   }
 }
-function setup() {
+function setup(onUnavailable?: (code: string) => boolean) {
   const sockets: FakeSocket[] = [],
     states: any[] = [];
   let config = {
@@ -37,6 +37,7 @@ function setup() {
   };
   const c = new StreamConnection({
     url: "ws://localhost/ws",
+    onUnavailable,
     random: () => 0.5,
     getConfig: () => config,
     onMessage: () => {},
@@ -96,5 +97,81 @@ test("server switch opens one new session with updated receiver", (t) => {
   sockets[1].open();
   assert.equal(sockets[0].readyState, 3);
   assert.equal(JSON.parse(sockets[1].sent[0]).receiver, "areg");
+  c.stop();
+});
+
+test("unavailable Kiwi switches receiver while preserving the current tune", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+  let change: (v: any) => void;
+  const codes: string[] = [];
+  const { c, sockets, states, setConfig } = setup((code) => {
+    codes.push(code);
+    change({
+      receiver: "areg",
+      frequency: 7074,
+      mode: "USB",
+      zoom: 7,
+      lowCut: 300,
+      highCut: 2100,
+    });
+    return true;
+  });
+  change = setConfig;
+  c.start();
+  sockets[0].open();
+  sockets[0].message({
+    type: "error",
+    code: "badp",
+    retryable: false,
+    message: "Kiwi unavailable",
+  });
+  assert.deepEqual(codes, []);
+  t.mock.timers.tick(1000);
+  sockets[1].open();
+  assert.equal(JSON.parse(sockets[1].sent[0]).receiver, "france");
+  sockets[1].message({
+    type: "error",
+    code: "badp",
+    retryable: false,
+    message: "Kiwi unavailable",
+  });
+  assert.deepEqual(codes, ["badp"]);
+  assert.equal(c.desired, true);
+  assert.equal(states.at(-1).phase, "retrying");
+  t.mock.timers.tick(2000);
+  sockets[2].open();
+  assert.equal(JSON.parse(sockets[2].sent[0]).receiver, "areg");
+  assert.equal(JSON.parse(sockets[2].sent[0]).highCut, 2100);
+  c.stop();
+});
+
+test("gateway disconnect and stream timeout retry the same Kiwi without failover", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+  let changes = 0;
+  const { c, sockets } = setup(() => {
+    changes++;
+    return true;
+  });
+  c.start();
+  sockets[0].open();
+  sockets[0].close();
+  t.mock.timers.tick(1000);
+  sockets[1].open();
+  assert.equal(JSON.parse(sockets[1].sent[0]).receiver, "france");
+  t.mock.timers.tick(23000);
+  assert.equal(changes, 0);
+  c.stop();
+});
+test("application heartbeat is acknowledged without resetting the stream", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+  const { c, sockets } = setup();
+  c.start();
+  sockets[0].open();
+  sockets[0].message({ type: "heartbeat", at: 123 });
+  assert.deepEqual(JSON.parse(sockets[0].sent.at(-1)!), {
+    type: "heartbeat_ack",
+    at: 123,
+  });
+  assert.equal(sockets.length, 1);
   c.stop();
 });

@@ -6,7 +6,36 @@
   "headers": [
     {
       "source": "/sw.js",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/gateway.js": {
+      "maxDuration": 300,
+      "includeFiles": "server/*.json"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/ws",
+      "destination": "/api/gateway"
+    },
+    {
+      "source": "/api/receivers",
+      "destination": "/api/gateway"
+    },
+    {
+      "source": "/api/catalog",
+      "destination": "/api/gateway"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/gateway"
     }
   ]
 }

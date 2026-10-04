@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import "./brand.css";
 import "./console.css";
-import { Antenna, Landing, BandSelector } from "./Landing";
+import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
 import { VfoDial } from "./VfoDial";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
@@ -14,6 +14,14 @@ import {
   type KiwiEvent,
 } from "./connection";
 import { useSpectrumGesture } from "./useSpectrumGesture";
+import { SpectrumRenderer } from "./spectrumRenderer";
+import {
+  viewFor,
+  sameView,
+  matchesRequest,
+  frequencyLabel,
+} from "./spectrumView";
+import { DirectKiwiSocket } from "./directKiwi";
 import { SMeter } from "./SMeter";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
 type SavedFrequency = {
@@ -61,7 +69,7 @@ function App() {
       // Keep the requested visible anchor selected at the bottom of the page.
       if (
         window.scrollY + window.innerHeight >=
-        document.documentElement.scrollHeight - 4
+        document.documentElement.scrollHeight - 48
       ) {
         const target = location.hash.slice(1);
         const bounds = document.getElementById(target)?.getBoundingClientRect();
@@ -97,7 +105,7 @@ function App() {
   );
   const [receiver, setReceiver] = useStoredState(
     "wave.receiver",
-    "france",
+    "niendorf",
     (v): v is string => typeof v === "string",
   );
   const [receivers, setReceivers] = useState<Receiver[]>([]),
@@ -169,6 +177,15 @@ function App() {
   const manager = useRef<StreamConnection | null>(null);
   const receiverRef = useRef(receiver);
   receiverRef.current = receiver;
+  const availableReceivers = useRef(receivers);
+  availableReceivers.current = receivers;
+  const failedReceivers = useRef(new Set<string>());
+  const [receiverChange, setReceiverChange] = useState("");
+  const [viewPending, setViewPending] = useState(false);
+  const renderer = useRef<SpectrumRenderer | null>(null);
+  const sourceView = useRef<View>({ start: 9765.625, span: 468.75 });
+  const requestedView = useRef<View | null>(null);
+  const signal = useRef<number | null>(null);
   const callbacks = useRef<{
     message: (v: KiwiEvent | Uint8Array) => void;
     state: (v: ConnectionState) => void;
@@ -200,6 +217,17 @@ function App() {
     agc,
     ...passband(mode, filterWidth),
   };
+  useEffect(() => {
+    renderer.current = new SpectrumRenderer(
+      spectrum.current!,
+      waterfall.current!,
+      viewRef.current,
+    );
+    return () => {
+      renderer.current?.dispose();
+      renderer.current = null;
+    };
+  }, []);
   useEffect(() => {
     let disposed = false,
       attempt = 0;
@@ -250,9 +278,14 @@ function App() {
       );
     else void loadCatalog();
     const t = setInterval(() => {
-      setCounts({ ...stats.current });
-      setClock(Date.now());
-    }, 500);
+      setCounts((old) =>
+        old.audio === stats.current.audio && old.wf === stats.current.wf
+          ? old
+          : { ...stats.current },
+      );
+      setRssi(signal.current);
+      if (manager.current?.desired) setClock(Date.now());
+    }, 1000);
     const online = () => {
       setOffline(!navigator.onLine);
       if (navigator.onLine) {
@@ -289,12 +322,17 @@ function App() {
     center = f,
   ) {
     f = Math.round(Math.max(0, Math.min(30000, f)) * 1000) / 1000;
+    const nextView = viewFor(center, z, viewRef.current.bandwidth ?? 30000);
+    center = nextView.start + nextView.span / 2;
+    requestedView.current = nextView;
+    setViewPending(wanted);
+    displayView(nextView);
     setViewCenter(center);
     setFrequency(f);
     setDraft(String(Number(f.toFixed(3))));
     setMode(m);
     setZoom(z);
-    setWidths((prev) => ({ ...prev, [m]: width }));
+    setWidths((prev) => (prev[m] === width ? prev : { ...prev, [m]: width }));
     settings.current = {
       frequency: f,
       mode: m,
@@ -306,43 +344,15 @@ function App() {
     manager.current?.tune();
   }
 
-  function draw(bytes: Uint8Array) {
-    const s = spectrum.current,
-      w = waterfall.current;
-    if (!s || !w) return;
-    const sc = s.getContext("2d")!,
-      wc = w.getContext("2d")!;
-    wc.drawImage(w, 0, 0, w.width, w.height - 1, 0, 1, w.width, w.height - 1);
-    const row = wc.createImageData(w.width, 1);
-    sc.clearRect(0, 0, s.width, s.height);
-    sc.strokeStyle = "#4ee3c2";
-    sc.lineWidth = 1.5;
-    sc.beginPath();
-    for (let x = 0; x < w.width; x++) {
-      const value =
-        bytes[
-          Math.min(bytes.length - 1, Math.floor((x / w.width) * bytes.length))
-        ];
-      const db = value - 255 + calibration.current;
-      const t = Math.max(0, Math.min(1, (db + 115) / 90));
-      row.data.set(
-        [
-          Math.round(8 + Math.max(0, t - 0.45) * 400),
-          Math.round(18 + t * 200),
-          Math.round(40 + Math.sin(t * Math.PI) * 170),
-          255,
-        ],
-        x * 4,
-      );
-      const y = s.height * (1 - t);
-      if (x === 0) sc.moveTo(x, y);
-      else sc.lineTo(x, y);
-    }
-    wc.putImageData(row, 0, 0);
-    sc.stroke();
+  function displayView(next: View) {
+    if (sameView(viewRef.current, next)) return;
+    viewRef.current = next;
+    renderer.current?.setView(next);
+    setView(next);
   }
   callbacks.current.state = (v) => {
     setWanted(manager.current?.desired ?? false);
+    if (v.phase === "idle" && context.current?.state === "running") void context.current.suspend();
     setConnected(v.phase === "live");
     setStatus(v.message);
     setRetryAt(v.retryAt);
@@ -363,7 +373,7 @@ function App() {
         stats.current.audio++;
       } else if (v[0] === 2) {
         stats.current.wf++;
-        draw(v.subarray(1));
+        renderer.current?.append(v.subarray(1), sourceView.current);
       }
       return;
     }
@@ -371,30 +381,41 @@ function App() {
       rate.current = v.sampleRate;
       player.current?.port.postMessage({ rate: v.sampleRate });
     }
-    if (v.type === "limits" && typeof v.maxZoom === "number")
-      setMaxZoom(Math.max(0, Math.min(14, v.maxZoom)));
-    if (v.type === "signal" && typeof v.rssi === "number") setRssi(v.rssi);
-    if (v.type === "calibration" && typeof v.value === "number")
+    if (v.type === "limits" && typeof v.maxZoom === "number") {
+      const limit = Math.max(0, Math.min(14, v.maxZoom));
+      setMaxZoom(limit);
+      if (settings.current.zoom > limit) changeView(settings.current.viewCenter, limit);
+    }
+    if (v.type === "signal" && typeof v.rssi === "number")
+      signal.current = v.rssi;
+    if (v.type === "calibration" && typeof v.value === "number") {
       calibration.current = v.value;
+      renderer.current?.setCalibration(v.value);
+    }
     if (
       v.type === "view" &&
       typeof v.start === "number" &&
       typeof v.span === "number"
     ) {
-      const changed =
-        Math.abs(viewRef.current.start - v.start) > 0.001 ||
-        Math.abs(viewRef.current.span - v.span) > 0.001;
-      if (changed) {
-        waterfall.current?.getContext("2d")?.clearRect(0, 0, 1024, 420);
-        spectrum.current?.getContext("2d")?.clearRect(0, 0, 1024, 160);
-      }
-      viewRef.current = {
+      const incoming = {
         start: v.start,
         span: v.span,
         bandwidth: typeof v.bandwidth === "number" ? v.bandwidth : 30000,
-        zoom: typeof v.zoom === "number" ? v.zoom : zoom,
+        zoom: typeof v.zoom === "number" ? v.zoom : settings.current.zoom,
       };
-      setView(viewRef.current);
+      sourceView.current = incoming;
+      if (requestedView.current && requestedView.current.bandwidth !== incoming.bandwidth) {
+        requestedView.current = viewFor(settings.current.viewCenter, settings.current.zoom, incoming.bandwidth);
+        displayView(requestedView.current);
+      }
+      if (
+        requestedView.current &&
+        !matchesRequest(incoming, requestedView.current)
+      )
+        return;
+      requestedView.current = null;
+      setViewPending(false);
+      displayView(incoming);
     }
   };
   if (!manager.current)
@@ -403,13 +424,62 @@ function App() {
       getConfig: () => ({ receiver: receiverRef.current, ...settings.current }),
       onState: (v) => callbacks.current.state(v),
       onMessage: (v) => callbacks.current.message(v),
+      socketFactory: (url) => {
+        const receiver = availableReceivers.current.find(
+          (r) => r.id === receiverRef.current,
+        );
+        return receiver?.directUrl
+          ? (new DirectKiwiSocket(receiver.directUrl) as unknown as WebSocket)
+          : new WebSocket(url);
+      },
+      onDiagnostic: (event) => {
+        console.info("WebSDR lifecycle", {
+          ...event,
+          at: new Date().toISOString(),
+        });
+      },
+      onUnavailable: (_code, reason) => {
+        failedReceivers.current.add(receiverRef.current);
+        if (failedReceivers.current.size >= 6) return false;
+        const frequency = settings.current.frequency;
+        const next = availableReceivers.current
+          .filter(
+            (r) =>
+              !failedReceivers.current.has(r.id) &&
+              r.apiAvailable &&
+              (r.maxUsers ?? 0) > (r.users ?? 0) &&
+              frequency >= (r.minFrequency ?? 0) &&
+              frequency <= (r.maxFrequency ?? 30000),
+          )
+          .sort(
+            (a, b) =>
+              Number(!!b.directUrl) - Number(!!a.directUrl) ||
+              (b.snr ?? 0) - (a.snr ?? 0),
+          )[0];
+        if (!next) return false;
+        const previous = availableReceivers.current.find(
+          (r) => r.id === receiverRef.current,
+        );
+        setReceiverChange(
+          `${previous?.name || receiverRef.current}: ${reason} После повторного подключения выбран ${next.name}.`,
+        );
+        renderer.current?.clear();
+        receiverRef.current = next.id;
+        setReceiver(next.id);
+        return true;
+      },
       onReset: () => {
         player.current?.port.postMessage({ reset: true });
+        signal.current = null;
         setRssi(null);
       },
     });
   const chooseReceiver = useCallback(
     (id: string) => {
+      failedReceivers.current.clear();
+      setReceiverChange("Приёмник выбран вручную");
+      renderer.current?.clear();
+      requestedView.current = null;
       receiverRef.current = id;
       setReceiver(id);
       setError("");
@@ -429,6 +499,7 @@ function App() {
     try {
       if (!context.current || context.current.state === "closed") {
         context.current = new AudioContext();
+        void context.current.resume();
         await context.current.audioWorklet.addModule("/audio-worklet.js");
         player.current = new AudioWorkletNode(context.current, "pcm-player");
         gain.current = context.current.createGain();
@@ -443,7 +514,8 @@ function App() {
       setAudioPaused(false);
       stats.current = { audio: 0, wf: 0 };
       setCounts({ ...stats.current });
-      waterfall.current?.getContext("2d")?.clearRect(0, 0, 1024, 420);
+      renderer.current?.clear();
+      failedReceivers.current.clear();
       manager.current!.start();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -466,6 +538,10 @@ function App() {
     setViewCenter(center);
     setZoom(z);
     settings.current = { ...settings.current, zoom: z, viewCenter: center };
+    const next = viewFor(center, z, bandwidth);
+    requestedView.current = next;
+    setViewPending(wanted);
+    displayView(next);
     manager.current?.tune();
   }
   const gestureOptions = {
@@ -597,6 +673,18 @@ function App() {
             {wanted ? "■ Отключиться" : "▶ Слушать эфир"}
           </button>
         </section>
+        <div className="receiver-status" role="status">
+          <strong>
+            {receivers.find((r) => r.id === receiver)?.name || receiver}
+          </strong>
+          <span>
+            {connected ? "Играет" : wanted ? "Подключение" : "Выбран"} ·{" "}
+            {receivers.find((r) => r.id === receiver)?.directUrl
+              ? "Прямой WSS Kiwi"
+              : "Через шлюз · восстановление каждые 5 минут"}
+          </span>
+          {receiverChange && <small>{receiverChange}</small>}
+        </div>
         {wanted && retryAt && (
           <div className="reconnect-banner" role="status">
             <span>
@@ -777,7 +865,9 @@ function App() {
               >
                 −
               </button>
-              <span>ZOOM {zoom}</span>
+              <span>
+                ZOOM {view.zoom ?? zoom} · ×{2 ** (view.zoom ?? zoom)}
+              </span>
               <button
                 aria-label="Увеличить масштаб"
                 onClick={() =>
@@ -787,6 +877,42 @@ function App() {
                 +
               </button>
             </div>
+          </div>
+          <div className="view-readout" aria-live="off">
+            <output>
+              {frequencyLabel(view.start, view.span)} —{" "}
+              {frequencyLabel(view.start + view.span, view.span)}
+            </output>
+            <span>
+              {viewPending ? "Ожидаем диапазон Kiwi…" : "Диапазон Kiwi"} ·
+              полоса {view.span.toFixed(3)} kHz
+            </span>
+          </div>
+          <div className="view-sliders">
+            <label>
+              Масштаб{" "}
+              <input
+                type="range"
+                aria-label="Масштаб waterfall"
+                min="0"
+                max={maxZoom}
+                step="1"
+                value={zoom}
+                onChange={(e) => changeView(viewCenter, Number(e.target.value))}
+              />
+            </label>
+            <label>
+              Центр · {viewCenter.toFixed(3)} kHz{" "}
+              <input
+                type="range"
+                aria-label="Центр waterfall"
+                min={view.span / 2}
+                max={(view.bandwidth ?? 30000) - view.span / 2}
+                step=".001"
+                value={viewCenter}
+                onChange={(e) => changeView(Number(e.target.value))}
+              />
+            </label>
           </div>
           <div className="gesture-toolbar">
             <div role="group" aria-label="Управление спектром">
@@ -854,7 +980,7 @@ function App() {
           >
             {Array.from({ length: 5 }, (_, i) => (
               <span key={i}>
-                {((view.start + (view.span * i) / 4) / 1000).toFixed(3)} MHz
+                {frequencyLabel(view.start + (view.span * i) / 4, view.span)}
               </span>
             ))}
           </div>
@@ -983,20 +1109,7 @@ function App() {
           </section>
         </section>
         <section id="about" className="about-section panel">
-          <a
-            className="qsl-full"
-            href="/ur4mtn-qsl.jpg"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <img
-              src="/ur4mtn-qsl.jpg"
-              alt="Оригинальная QSL-карточка UR4MTN"
-              loading="lazy"
-              width="800"
-              height="533"
-            />
-          </a>
+          <QslCard full />
           <div>
             <span className="eyebrow">О ПРОЕКТЕ</span>
             <h2>UR4MTN WEB SDR</h2>

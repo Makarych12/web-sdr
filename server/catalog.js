@@ -4,7 +4,9 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 export const CATALOG_SOURCE = "http://rx.linkfanel.net/kiwisdr_com.js";
-const CACHE = new URL("../.cache/catalog.json", import.meta.url);
+const CACHE = process.env.VERCEL
+  ? new URL("file:///tmp/ur4mtn/catalog.json")
+  : new URL("../.cache/catalog.json", import.meta.url);
 // Only public addresses may be reached, including when a catalog host resolves again.
 export function isPublicAddress(address) {
   if (isIP(address) === 4) {
@@ -110,13 +112,19 @@ export class ReceiverCatalog {
   }
   async initialize() {
     try {
+      const seed = JSON.parse(await readFile(new URL("./catalog-seed.json", import.meta.url), "utf8"));
+      this.merge(seed.receivers.filter((r) => safeReceiverUrl(r.url)));
+      this.updatedAt = seed.updatedAt;
+    } catch {}
+    try {
       const cached = JSON.parse(await readFile(CACHE, "utf8"));
       if (Array.isArray(cached.receivers)) {
         this.merge(cached.receivers.filter((r) => safeReceiverUrl(r.url)));
         this.updatedAt = cached.updatedAt;
       }
     } catch {}
-    await this.refresh();
+    if (process.env.VERCEL) void this.refresh();
+    else await this.refresh();
   }
   refresh() {
     if (this.refreshing) return this.refreshing;
@@ -130,7 +138,7 @@ export class ReceiverCatalog {
         this.merge(rows);
         this.updatedAt = new Date().toISOString();
         this.stale = false;
-        await mkdir(new URL("../.cache/", import.meta.url), {
+        await mkdir(new URL("./", CACHE), {
           recursive: true,
         });
         await writeFile(
@@ -147,7 +155,7 @@ export class ReceiverCatalog {
     return this.refreshing;
   }
   list() {
-    return this.receivers.map(({ url, ...r }) => r);
+    return this.receivers.map(({ url, ...r }) => ({ ...r, ...(url.startsWith("https:") ? { directUrl: url } : {}) }));
   }
   find(id) {
     return this.receivers.find((r) => r.id === id);

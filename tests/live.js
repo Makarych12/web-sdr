@@ -108,6 +108,7 @@ socket.on("message", (raw, binary) => {
   try {
     if (!binary) {
       const v = JSON.parse(raw);
+      if (v.type === "heartbeat") socket.send(JSON.stringify({type:"heartbeat_ack",at:v.at}));
       if (v.type === "error") return finish(Error(v.message));
       if (v.type === "audio") rate = v.sampleRate;
       if (v.type === "view") view = v;

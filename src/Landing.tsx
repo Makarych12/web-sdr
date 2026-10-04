@@ -1,3 +1,4 @@
+import { useRef, type PointerEvent } from "react";
 import type { Mode } from "./radio";
 export function Antenna() {
   return (
@@ -8,6 +9,31 @@ export function Antenna() {
       <circle cx="24" cy="20" r="5" fill="currentColor" />
     </svg>
   );
+}
+export function QslCard({ full = false }: { full?: boolean }) {
+  const card = useRef<HTMLAnchorElement>(null);
+  function move(event: PointerEvent<HTMLAnchorElement>) {
+    if (event.pointerType !== "mouse" || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    const style = event.currentTarget.style;
+    style.setProperty("--rx", `${(0.5 - y) * 10}deg`);
+    style.setProperty("--ry", `${(x - 0.5) * 12}deg`);
+    style.setProperty("--light-x", `${x * 100}%`);
+    style.setProperty("--light-y", `${y * 100}%`);
+  }
+  function reset() {
+    card.current?.style.setProperty("--rx", "0deg");
+    card.current?.style.setProperty("--ry", "0deg");
+  }
+  return <a ref={card} className={`qsl-card ${full ? "qsl-full" : "qsl-preview"}`}
+    href={full ? "/ur4mtn-qsl.jpg" : "#about"}
+    target={full ? "_blank" : undefined} rel={full ? "noreferrer" : undefined}
+    onPointerMove={move} onPointerLeave={reset} onBlur={reset}>
+    <img src="/ur4mtn-qsl.jpg" alt="Оригинальная QSL-карточка UR4MTN" width="800" height="533" loading={full ? "lazy" : "eager"} />
+    <span className="qsl-caption">QSL · UR4MTN <b aria-hidden="true">↗</b></span>
+  </a>;
 }
 export function Landing({
   listen,
@@ -109,15 +135,7 @@ export function Landing({
           <span aria-hidden="true">↗</span>
         </button>
       </div>
-      <a className="qsl-preview" href="#about">
-        <img
-          src="/ur4mtn-qsl.jpg"
-          alt="QSL UR4MTN — оригинал"
-          width="800"
-          height="533"
-        />
-        <span>QSL · UR4MTN ↗</span>
-      </a>
+      <QslCard />
     </section>
   );
 }

@@ -1,5 +1,10 @@
 [
   {
+    "id": "niendorf",
+    "name": "Niendorf · Germany",
+    "url": "https://kwsdr.db0nas.de"
+  },
+  {
     "id": "france",
     "name": "Montmorillon · France",
     "url": "http://86.209.14.222:8073"

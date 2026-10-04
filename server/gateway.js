@@ -1,4 +1,5 @@
 import express from "express";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { WebSocketServer, WebSocket } from "ws";
@@ -43,8 +44,8 @@ app.get("/api/health", (_, res) =>
     ok: true,
     service: "ur4mtn-kiwi-gateway",
     transport: "websocket",
-    hosting: process.env.RENDER ? "render" : "node",
-    revision: process.env.RENDER_GIT_COMMIT || "local",
+    hosting: process.env.VERCEL ? "vercel" : "node",
+    revision: process.env.VERCEL_GIT_COMMIT_SHA || "local",
   }),
 );
 app.use(express.static("dist"));
@@ -52,7 +53,7 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
 server.on("upgrade", (req, socket, head) => {
   const path = new URL(req.url, "http://gateway").pathname;
   if (
-    !["/ws"].includes(path) ||
+    !["/ws", "/api/gateway"].includes(path) ||
     !originAllowed(req.headers.origin, req.headers.host)
   ) {
     socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
@@ -64,40 +65,76 @@ server.on("upgrade", (req, socket, head) => {
 });
 const heartbeat = setInterval(() => {
   for (const client of wss.clients) {
-    if (client.alive === false) {
-      client.terminate();
+    if (Date.now() - client.lastSeen > 75000) {
+      console.warn(
+        JSON.stringify({
+          event: "heartbeat_timeout",
+          connection: client.id,
+          silenceMs: Date.now() - client.lastSeen,
+          buffered: client.bufferedAmount,
+        }),
+      );
+      client.close(1011, "heartbeat_timeout");
       continue;
     }
-    client.alive = false;
-    client.ping();
+    if (client.readyState === WebSocket.OPEN) {
+      client.ping();
+      client.send(JSON.stringify({ type: "heartbeat", at: Date.now() }));
+    }
   }
-}, 30000);
+}, 25000);
 heartbeat.unref();
 wss.on("close", () => clearInterval(heartbeat));
-wss.on("connection", (client) => {
-  client.alive = true;
+wss.on("connection", async (client) => {
+  client.id = randomUUID();
+  client.openedAt = client.lastSeen = Date.now();
   client.on("pong", () => {
-    client.alive = true;
+    client.lastSeen = Date.now();
   });
+  console.info(
+    JSON.stringify({ event: "gateway_open", connection: client.id }),
+  );
   let session;
   const emit = (v) => {
+    if (v.type === "error")
+      console.warn(
+        JSON.stringify({
+          event: "upstream_error",
+          connection: client.id,
+          receiver: client.receiver,
+          seconds: (Date.now() - client.openedAt) / 1000,
+          ...v,
+        }),
+      );
     if (client.readyState === WebSocket.OPEN) {
       if (client.bufferedAmount > 1024 * 1024) {
         session?.close();
         client.close(1013, "Slow connection");
         return;
       }
-      client.send(Buffer.isBuffer(v) ? v : JSON.stringify(v));
+      client.send(v instanceof Uint8Array ? v : JSON.stringify(v));
     }
   };
-  client.on("message", (raw) => {
+  client.on("message", async (raw) => {
     try {
       const v = JSON.parse(raw);
+      client.lastSeen = Date.now();
+      if (v.type === "heartbeat_ack") return;
       if (v.type === "connect") {
+        await catalogReady;
+        if (client.readyState !== WebSocket.OPEN) return;
         const r = catalog.find(v.receiver);
         if (!r) throw Error("Неизвестный приёмник");
         validateTune(v);
         session?.close();
+        client.receiver = r.id;
+        console.info(
+          JSON.stringify({
+            event: "kiwi_connect",
+            connection: client.id,
+            receiver: r.id,
+          }),
+        );
         session = new KiwiSession(r.url, emit);
         session.start(v);
       } else if (v.type === "tune") {
@@ -116,7 +153,20 @@ wss.on("connection", (client) => {
       });
     }
   });
-  client.on("close", () => session?.close());
+  client.on("close", (code, reason) => {
+    console.info(
+      JSON.stringify({
+        event: "gateway_close",
+        connection: client.id,
+        receiver: client.receiver,
+        code,
+        reason: reason.toString(),
+        seconds: (Date.now() - client.openedAt) / 1000,
+        lastSeenAge: Date.now() - client.lastSeen,
+      }),
+    );
+    session?.close();
+  });
   client.on("error", () => session?.close());
 });
 export { app, server, wss };

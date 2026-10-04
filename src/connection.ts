@@ -20,6 +20,8 @@ type Options = {
   onState: (s: ConnectionState) => void;
   onMessage: (v: KiwiEvent | Uint8Array) => void;
   onReset: () => void;
+  onUnavailable?: (code: string, reason: string) => boolean;
+  onDiagnostic?: (event: Record<string, unknown>) => void;
   socketFactory?: (url: string) => WebSocket;
   random?: () => number;
   url: string;
@@ -29,6 +31,7 @@ export class StreamConnection {
   socket: WebSocket | null = null;
   private generation = 0;
   private attempts = 0;
+  private failures = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private watchdog: ReturnType<typeof setInterval> | undefined;
   private options: Options;
@@ -38,6 +41,7 @@ export class StreamConnection {
   start() {
     this.desired = true;
     this.attempts = 0;
+    this.failures = 0;
     this.connect();
   }
   stop() {
@@ -48,12 +52,14 @@ export class StreamConnection {
   switchReceiver() {
     if (this.desired) {
       this.attempts = 0;
+      this.failures = 0;
       this.connect();
     }
   }
   reconnectNow() {
     if (this.desired) {
       this.attempts = 0;
+      this.failures = 0;
       this.connect();
     }
   }
@@ -142,10 +148,34 @@ export class StreamConnection {
       try {
         if (typeof e.data === "string") {
           const v = JSON.parse(e.data) as KiwiEvent;
+          if (v.type === "heartbeat") {
+            socket.send(JSON.stringify({ type: "heartbeat_ack", at: v.at }));
+            return;
+          }
           if (v.type === "error") {
             const reason =
               typeof v.message === "string" ? v.message : "Ошибка приёмника";
-            if (v.retryable === false) {
+            this.failures++;
+            this.options.onDiagnostic?.({
+              type: "upstream_error",
+              receiver: this.options.getConfig().receiver,
+              code: v.code,
+              reason,
+              failures: this.failures,
+            });
+            const confirmedRefusal = ["badp", "too_busy", "down"].includes(
+              String(v.code),
+            );
+            const changedReceiver =
+              ((confirmedRefusal && this.failures >= 2) ||
+                (v.code === "connection" && this.failures >= 3)) &&
+              this.options.onUnavailable?.(String(v.code), reason);
+            if (changedReceiver) {
+              this.failures = 0;
+              this.retry(`${reason} Подключаем другой публичный узел…`);
+              return;
+            }
+            if (v.retryable === false && !confirmedRefusal) {
               this.desired = false;
               this.disposeSocket();
               this.options.onState({
@@ -176,8 +206,10 @@ export class StreamConnection {
               attempt: 0,
             });
           }
-          if (audio >= 5 && wf >= 5 && Date.now() - opened >= 5000)
+          if (audio >= 5 && wf >= 5 && Date.now() - opened >= 5000) {
             this.attempts = 0;
+            this.failures = 0;
+          }
         }
       } catch {
         this.retry("Ошибка данных от шлюза");
@@ -186,12 +218,34 @@ export class StreamConnection {
     socket.onerror = () => {
       if (current()) this.retry("Не удалось связаться со шлюзом");
     };
-    socket.onclose = () => {
-      if (current()) this.retry("Соединение прервано");
+    socket.onclose = (event) => {
+      if (!current()) return;
+      const age = Math.round((Date.now() - opened) / 1000);
+      this.options.onDiagnostic?.({
+        type: "transport_close",
+        receiver: this.options.getConfig().receiver,
+        code: event.code,
+        reason: event.reason,
+        clean: event.wasClean,
+        seconds: age,
+      });
+      this.retry(
+        `Соединение закрыто (${event.code}${event.reason ? ": " + event.reason : ""}). Восстанавливаем текущий Kiwi.`,
+      );
     };
     this.watchdog = setInterval(() => {
-      if (current() && Date.now() - Math.min(lastAudio, lastWaterfall) > 22000)
-        this.retry("Поток данных прерван");
+      if (
+        current() &&
+        Date.now() - Math.min(lastAudio, lastWaterfall) > 22000
+      ) {
+        this.options.onDiagnostic?.({
+          type: "stream_timeout",
+          receiver: this.options.getConfig().receiver,
+          audioAge: Date.now() - lastAudio,
+          waterfallAge: Date.now() - lastWaterfall,
+        });
+        this.retry("Нет данных потока. Восстанавливаем текущий Kiwi.");
+      }
     }, 1000);
   }
   private retry(reason: string, minDelay = 0) {

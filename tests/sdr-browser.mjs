@@ -51,6 +51,14 @@ await page.addInitScript(() => {
     return connect.apply(this, a);
   };
 });
+async function chooseReceiver(id) {
+  const rows = await (await page.request.get(new URL("/api/receivers", process.env.TEST_APP_URL || "https://web-sdr.vercel.app").href)).json();
+  const receiver = rows.find((r) => r.id === id);
+  assert.ok(receiver, `receiver ${id}`);
+  await page.getByRole("button", {name:"Приёмник", exact:true}).click();
+  await page.getByRole("textbox", {name:"Поиск приёмников"}).fill(receiver.name);
+  await page.locator(".catalog-item").first().click();
+}
 async function packets() {
   return page.evaluate(() => {
     const m = document
@@ -141,7 +149,7 @@ async function touchDrag(canvas, from, to) {
 try {
   await page.goto(process.env.TEST_APP_URL || "http://localhost:8787");
   await page.waitForFunction(
-    () => document.querySelectorAll("#receiver option").length > 20,
+    () => +document.querySelector(".receiver-choice")?.dataset.count > 20,
   );
   await page.getByRole("button", { name: /Все приёмники/ }).click();
   await page
@@ -403,11 +411,9 @@ try {
     "1800",
   );
   if (process.env.TEST_SECOND_RECEIVER) {
-    await page
-      .getByLabel("Приёмник", { exact: true })
-      .selectOption(process.env.TEST_SECOND_RECEIVER);
+    await chooseReceiver(process.env.TEST_SECOND_RECEIVER);
     await healthy("switch to another public KiwiSDR");
-    await page.getByLabel("Приёмник", { exact: true }).selectOption("france");
+    await chooseReceiver("france");
     await healthy("switch back to original KiwiSDR");
   }
   mkdirSync("artifacts", { recursive: true });

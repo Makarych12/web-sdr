@@ -3,7 +3,7 @@ const url = process.argv[2];
 let audio = 0,
   wf = 0;
 const s = new KiwiSession(url, (v) => {
-  if (Buffer.isBuffer(v)) {
+  if (v instanceof Uint8Array) {
     v[0] === 1 ? audio++ : wf++;
     if (audio > 3 && wf > 2) {
       console.log({ url, audio, wf });
