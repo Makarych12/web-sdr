@@ -1,0 +1,900 @@
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createRoot } from "react-dom/client";
+import "./style.css";
+import "./brand.css";
+import { Antenna, Landing } from "./Landing";
+import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
+import { useStoredState, stringList, finiteNumber } from "./storage";
+import {
+  StreamConnection,
+  type ConnectionState,
+  type KiwiEvent,
+} from "./connection";
+import { useSpectrumGesture } from "./useSpectrumGesture";
+import { SMeter } from "./SMeter";
+import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
+type SavedFrequency = {
+  id: string;
+  frequency: number;
+  mode: Mode;
+  width?: number;
+};
+const savedFrequencies = (v: unknown): v is SavedFrequency[] =>
+  Array.isArray(v) &&
+  v.length <= 1000 &&
+  v.every(
+    (x) =>
+      x &&
+      typeof x.id === "string" &&
+      Number.isFinite(x.frequency) &&
+      x.frequency >= 0 &&
+      x.frequency <= 30000 &&
+      ["AM", "USB", "LSB", "CW", "FM"].includes(x.mode) &&
+      (x.width === undefined ||
+        FILTER_WIDTHS[x.mode as Mode].includes(x.width)),
+  );
+type View = { start: number; span: number; bandwidth?: number; zoom?: number };
+function App() {
+  const [activeSection, setActiveSection] = useState("home");
+  useEffect(() => {
+    const update = () => {
+      const top =
+        (document.querySelector("header")?.getBoundingClientRect().height ??
+          84) + 80;
+      let active = "home";
+      for (const id of ["home", "listen", "favorites", "about"])
+        if (
+          (document.getElementById(id)?.getBoundingClientRect().top ??
+            Infinity) <= top
+        )
+          active = id;
+      // A short final section cannot always reach the sticky header.
+      // Keep the requested visible anchor selected at the bottom of the page.
+      if (
+        window.scrollY + window.innerHeight >=
+        document.documentElement.scrollHeight - 4
+      ) {
+        const target = location.hash.slice(1);
+        const bounds = document.getElementById(target)?.getBoundingClientRect();
+        if (
+          ["favorites", "about"].includes(target) &&
+          bounds &&
+          bounds.top < window.innerHeight &&
+          bounds.bottom > top
+        )
+          active = target;
+      }
+      setActiveSection(active);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    window.addEventListener("hashchange", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("hashchange", update);
+    };
+  }, []);
+  const [favoriteServers, setFavoriteServers] = useStoredState(
+    "wave.servers",
+    [],
+    stringList,
+  );
+  const [favoriteFrequencies, setFavoriteFrequencies] = useStoredState(
+    "wave.frequencies",
+    [],
+    savedFrequencies,
+  );
+  const [receiver, setReceiver] = useStoredState(
+    "wave.receiver",
+    "france",
+    (v): v is string => typeof v === "string",
+  );
+  const [receivers, setReceivers] = useState<Receiver[]>([]),
+    [frequency, setFrequency] = useState(10000),
+    [draft, setDraft] = useState("10000"),
+    [mode, setMode] = useState<Mode>("AM"),
+    [zoom, setZoom] = useState(6),
+    [viewCenter, setViewCenter] = useState(10000),
+    [maxZoom, setMaxZoom] = useState(14),
+    [gestureMode, setGestureMode] = useState<"tune" | "pan">("tune"),
+    [step, setStep] = useStoredState(
+      "wave.step",
+      1,
+      (v): v is number => finiteNumber(v) && [0.01, 0.1, 1, 5, 10].includes(v),
+    ),
+    [status, setStatus] = useState("Готов к эфиру"),
+    [connected, setConnected] = useState(false),
+    [wanted, setWanted] = useState(false),
+    [retryAt, setRetryAt] = useState<number | undefined>(),
+    [retryAttempt, setRetryAttempt] = useState(0),
+    [clock, setClock] = useState(Date.now()),
+    [audioPaused, setAudioPaused] = useState(false),
+    [preparing, setPreparing] = useState(false),
+    [error, setError] = useState(""),
+    [rssi, setRssi] = useState<number | null>(null),
+    [counts, setCounts] = useState({ audio: 0, wf: 0 }),
+    [view, setView] = useState<View>({ start: 9765.625, span: 468.75 }),
+    [offline, setOffline] = useState(!navigator.onLine);
+  const [volume, setVolume] = useStoredState(
+    "wave.volume",
+    0.7,
+    (v): v is number => finiteNumber(v) && v >= 0 && v <= 1,
+  );
+  const [muted, setMuted] = useStoredState(
+    "wave.muted",
+    false,
+    (v): v is boolean => typeof v === "boolean",
+  );
+  const [widths, setWidths] = useStoredState(
+    "wave.filters",
+    DEFAULT_WIDTHS,
+    (v): v is Record<Mode, number> =>
+      !!v &&
+      typeof v === "object" &&
+      Object.keys(DEFAULT_WIDTHS).every((m) =>
+        FILTER_WIDTHS[m as Mode].includes(
+          (v as Record<Mode, number>)[m as Mode],
+        ),
+      ),
+  );
+  const filterWidth = widths[mode];
+  const favoriteServer = useCallback(
+    (id: string) => {
+      setFavoriteServers((list) =>
+        list.includes(id) ? list.filter((v) => v !== id) : [...list, id],
+      );
+    },
+    [setFavoriteServers],
+  );
+  function favoriteFrequency() {
+    const id = `${frequency}-${mode}`;
+    setFavoriteFrequencies((list) =>
+      list.some((v) => v.id === id)
+        ? list.filter((v) => v.id !== id)
+        : [...list, { id, frequency, mode, width: filterWidth }],
+    );
+  }
+  const manager = useRef<StreamConnection | null>(null);
+  const receiverRef = useRef(receiver);
+  receiverRef.current = receiver;
+  const callbacks = useRef<{
+    message: (v: KiwiEvent | Uint8Array) => void;
+    state: (v: ConnectionState) => void;
+  }>({ message: () => {}, state: () => {} });
+  const context = useRef<AudioContext | null>(null),
+    player = useRef<AudioWorkletNode | null>(null),
+    gain = useRef<GainNode | null>(null),
+    spectrum = useRef<HTMLCanvasElement>(null),
+    waterfall = useRef<HTMLCanvasElement>(null),
+    settings = useRef({
+      frequency,
+      mode,
+      zoom,
+      viewCenter,
+      ...passband(mode, filterWidth),
+    }),
+    stats = useRef({ audio: 0, wf: 0 }),
+    initializing = useRef(false),
+    rate = useRef(12000),
+    viewRef = useRef(view),
+    calibration = useRef(-13);
+  settings.current = {
+    frequency,
+    mode,
+    zoom,
+    viewCenter,
+    ...passband(mode, filterWidth),
+  };
+  useEffect(() => {
+    fetch("/api/receivers")
+      .then((r) => r.json())
+      .then((rows: Receiver[]) => {
+        setReceivers(rows);
+        if (rows.length && !rows.some((r) => r.id === receiver))
+          setReceiver(rows[0].id);
+      })
+      .catch(() => setError("Шлюз недоступен"));
+    const t = setInterval(() => {
+      setCounts({ ...stats.current });
+      setClock(Date.now());
+    }, 500);
+    const online = () => {
+      setOffline(!navigator.onLine);
+      if (navigator.onLine) manager.current?.reconnectNow();
+    };
+    window.addEventListener("online", online);
+    window.addEventListener("offline", online);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", online);
+      manager.current?.stop();
+      void context.current?.close();
+    };
+  }, []);
+  useEffect(() => {
+    if (gain.current)
+      gain.current.gain.setTargetAtTime(
+        muted ? 0 : volume,
+        context.current!.currentTime,
+        0.025,
+      );
+  }, [volume, muted]);
+  function tune(
+    f = frequency,
+    m = mode,
+    z = zoom,
+    width = widths[m],
+    center = f,
+  ) {
+    f = Math.round(Math.max(0, Math.min(30000, f)) * 1000) / 1000;
+    setViewCenter(center);
+    setFrequency(f);
+    setDraft(String(Number(f.toFixed(3))));
+    setMode(m);
+    setZoom(z);
+    setWidths((prev) => ({ ...prev, [m]: width }));
+    settings.current = {
+      frequency: f,
+      mode: m,
+      zoom: z,
+      viewCenter: center,
+      ...passband(m, width),
+    };
+    manager.current?.tune();
+  }
+
+  function draw(bytes: Uint8Array) {
+    const s = spectrum.current,
+      w = waterfall.current;
+    if (!s || !w) return;
+    const sc = s.getContext("2d")!,
+      wc = w.getContext("2d")!;
+    wc.drawImage(w, 0, 0, w.width, w.height - 1, 0, 1, w.width, w.height - 1);
+    const row = wc.createImageData(w.width, 1);
+    sc.clearRect(0, 0, s.width, s.height);
+    sc.strokeStyle = "#4ee3c2";
+    sc.lineWidth = 1.5;
+    sc.beginPath();
+    for (let x = 0; x < w.width; x++) {
+      const value =
+        bytes[
+          Math.min(bytes.length - 1, Math.floor((x / w.width) * bytes.length))
+        ];
+      const db = value - 255 + calibration.current;
+      const t = Math.max(0, Math.min(1, (db + 115) / 90));
+      row.data.set(
+        [
+          Math.round(8 + Math.max(0, t - 0.45) * 400),
+          Math.round(18 + t * 200),
+          Math.round(40 + Math.sin(t * Math.PI) * 170),
+          255,
+        ],
+        x * 4,
+      );
+      const y = s.height * (1 - t);
+      if (x === 0) sc.moveTo(x, y);
+      else sc.lineTo(x, y);
+    }
+    wc.putImageData(row, 0, 0);
+    sc.stroke();
+  }
+  callbacks.current.state = (v) => {
+    setWanted(manager.current?.desired ?? false);
+    setConnected(v.phase === "live");
+    setStatus(v.message);
+    setRetryAt(v.retryAt);
+    setRetryAttempt(v.attempt);
+    if (v.phase === "retrying" || v.phase === "blocked") setError(v.message);
+    else if (v.phase === "live") setError("");
+  };
+  callbacks.current.message = (v) => {
+    if (v instanceof Uint8Array) {
+      if (v[0] === 1) {
+        const dv = new DataView(v.buffer, v.byteOffset, v.byteLength);
+        const samples = new Float32Array((v.length - 1) / 2);
+        for (let i = 0; i < samples.length; i++)
+          samples[i] = dv.getInt16(1 + i * 2, false) / 32768;
+        player.current?.port.postMessage({ samples, rate: rate.current }, [
+          samples.buffer,
+        ]);
+        stats.current.audio++;
+      } else if (v[0] === 2) {
+        stats.current.wf++;
+        draw(v.subarray(1));
+      }
+      return;
+    }
+    if (v.type === "audio" && typeof v.sampleRate === "number") {
+      rate.current = v.sampleRate;
+      player.current?.port.postMessage({ rate: v.sampleRate });
+    }
+    if (v.type === "limits" && typeof v.maxZoom === "number")
+      setMaxZoom(Math.max(0, Math.min(14, v.maxZoom)));
+    if (v.type === "signal" && typeof v.rssi === "number") setRssi(v.rssi);
+    if (v.type === "calibration" && typeof v.value === "number")
+      calibration.current = v.value;
+    if (
+      v.type === "view" &&
+      typeof v.start === "number" &&
+      typeof v.span === "number"
+    ) {
+      const changed =
+        Math.abs(viewRef.current.start - v.start) > 0.001 ||
+        Math.abs(viewRef.current.span - v.span) > 0.001;
+      if (changed) {
+        waterfall.current?.getContext("2d")?.clearRect(0, 0, 1024, 420);
+        spectrum.current?.getContext("2d")?.clearRect(0, 0, 1024, 160);
+      }
+      viewRef.current = {
+        start: v.start,
+        span: v.span,
+        bandwidth: typeof v.bandwidth === "number" ? v.bandwidth : 30000,
+        zoom: typeof v.zoom === "number" ? v.zoom : zoom,
+      };
+      setView(viewRef.current);
+    }
+  };
+  if (!manager.current)
+    manager.current = new StreamConnection({
+      url: `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`,
+      getConfig: () => ({ receiver: receiverRef.current, ...settings.current }),
+      onState: (v) => callbacks.current.state(v),
+      onMessage: (v) => callbacks.current.message(v),
+      onReset: () => {
+        player.current?.port.postMessage({ reset: true });
+        setRssi(null);
+      },
+    });
+  const chooseReceiver = useCallback(
+    (id: string) => {
+      receiverRef.current = id;
+      setReceiver(id);
+      setError("");
+      manager.current?.switchReceiver();
+    },
+    [setReceiver],
+  );
+  async function connect() {
+    if (initializing.current) return;
+    if (manager.current?.desired) {
+      manager.current.stop();
+      return;
+    }
+    initializing.current = true;
+    setPreparing(true);
+    setError("");
+    try {
+      if (!context.current || context.current.state === "closed") {
+        context.current = new AudioContext();
+        await context.current.audioWorklet.addModule("/audio-worklet.js");
+        player.current = new AudioWorkletNode(context.current, "pcm-player");
+        gain.current = context.current.createGain();
+        gain.current.gain.value = muted ? 0 : volume;
+        player.current
+          .connect(gain.current)
+          .connect(context.current.destination);
+        context.current.onstatechange = () =>
+          setAudioPaused(context.current?.state !== "running");
+      }
+      await context.current.resume();
+      setAudioPaused(false);
+      stats.current = { audio: 0, wf: 0 };
+      setCounts({ ...stats.current });
+      waterfall.current?.getContext("2d")?.clearRect(0, 0, 1024, 420);
+      manager.current!.start();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("Не удалось включить звук");
+      manager.current?.stop();
+      if (!player.current) {
+        await context.current?.close();
+        context.current = null;
+      }
+    } finally {
+      initializing.current = false;
+      setPreparing(false);
+    }
+  }
+  function changeView(center: number, z = zoom) {
+    const bandwidth = viewRef.current.bandwidth ?? 30000;
+    z = Math.max(0, Math.min(maxZoom, z));
+    const span = bandwidth / 2 ** z;
+    center = Math.max(span / 2, Math.min(bandwidth - span / 2, center));
+    setViewCenter(center);
+    setZoom(z);
+    settings.current = { ...settings.current, zoom: z, viewCenter: center };
+    manager.current?.tune();
+  }
+  const gestureOptions = {
+    view,
+    zoom: view.zoom ?? zoom,
+    maxZoom,
+    mode: gestureMode,
+    step,
+    frequency,
+    onTune: (f: number, center: number) =>
+      tune(f, mode, zoom, filterWidth, center),
+    onView: changeView,
+    onEnd: () => manager.current?.flushTune(),
+  };
+  const spectrumGesture = useSpectrumGesture({
+    canvas: spectrum,
+    ...gestureOptions,
+  });
+  const waterfallGesture = useSpectrumGesture({
+    canvas: waterfall,
+    ...gestureOptions,
+  });
+  const marker = Math.max(
+    0,
+    Math.min(100, ((frequency - view.start) / view.span) * 100),
+  );
+  return (
+    <div className={"app" + (wanted ? " playing" : "")}>
+      <header className="site-header">
+        <a className="brand" href="#home" aria-label="UR4MTN WEB SDR — главная">
+          <Antenna />
+          <span>
+            UR4MTN<small>WEB SDR</small>
+          </span>
+        </a>
+        <nav aria-label="Главное меню">
+          <a
+            href="#home"
+            aria-current={activeSection === "home" ? "location" : undefined}
+          >
+            Главная
+          </a>
+          <a
+            href="#listen"
+            aria-current={activeSection === "listen" ? "location" : undefined}
+          >
+            Слушать
+          </a>
+          <button
+            onClick={() =>
+              document
+                .querySelector<HTMLButtonElement>(".catalog-open")
+                ?.click()
+            }
+          >
+            Серверы
+          </button>
+          <a
+            href="#favorites"
+            aria-current={
+              activeSection === "favorites" ? "location" : undefined
+            }
+          >
+            Избранное
+          </a>
+          <a
+            href="#about"
+            aria-current={activeSection === "about" ? "location" : undefined}
+          >
+            О проекте
+          </a>
+        </nav>
+        <div className="header-right" role="status">
+          <span className={"dot " + (connected ? "live" : "")} />
+          {offline
+            ? "Нет сети"
+            : retryAt
+              ? "Переподключение…"
+              : error && !wanted
+                ? "Ошибка"
+                : status}
+        </div>
+      </header>
+      <main>
+        <Landing
+          disabled={offline || preparing}
+          listen={() => {
+            if (!wanted) void connect();
+            document
+              .getElementById("listen")
+              ?.scrollIntoView({ behavior: "smooth" });
+          }}
+          tune={(f, m) => {
+            tune(f, m);
+            document
+              .getElementById("listen")
+              ?.scrollIntoView({ behavior: "smooth" });
+          }}
+        />
+        <div id="listen" className="section-heading">
+          <div>
+            <span className="eyebrow">UR4MTN · LIVE RECEIVER</span>
+            <h2>Слушать эфир</h2>
+          </div>
+          <p>Выберите приёмник и найдите свою частоту.</p>
+        </div>
+        <section className="receiver panel">
+          <ReceiverPicker
+            receivers={receivers}
+            selected={receiver}
+            favorites={favoriteServers}
+            choose={chooseReceiver}
+            favorite={favoriteServer}
+            disabled={preparing}
+          />
+          <button
+            className={"connect " + (wanted ? "stop" : "")}
+            onClick={() => void connect()}
+            disabled={(!wanted && offline) || preparing}
+          >
+            {" "}
+            {wanted ? "■ Отключиться" : "▶ Слушать эфир"}
+          </button>
+        </section>
+        {wanted && retryAt && (
+          <div className="reconnect-banner" role="status">
+            <span>
+              Переподключение через{" "}
+              {Math.max(0, Math.ceil((retryAt - clock) / 1000))} с · попытка{" "}
+              {retryAttempt}
+            </span>
+            <button onClick={() => manager.current?.reconnectNow()}>
+              Повторить сейчас
+            </button>
+          </div>
+        )}
+        {wanted && audioPaused && (
+          <div className="reconnect-banner">
+            <span>Браузер приостановил звук</span>
+            <button onClick={() => void context.current?.resume()}>
+              Возобновить звук
+            </button>
+          </div>
+        )}
+        {error && (
+          <div role="alert" className="error">
+            {error}
+          </div>
+        )}
+        <section className="tuner panel">
+          <div className="frequency">
+            <label htmlFor="frequency">ЧАСТОТА</label>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = Number(draft);
+                if (draft.trim() && Number.isFinite(f) && f >= 0 && f <= 30000)
+                  tune(f);
+                else setError("Введите частоту от 0 до 30000 кГц");
+              }}
+            >
+              <input
+                id="frequency"
+                aria-label="Частота кГц"
+                inputMode="decimal"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value.replace(",", "."))}
+              />
+              <span>kHz</span>
+              <button title="Настроить" aria-label="Настроить">
+                ↵
+              </button>
+            </form>
+            <div className="steps">
+              <label className="step-select">
+                Шаг{" "}
+                <select
+                  aria-label="Шаг настройки"
+                  value={step}
+                  onChange={(e) => setStep(Number(e.target.value))}
+                >
+                  {[0.01, 0.1, 1, 5, 10].map((s) => (
+                    <option key={s} value={s}>
+                      {s < 1 ? `${s * 1000} Hz` : `${s} kHz`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                aria-label="Избранная частота"
+                aria-pressed={favoriteFrequencies.some(
+                  (v) => v.id === `${frequency}-${mode}`,
+                )}
+                onClick={favoriteFrequency}
+              >
+                {favoriteFrequencies.some(
+                  (v) => v.id === `${frequency}-${mode}`,
+                )
+                  ? "★ Сохранено"
+                  : "☆ Сохранить"}
+              </button>
+              <button onClick={() => tune(frequency - step)}>
+                − {step} kHz
+              </button>
+              <button onClick={() => tune(frequency + step)}>
+                + {step} kHz
+              </button>
+            </div>
+          </div>
+          <div className="mode">
+            <label>ДЕМОДУЛЯЦИЯ</label>
+            <div className="modes">
+              {(["AM", "USB", "LSB", "CW", "FM"] as Mode[]).map((m) => (
+                <button
+                  key={m}
+                  className={mode === m ? "selected" : ""}
+                  onClick={() => tune(frequency, m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <div className="filter-control">
+              <label htmlFor="filter-width">Полоса фильтра</label>
+              <select
+                id="filter-width"
+                value={filterWidth}
+                onChange={(e) =>
+                  tune(frequency, mode, zoom, Number(e.target.value))
+                }
+              >
+                {FILTER_WIDTHS[mode].map((w) => (
+                  <option value={w} key={w}>
+                    {w >= 1000 ? `${w / 1000} kHz` : `${w} Hz`}
+                  </option>
+                ))}
+              </select>
+              <small>
+                {passband(mode, filterWidth).lowCut}…
+                {passband(mode, filterWidth).highCut} Hz
+              </small>
+            </div>
+            <small>
+              {mode === "FM"
+                ? "Узкополосная FM в диапазоне HF"
+                : "Демодуляция выполняется на KiwiSDR"}
+            </small>
+          </div>
+          <SMeter rssi={rssi} />
+        </section>
+        <section
+          className="visual panel"
+          data-start={view.start}
+          data-span={view.span}
+          data-zoom={view.zoom ?? zoom}
+        >
+          <div className="visual-head">
+            <div>
+              <span className={"dot " + (connected ? "live" : "")} /> SPECTRUM{" "}
+              <span className="subtle">/ WATERFALL</span>
+            </div>
+            <div className="zoom">
+              <button
+                aria-label="Уменьшить масштаб"
+                onClick={() => changeView(viewCenter, Math.max(0, zoom - 1))}
+              >
+                −
+              </button>
+              <span>ZOOM {zoom}</span>
+              <button
+                aria-label="Увеличить масштаб"
+                onClick={() =>
+                  changeView(viewCenter, Math.min(maxZoom, zoom + 1))
+                }
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div className="gesture-toolbar">
+            <div role="group" aria-label="Управление спектром">
+              <button
+                aria-pressed={gestureMode === "tune"}
+                onClick={() => setGestureMode("tune")}
+              >
+                ☝ Настройка
+              </button>
+              <button
+                aria-pressed={gestureMode === "pan"}
+                onClick={() => setGestureMode("pan")}
+              >
+                ↔ Панорама
+              </button>
+            </div>
+            <button onClick={() => changeView(frequency, zoom)}>
+              К частоте
+            </button>
+            <button
+              aria-label="Панорама влево"
+              onClick={() => changeView(viewCenter - view.span * 0.3)}
+            >
+              ←
+            </button>
+            <button
+              aria-label="Панорама вправо"
+              onClick={() => changeView(viewCenter + view.span * 0.3)}
+            >
+              →
+            </button>
+          </div>
+          <div className="scope">
+            <canvas
+              ref={spectrum}
+              width={1024}
+              height={160}
+              {...spectrumGesture}
+              tabIndex={0}
+              aria-label="Спектр: касание и перетаскивание для настройки"
+            />
+            {frequency >= view.start && frequency <= view.start + view.span && (
+              <>
+                <div
+                  className="passband"
+                  style={{
+                    left: `${Math.max(0, ((frequency + passband(mode, filterWidth).lowCut / 1000 - view.start) / view.span) * 100)}%`,
+                    width: `${(filterWidth / 1000 / view.span) * 100}%`,
+                  }}
+                />
+                <div className="marker" style={{ left: `${marker}%` }} />
+              </>
+            )}
+          </div>
+          <div className="axis">
+            {Array.from({ length: 5 }, (_, i) => (
+              <span key={i}>
+                {((view.start + (view.span * i) / 4) / 1000).toFixed(3)} MHz
+              </span>
+            ))}
+          </div>
+          <div className="fall">
+            <canvas
+              ref={waterfall}
+              width={1024}
+              height={420}
+              {...waterfallGesture}
+              tabIndex={0}
+              aria-label="Waterfall: касание и перетаскивание для настройки"
+            />
+            {counts.wf === 0 && (
+              <div className="empty">
+                <span>≋</span>
+                <strong>
+                  {wanted
+                    ? "Ожидаем данные приёмника"
+                    : "Эфир начинается здесь"}
+                </strong>
+                <small>Включите приёмник, чтобы увидеть спектр</small>
+              </div>
+            )}
+          </div>
+          <div className="visual-foot">
+            <span>Касание — частота · два пальца — масштаб</span>
+            <span>
+              −115 <i /> −25 dBm
+            </span>
+          </div>
+        </section>
+        <section className="bottom">
+          <div className="volume panel">
+            <button
+              aria-label={muted ? "Включить звук" : "Выключить звук"}
+              onClick={() => setMuted(!muted)}
+            >
+              {muted ? "◌" : "◖))"}
+            </button>
+            <label htmlFor="volume">Громкость</label>
+            <input
+              id="volume"
+              type="range"
+              min="0"
+              max="1"
+              step=".01"
+              value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+            />
+            <span>{muted ? "MUTE" : Math.round(volume * 100) + "%"}</span>
+          </div>
+          <div className="presets panel">
+            <label>БЫСТРАЯ НАСТРОЙКА</label>
+            {[
+              [4625, "USB"],
+              [7074, "USB"],
+              [10000, "AM"],
+              [14200, "USB"],
+            ].map(([f, m]) => (
+              <button key={f} onClick={() => tune(Number(f), m as Mode)}>
+                {Number(f) / 1000} <small>MHz</small>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section id="favorites" className="favorites-section">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">ВАША КОЛЛЕКЦИЯ</span>
+              <h2>Избранное</h2>
+            </div>
+            <p>Серверы и частоты сохраняются на этом устройстве.</p>
+          </div>
+          <div className="favorite-servers panel">
+            <label>ИЗБРАННЫЕ СЕРВЕРЫ</label>
+            <div>
+              {receivers
+                .filter((r) => favoriteServers.includes(r.id))
+                .map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      chooseReceiver(r.id);
+                      document
+                        .getElementById("listen")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    {r.name}
+                  </button>
+                ))}
+            </div>
+            {!favoriteServers.length && (
+              <p>Нажмите ☆ рядом с приёмником, чтобы сохранить сервер.</p>
+            )}
+          </div>
+          <section className="saved-frequencies panel">
+            <label>ИЗБРАННЫЕ ЧАСТОТЫ</label>
+            {!favoriteFrequencies.length && (
+              <p>Настройтесь на станцию и нажмите «☆ Сохранить».</p>
+            )}
+            <div>
+              {favoriteFrequencies.map((v) => (
+                <span key={v.id}>
+                  <button
+                    onClick={() =>
+                      tune(v.frequency, v.mode, zoom, v.width ?? widths[v.mode])
+                    }
+                  >
+                    {v.frequency} kHz · {v.mode}
+                  </button>
+                  <button
+                    aria-label={`Удалить частоту ${v.frequency}`}
+                    onClick={() =>
+                      setFavoriteFrequencies((list) =>
+                        list.filter((x) => x.id !== v.id),
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </section>
+        </section>
+        <section id="about" className="about-section panel">
+          <Antenna />
+          <div>
+            <span className="eyebrow">О ПРОЕКТЕ</span>
+            <h2>UR4MTN WEB SDR</h2>
+            <p>
+              Короткие волны объединяют мир. Слушайте публичные KiwiSDR,
+              исследуйте спектр и возвращайтесь к любимым станциям — на
+              телефоне, планшете или компьютере.
+            </p>
+            <p>
+              Установите приложение через меню браузера, чтобы открыть эфир с
+              главного экрана. Для приёма нужен интернет; звук включается
+              кнопкой «Слушать эфир».
+            </p>
+          </div>
+        </section>
+        <footer>
+          <span>UR4MTN WEB SDR / KiwiSDR</span>
+          <span>
+            {counts.audio} PCM · {counts.wf} WF · {Math.round(rate.current)} Hz
+          </span>
+        </footer>
+      </main>
+    </div>
+  );
+}
+createRoot(document.getElementById("root")!).render(<App />);
+if ("serviceWorker" in navigator && import.meta.env.PROD)
+  navigator.serviceWorker.register("/sw.js").catch(console.error);

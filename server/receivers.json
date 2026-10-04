@@ -1,0 +1,17 @@
+[
+  {
+    "id": "france",
+    "name": "Montmorillon · France",
+    "url": "http://86.209.14.222:8073"
+  },
+  {
+    "id": "areg",
+    "name": "VK5ARG · South Australia",
+    "url": "http://kiwisdr.areg.org.au:8073"
+  },
+  {
+    "id": "zl2p",
+    "name": "ZL2P · New Zealand",
+    "url": "http://zl2p-3.proxy.kiwisdr.com"
+  }
+]
