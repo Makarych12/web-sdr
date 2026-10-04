@@ -2,7 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import "./brand.css";
-import { Antenna, Landing } from "./Landing";
+import "./console.css";
+import { Antenna, Landing, BandSelector } from "./Landing";
+import { gateway, gatewayConfigured } from "./gateway";
+import { VfoDial } from "./VfoDial";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
 import { useStoredState, stringList, finiteNumber } from "./storage";
 import {
@@ -35,6 +38,12 @@ const savedFrequencies = (v: unknown): v is SavedFrequency[] =>
   );
 type View = { start: number; span: number; bandwidth?: number; zoom?: number };
 function App() {
+  const [agc, setAgc] = useStoredState<"fast" | "slow" | "off">(
+    "wave.agc",
+    "slow",
+    (v): v is "fast" | "slow" | "off" =>
+      ["fast", "slow", "off"].includes(String(v)),
+  );
   const [activeSection, setActiveSection] = useState("home");
   useEffect(() => {
     const update = () => {
@@ -102,7 +111,8 @@ function App() {
     [step, setStep] = useStoredState(
       "wave.step",
       1,
-      (v): v is number => finiteNumber(v) && [0.01, 0.1, 1, 5, 10].includes(v),
+      (v): v is number =>
+        finiteNumber(v) && [0.001, 0.01, 0.1, 1, 5, 10].includes(v),
     ),
     [status, setStatus] = useState("Готов к эфиру"),
     [connected, setConnected] = useState(false),
@@ -168,11 +178,13 @@ function App() {
     gain = useRef<GainNode | null>(null),
     spectrum = useRef<HTMLCanvasElement>(null),
     waterfall = useRef<HTMLCanvasElement>(null),
+    scale = useRef<HTMLDivElement>(null),
     settings = useRef({
       frequency,
       mode,
       zoom,
       viewCenter,
+      agc,
       ...passband(mode, filterWidth),
     }),
     stats = useRef({ audio: 0, wf: 0 }),
@@ -185,17 +197,33 @@ function App() {
     mode,
     zoom,
     viewCenter,
+    agc,
     ...passband(mode, filterWidth),
   };
   useEffect(() => {
-    fetch("/api/receivers")
-      .then((r) => r.json())
-      .then((rows: Receiver[]) => {
-        setReceivers(rows);
-        if (rows.length && !rows.some((r) => r.id === receiver))
-          setReceiver(rows[0].id);
+    if (!gatewayConfigured)
+      setError(
+        "Приёмник временно недоступен: администратор ещё не подключил шлюз.",
+      );
+    else
+      fetch(gateway.http + "/api/receivers", {
+        signal: AbortSignal.timeout(20000),
       })
-      .catch(() => setError("Шлюз недоступен"));
+        .then((r) => {
+          if (
+            !r.ok ||
+            !r.headers.get("content-type")?.includes("application/json")
+          )
+            throw Error("Gateway API unavailable");
+          return r.json();
+        })
+        .then((rows: Receiver[]) => {
+          if (!Array.isArray(rows)) throw Error("Invalid receiver catalog");
+          setReceivers(rows);
+          if (rows.length && !rows.some((r) => r.id === receiver))
+            setReceiver(rows[0].id);
+        })
+        .catch(() => setError("Шлюз недоступен"));
     const t = setInterval(() => {
       setCounts({ ...stats.current });
       setClock(Date.now());
@@ -241,6 +269,7 @@ function App() {
       mode: m,
       zoom: z,
       viewCenter: center,
+      agc,
       ...passband(m, width),
     };
     manager.current?.tune();
@@ -339,7 +368,7 @@ function App() {
   };
   if (!manager.current)
     manager.current = new StreamConnection({
-      url: `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`,
+      url: gateway.socket,
       getConfig: () => ({ receiver: receiverRef.current, ...settings.current }),
       onState: (v) => callbacks.current.state(v),
       onMessage: (v) => callbacks.current.message(v),
@@ -358,7 +387,7 @@ function App() {
     [setReceiver],
   );
   async function connect() {
-    if (initializing.current) return;
+    if (initializing.current || !gatewayConfigured) return;
     if (manager.current?.desired) {
       manager.current.stop();
       return;
@@ -424,6 +453,11 @@ function App() {
     canvas: spectrum,
     ...gestureOptions,
   });
+  const scaleGesture = useSpectrumGesture({
+    canvas: scale,
+    ...gestureOptions,
+    mode: "tune",
+  });
   const waterfallGesture = useSpectrumGesture({
     canvas: waterfall,
     ...gestureOptions,
@@ -486,20 +520,16 @@ function App() {
               ? "Переподключение…"
               : error && !wanted
                 ? "Ошибка"
-                : status}
+                : connected
+                  ? "ONLINE · В эфире"
+                  : status}
         </div>
       </header>
       <main>
         <Landing
-          disabled={offline || preparing}
+          disabled={offline || preparing || !gatewayConfigured}
           listen={() => {
             if (!wanted) void connect();
-            document
-              .getElementById("listen")
-              ?.scrollIntoView({ behavior: "smooth" });
-          }}
-          tune={(f, m) => {
-            tune(f, m);
             document
               .getElementById("listen")
               ?.scrollIntoView({ behavior: "smooth" });
@@ -524,7 +554,11 @@ function App() {
           <button
             className={"connect " + (wanted ? "stop" : "")}
             onClick={() => void connect()}
-            disabled={(!wanted && offline) || preparing}
+            disabled={
+              (!wanted &&
+                (offline || !gatewayConfigured || !receivers.length)) ||
+              preparing
+            }
           >
             {" "}
             {wanted ? "■ Отключиться" : "▶ Слушать эфир"}
@@ -555,9 +589,16 @@ function App() {
             {error}
           </div>
         )}
-        <section className="tuner panel">
+        <section className={"tuner panel" + (connected ? " receiving" : "")}>
           <div className="frequency">
-            <label htmlFor="frequency">ЧАСТОТА</label>
+            <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
+            <output
+              className="digital-frequency"
+              aria-label="Текущая частота Hz"
+            >
+              {Math.round(frequency * 1000).toLocaleString("de-DE")}
+              <small>Hz</small>
+            </output>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -587,9 +628,9 @@ function App() {
                   value={step}
                   onChange={(e) => setStep(Number(e.target.value))}
                 >
-                  {[0.01, 0.1, 1, 5, 10].map((s) => (
+                  {[0.001, 0.01, 0.1, 1, 5, 10].map((s) => (
                     <option key={s} value={s}>
-                      {s < 1 ? `${s * 1000} Hz` : `${s} kHz`}
+                      {`${s * 1000} Hz`}
                     </option>
                   ))}
                 </select>
@@ -607,14 +648,26 @@ function App() {
                   ? "★ Сохранено"
                   : "☆ Сохранить"}
               </button>
-              <button onClick={() => tune(frequency - step)}>
-                − {step} kHz
+              <button
+                aria-label="Шаг частоты вниз"
+                onClick={() => tune(frequency - step)}
+              >
+                − {step * 1000} Hz
               </button>
-              <button onClick={() => tune(frequency + step)}>
-                + {step} kHz
+              <button
+                aria-label="Шаг частоты вверх"
+                onClick={() => tune(frequency + step)}
+              >
+                + {step * 1000} Hz
               </button>
             </div>
           </div>
+          <VfoDial
+            frequency={frequency}
+            step={step}
+            onTune={(f) => tune(f)}
+            onEnd={() => manager.current?.flushTune()}
+          />
           <div className="mode">
             <label>ДЕМОДУЛЯЦИЯ</label>
             <div className="modes">
@@ -647,6 +700,23 @@ function App() {
                 {passband(mode, filterWidth).lowCut}…
                 {passband(mode, filterWidth).highCut} Hz
               </small>
+            </div>
+            <div className="agc-control">
+              <label htmlFor="agc">AGC</label>
+              <select
+                id="agc"
+                value={agc}
+                onChange={(e) => {
+                  const value = e.target.value as typeof agc;
+                  setAgc(value);
+                  settings.current = { ...settings.current, agc: value };
+                  manager.current?.tune();
+                }}
+              >
+                <option value="slow">Медленная</option>
+                <option value="fast">Быстрая</option>
+                <option value="off">Выкл. · Gain 50</option>
+              </select>
             </div>
             <small>
               {mode === "FM"
@@ -738,7 +808,17 @@ function App() {
               </>
             )}
           </div>
-          <div className="axis">
+          <div
+            ref={scale}
+            className="axis frequency-scale"
+            role="slider"
+            tabIndex={0}
+            aria-label="Шкала частоты: перетащите для настройки"
+            aria-valuemin={0}
+            aria-valuemax={30000000}
+            aria-valuenow={Math.round(frequency * 1000)}
+            {...scaleGesture}
+          >
             {Array.from({ length: 5 }, (_, i) => (
               <span key={i}>
                 {((view.start + (view.span * i) / 4) / 1000).toFixed(3)} MHz
@@ -773,6 +853,7 @@ function App() {
             </span>
           </div>
         </section>
+        <BandSelector tune={(f, m) => tune(f, m)} />
         <section className="bottom">
           <div className="volume panel">
             <button
@@ -869,7 +950,20 @@ function App() {
           </section>
         </section>
         <section id="about" className="about-section panel">
-          <Antenna />
+          <a
+            className="qsl-full"
+            href="/ur4mtn-qsl.jpg"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <img
+              src="/ur4mtn-qsl.jpg"
+              alt="Оригинальная QSL-карточка UR4MTN"
+              loading="lazy"
+              width="800"
+              height="533"
+            />
+          </a>
           <div>
             <span className="eyebrow">О ПРОЕКТЕ</span>
             <h2>UR4MTN WEB SDR</h2>

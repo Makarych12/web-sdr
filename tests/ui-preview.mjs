@@ -16,17 +16,31 @@ try {
     ["tablet", 820, 1180],
   ]) {
     await page.setViewportSize({ width, height });
-    await page.goto("http://localhost:8787");
-    await page
-      .locator("#receiver option")
-      .nth(2)
-      .waitFor({ state: "attached" });
+    await page.goto(process.env.TEST_APP_URL || "http://localhost:8787");
+    if (!process.env.TEST_ALLOW_UNCONFIGURED)
+      await page
+        .locator("#receiver option")
+        .nth(2)
+        .waitFor({ state: "attached" });
+    else {
+      await page.locator(".digital-frequency").waitFor();
+      assert.ok(await page.locator(".hero-cta").isDisabled());
+      await page
+        .getByRole("alert")
+        .filter({ hasText: "ещё не подключил шлюз" })
+        .waitFor();
+    }
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
       ),
       false,
       name + " overflow",
+    );
+    await page.waitForTimeout(600);
+    assert.ok(
+      (await page.locator(".digital-frequency").boundingBox()).y < height,
+      name + " frequency visible without scrolling",
     );
     await page.screenshot({ path: `artifacts/ur4mtn-${name}-home.png` });
     await page.getByRole("link", { name: "Слушать", exact: true }).click();

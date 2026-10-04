@@ -40,6 +40,11 @@ export function validateTune(v) {
       throw Error("Неверный центр waterfall");
     value.viewCenter = v.viewCenter;
   }
+  if (v.agc !== undefined) {
+    if (!["fast", "slow", "off"].includes(v.agc))
+      throw Error("Некорректный режим AGC");
+    value.agc = v.agc;
+  }
   return value;
 }
 let lastStamp = 0;
@@ -139,11 +144,8 @@ export class KiwiSession {
         if (key === "sample_rate") {
           this.rate = Number(val);
           this.send(ws, "SET compression=0");
-          this.send(ws, "SET ident_user=Wave-WebSDR");
-          this.send(
-            ws,
-            "SET agc=1 hang=0 thresh=-100 slope=6 decay=1000 manGain=50",
-          );
+          this.send(ws, "SET ident_user=UR4MTN-WebSDR");
+
           this.send(ws, "SET squelch=0 max=0");
           this.send(ws, "SET gen=0 mix=-1");
           this.apply();
@@ -204,6 +206,15 @@ export class KiwiSession {
     ) {
       this.send(this.sockets[0], audioCommand);
       this.lastAudioCommand = audioCommand;
+    }
+    const agc = tune.agc ?? "slow";
+    const agcCommand = `SET agc=${agc === "off" ? 0 : 1} hang=0 thresh=-100 slope=6 decay=${agc === "fast" ? 100 : 1000} manGain=50`;
+    if (
+      this.sockets[0]?.readyState === WebSocket.OPEN &&
+      this.lastAgcCommand !== agcCommand
+    ) {
+      this.send(this.sockets[0], agcCommand);
+      this.lastAgcCommand = agcCommand;
     }
     const viewCommand = `SET zoom=${tune.zoom} cf=${(tune.viewCenter ?? tune.frequency).toFixed(3)}`;
     if (

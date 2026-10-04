@@ -12,6 +12,7 @@ export type StreamConfig = {
   lowCut?: number;
   highCut?: number;
   viewCenter?: number;
+  agc?: "fast" | "slow" | "off";
 };
 export type KiwiEvent = { type: string; [key: string]: unknown };
 type Options = {

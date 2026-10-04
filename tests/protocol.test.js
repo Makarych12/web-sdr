@@ -62,7 +62,11 @@ test("custom passband reaches the actual Kiwi mod command", () => {
     lowCut: 300,
     highCut: 2100,
   });
-  assert.match(sent[0], /mod=usb low_cut=300 high_cut=2100 freq=7074.000/);
+  assert.ok(
+    sent.some((command) =>
+      /mod=usb low_cut=300 high_cut=2100 freq=7074.000/.test(command),
+    ),
+  );
   for (const cuts of [
     { lowCut: 0 },
     { lowCut: -7000, highCut: 1000 },
@@ -97,5 +101,29 @@ test("pan and zoom only change the waterfall command, keeping audio tuned", () =
     highCut: 2100,
   });
   assert.deepEqual(sent, ["SET zoom=8 cf=7300.000"]);
+  s.close();
+});
+
+test("AGC mode reaches Kiwi without retuning or resetting waterfall", () => {
+  const sent = [];
+  const s = new KiwiSession("http://example.org", () => {});
+  s.sockets = [
+    { readyState: 1, send: (v) => sent.push(v), close() {} },
+    { readyState: 1, send: (v) => sent.push(v), close() {} },
+  ];
+  s.apply({ frequency: 7074, mode: "USB", zoom: 7, agc: "slow" });
+  sent.length = 0;
+  s.apply({ frequency: 7074, mode: "USB", zoom: 7, agc: "fast" });
+  assert.deepEqual(sent, [
+    "SET agc=1 hang=0 thresh=-100 slope=6 decay=100 manGain=50",
+  ]);
+  sent.length = 0;
+  s.apply({ frequency: 7074, mode: "USB", zoom: 7, agc: "off" });
+  assert.deepEqual(sent, [
+    "SET agc=0 hang=0 thresh=-100 slope=6 decay=1000 manGain=50",
+  ]);
+  assert.throws(() =>
+    validateTune({ frequency: 7074, mode: "USB", zoom: 7, agc: "invalid" }),
+  );
   s.close();
 });

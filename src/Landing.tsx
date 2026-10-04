@@ -9,102 +9,12 @@ export function Antenna() {
     </svg>
   );
 }
-function RadioArt() {
-  return (
-    <svg className="radio-art" viewBox="0 0 460 260" aria-hidden="true">
-      <defs>
-        <linearGradient id="case" x2="1" y2="1">
-          <stop stopColor="#244668" />
-          <stop offset="1" stopColor="#061225" />
-        </linearGradient>
-        <linearGradient id="dial">
-          <stop stopColor="#b2cfda" />
-          <stop offset=".5" stopColor="#edf6ed" />
-          <stop offset="1" stopColor="#83aebd" />
-        </linearGradient>
-      </defs>
-      <rect
-        x="10"
-        y="20"
-        width="438"
-        height="218"
-        rx="18"
-        fill="url(#case)"
-        stroke="#5385a2"
-        strokeWidth="3"
-      />
-      <rect
-        x="28"
-        y="38"
-        width="403"
-        height="178"
-        rx="9"
-        fill="#0b2036"
-        stroke="#325777"
-      />
-      <rect x="203" y="54" width="207" height="100" rx="5" fill="url(#dial)" />
-      {Array.from({ length: 19 }, (_, i) => (
-        <path
-          key={i}
-          d={`M${218 + i * 10} 68v${i % 3 === 0 ? 20 : 10}`}
-          stroke="#204762"
-        />
-      ))}
-      <path
-        d="M225 133 Q305 55 390 133M307 131 338 78"
-        fill="none"
-        stroke="#234a66"
-        strokeWidth="2"
-      />
-      <circle
-        cx="307"
-        cy="177"
-        r="35"
-        fill="#08182a"
-        stroke="#5b8096"
-        strokeWidth="4"
-      />
-      <circle cx="307" cy="177" r="24" fill="#29465c" stroke="#a0bccb" />
-      <path d="m307 177 12-17" stroke="#cdf5ff" strokeWidth="3" />
-      <rect
-        x="46"
-        y="56"
-        width="132"
-        height="63"
-        rx="5"
-        fill="#112d45"
-        stroke="#4c7190"
-      />
-      <text x="63" y="83" fill="#7bafc5" fontSize="10" letterSpacing="3">
-        SHORTWAVE
-      </text>
-      <text x="61" y="107" fill="#36d4ff" fontSize="21" fontFamily="monospace">
-        UR4MTN
-      </text>
-      {[65, 116, 168, 390].map((x) => (
-        <g key={x}>
-          <circle
-            cx={x}
-            cy="177"
-            r="18"
-            fill="#10263d"
-            stroke="#6a91ab"
-            strokeWidth="3"
-          />
-          <path d={`M${x} 177v-12`} stroke="#b5d1df" strokeWidth="2" />
-        </g>
-      ))}
-    </svg>
-  );
-}
 export function Landing({
   listen,
   disabled,
-  tune,
 }: {
   listen: () => void;
   disabled: boolean;
-  tune: (f: number, m: Mode) => void;
 }) {
   return (
     <section id="home" className="landing-hero" aria-label="Главная">
@@ -176,18 +86,6 @@ export function Landing({
           <i />
           <span>✦</span>
         </div>
-        <RadioArt />
-        <div className="skyline">
-          {Array.from({ length: 26 }, (_, i) => (
-            <i
-              key={i}
-              style={{
-                height: `${35 + ((i * 37) % 100)}px`,
-                width: `${18 + ((i * 7) % 23)}px`,
-              }}
-            />
-          ))}
-        </div>
       </div>
       <div className="hero-copy">
         <span className="hero-kicker">РАДИО БЕЗ ГРАНИЦ · 0–30 MHz</span>
@@ -197,11 +95,7 @@ export function Landing({
           WEB SDR
           <span />
         </div>
-        <p>
-          Весь мир на одной волне.
-          <br />
-          Настройтесь на эфир прямо в браузере.
-        </p>
+        <p>Весь мир на одной волне. Настройтесь на эфир прямо в браузере.</p>
         <button
           className="hero-cta"
           aria-label="Открыть приёмник и включить звук"
@@ -215,45 +109,45 @@ export function Landing({
           <span aria-hidden="true">↗</span>
         </button>
       </div>
-      <div className="hero-features">
+      <a className="qsl-preview" href="#about">
+        <img
+          src="/ur4mtn-qsl.jpg"
+          alt="QSL UR4MTN — оригинал"
+          width="800"
+          height="533"
+        />
+        <span>QSL · UR4MTN ↗</span>
+      </a>
+    </section>
+  );
+}
+export function BandSelector({ tune }: { tune: (f: number, m: Mode) => void }) {
+  return (
+    <section
+      className="band-selector panel"
+      aria-label="Любительские диапазоны"
+    >
+      <span>ДИАПАЗОНЫ</span>
+      <div>
         {[
-          ["◖))", "Реальный звук", "AM / USB / LSB / CW / FM"],
-          ["▥", "Spectrum & Waterfall", "Эфир в реальном времени"],
-          ["◎", "Публичные KiwiSDR", "Приёмники по всему миру"],
-          ["★", "Избранные частоты", "Сохраните свою волну"],
-          ["▣", "На любом устройстве", "Телефон, планшет, ПК · PWA"],
-        ].map(([icon, title, sub]) => (
-          <div key={title}>
-            <span aria-hidden="true">{icon}</span>
-            <div>
-              <strong>{title}</strong>
-              <small>{sub}</small>
-            </div>
-          </div>
+          [160, 1840],
+          [80, 3750],
+          [40, 7100],
+          [30, 10120],
+          [20, 14200],
+          [17, 18100],
+          [15, 21200],
+          [12, 24920],
+          [10, 28400],
+        ].map(([band, f]) => (
+          <button
+            key={band}
+            onClick={() => tune(f, band >= 40 ? "LSB" : "USB")}
+          >
+            <strong>{band}m</strong>
+            <small>{f / 1000} MHz</small>
+          </button>
         ))}
-      </div>
-      <div className="hero-bands">
-        <span>Популярные диапазоны</span>
-        <div>
-          {[
-            [160, 1.8],
-            [80, 3.5],
-            [40, 7],
-            [30, 10],
-            [20, 14],
-            [17, 18],
-            [15, 21],
-            [12, 24],
-            [10, 28],
-          ].map(([band, mhz]) => (
-            <button
-              key={band}
-              onClick={() => tune(mhz * 1000, band >= 40 ? "LSB" : "USB")}
-            >
-              <strong>{band}м</strong> <small>({mhz} MHz)</small>
-            </button>
-          ))}
-        </div>
       </div>
     </section>
   );

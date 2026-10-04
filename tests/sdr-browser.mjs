@@ -111,7 +111,15 @@ async function changedView(previous) {
   );
 }
 async function touchDrag(canvas, from, to) {
-  await canvas.scrollIntoViewIfNeeded();
+  await canvas.evaluate((el) =>
+    el.scrollIntoView({ block: "center", behavior: "instant" }),
+  );
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
   const b = await canvas.boundingBox();
   const session = await context.newCDPSession(page);
   const pt = (f) => ({ x: b.x + b.width * f, y: b.y + b.height * 0.5, id: 1 });
@@ -131,7 +139,7 @@ async function touchDrag(canvas, from, to) {
   await session.detach();
 }
 try {
-  await page.goto("http://localhost:8787");
+  await page.goto(process.env.TEST_APP_URL || "http://localhost:8787");
   await page.waitForFunction(
     () => document.querySelectorAll("#receiver option").length > 20,
   );
@@ -175,6 +183,81 @@ try {
       ) < 0.01,
   );
   await healthy("frequency and USB");
+  const steps = page.getByLabel("Шаг настройки", { exact: true });
+  assert.deepEqual(await steps.locator("option").allTextContents(), [
+    "1 Hz",
+    "10 Hz",
+    "100 Hz",
+    "1000 Hz",
+    "5000 Hz",
+    "10000 Hz",
+  ]);
+  await steps.selectOption("0.001");
+  await page
+    .getByRole("button", { name: "Шаг частоты вверх", exact: true })
+    .click();
+  assert.equal(await page.locator("#frequency").inputValue(), "7074.001");
+  await healthy("1 Hz tuning step");
+  await page
+    .getByRole("button", { name: "Шаг частоты вниз", exact: true })
+    .click();
+  assert.equal(await page.locator("#frequency").inputValue(), "7074");
+  const dial = page.getByRole("slider", {
+    name: "VFO — ручка настройки",
+    exact: true,
+  });
+  await dial.focus();
+  await dial.press("ArrowRight");
+  assert.equal(await page.locator("#frequency").inputValue(), "7074.001");
+  await dial.press("ArrowLeft");
+  await dial.scrollIntoViewIfNeeded();
+  const dialBox = await dial.boundingBox();
+  await page.mouse.move(
+    dialBox.x + dialBox.width * 0.88,
+    dialBox.y + dialBox.height * 0.5,
+  );
+  await page.mouse.down();
+  for (let a = 0; a <= Math.PI / 2; a += Math.PI / 16) {
+    await page.mouse.move(
+      dialBox.x + dialBox.width * (0.5 + 0.38 * Math.cos(a)),
+      dialBox.y + dialBox.height * (0.5 + 0.38 * Math.sin(a)),
+    );
+  }
+  await page.mouse.up();
+  assert.ok(+(await page.locator("#frequency").inputValue()) > 7074);
+  await healthy("real rotary VFO drag");
+  await page.locator("#frequency").fill("7074");
+  await page.getByRole("button", { name: "Настроить", exact: true }).click();
+  await steps.selectOption("1");
+  for (const agc of ["fast", "off", "slow"]) {
+    await page.getByLabel("AGC", { exact: true }).selectOption(agc);
+    await page.waitForFunction(
+      (value) => window.__commands.at(-1)?.agc === value,
+      agc,
+    );
+    await healthy("AGC " + agc + " preserves stream");
+  }
+  for (const [band, freq] of [
+    [160, 1840],
+    [80, 3750],
+    [40, 7100],
+    [30, 10120],
+    [20, 14200],
+    [17, 18100],
+    [15, 21200],
+    [12, 24920],
+    [10, 28400],
+  ]) {
+    await page
+      .locator(".band-selector button")
+      .filter({ hasText: new RegExp(`^${band}m`) })
+      .click();
+    assert.equal(+(await page.locator("#frequency").inputValue()), freq);
+    await healthy(`${band}m band tuning`);
+  }
+  await page.locator("#frequency").fill("7074");
+  await page.getByRole("button", { name: "Настроить", exact: true }).click();
+  await page.getByRole("button", { name: "USB", exact: true }).click();
   await page.getByLabel("Полоса фильтра", { exact: true }).selectOption("1800");
   await page.waitForFunction(() => window.__commands.at(-1)?.highCut === 2100);
   await healthy("1800 Hz passband");
@@ -247,6 +330,9 @@ try {
     before.start + before.span * 0.55,
   );
   await healthy("finger drag tunes waterfall");
+  await touchDrag(page.locator(".frequency-scale"), 0.4, 0.6);
+  await healthy("finger drag tunes frequency scale");
+
   before = await viewport();
   const tuned = await page
     .getByRole("textbox", { name: "Частота кГц" })

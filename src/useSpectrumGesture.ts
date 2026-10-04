@@ -7,7 +7,7 @@ import {
 } from "react";
 type View = { start: number; span: number };
 type Options = {
-  canvas: RefObject<HTMLCanvasElement | null>;
+  canvas: RefObject<HTMLElement | null>;
   view: View;
   zoom: number;
   maxZoom: number;
@@ -37,7 +37,7 @@ export function useSpectrumGesture(options: Options) {
   const position = (g: Gesture, x: number) =>
     g.view.start +
     Math.max(0, Math.min(1, (x - g.left) / g.width)) * g.view.span;
-  function down(e: PointerEvent<HTMLCanvasElement>) {
+  function down(e: PointerEvent<HTMLElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -67,7 +67,7 @@ export function useSpectrumGesture(options: Options) {
       };
     }
   }
-  function move(e: PointerEvent<HTMLCanvasElement>) {
+  function move(e: PointerEvent<HTMLElement>) {
     if (!points.current.has(e.pointerId) || !gesture.current) return;
     points.current.set(e.pointerId, e.clientX);
     const g = gesture.current;
@@ -104,7 +104,7 @@ export function useSpectrumGesture(options: Options) {
         g.view.start + g.view.span / 2,
       );
   }
-  function end(e: PointerEvent<HTMLCanvasElement>, cancelled = false) {
+  function end(e: PointerEvent<HTMLElement>, cancelled = false) {
     const g = gesture.current;
     if (!points.current.has(e.pointerId) || !g) return;
     points.current.delete(e.pointerId);
@@ -150,7 +150,7 @@ export function useSpectrumGesture(options: Options) {
     canvas.addEventListener("wheel", wheel, { passive: false });
     return () => canvas.removeEventListener("wheel", wheel);
   }, [options.canvas]);
-  function key(e: KeyboardEvent<HTMLCanvasElement>) {
+  function key(e: KeyboardEvent<HTMLElement>) {
     const o = latest.current;
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
@@ -171,9 +171,9 @@ export function useSpectrumGesture(options: Options) {
   return {
     onPointerDown: down,
     onPointerMove: move,
-    onPointerUp: (e: PointerEvent<HTMLCanvasElement>) => end(e),
-    onPointerCancel: (e: PointerEvent<HTMLCanvasElement>) => end(e, true),
-    onLostPointerCapture: (e: PointerEvent<HTMLCanvasElement>) => end(e, true),
+    onPointerUp: (e: PointerEvent<HTMLElement>) => end(e),
+    onPointerCancel: (e: PointerEvent<HTMLElement>) => end(e, true),
+    onLostPointerCapture: (e: PointerEvent<HTMLElement>) => end(e, true),
     onKeyDown: key,
   };
 }

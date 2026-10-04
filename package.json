@@ -12,7 +12,8 @@
     "verify:browser": "node tests/browser.mjs",
     "verify:pwa": "node tests/pwa.mjs",
     "verify:sdr": "node tests/sdr-browser.mjs",
-    "verify:ui": "node tests/ui-preview.mjs"
+    "verify:ui": "node tests/ui-preview.mjs",
+    "verify:split": "node tests/split-gateway.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

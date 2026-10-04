@@ -8,7 +8,7 @@ const browser = await chromium.launch({
 const c = await browser.newContext();
 const p = await c.newPage();
 try {
-  await p.goto("http://localhost:8787");
+  await p.goto(process.env.TEST_APP_URL || "http://localhost:8787");
   await p.evaluate(() => navigator.serviceWorker.ready);
   await p.reload();
   assert.ok(

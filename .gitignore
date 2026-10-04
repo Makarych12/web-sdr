@@ -5,3 +5,7 @@ artifacts/
 .env
 
 .cache/
+
+.vercel/
+.env.*
+!.env.example

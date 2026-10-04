@@ -2,6 +2,10 @@
 
 Рабочий HF-приёмник: React + TypeScript, Node.js WebSocket-шлюз, реальный PCM-звук и spectrum/waterfall KiwiSDR. Адаптивный интерфейс и PWA. Имитации сигнала нет.
 
+## Production: Vercel + Render
+
+Фронтенд на Vercel использует внешний Node gateway на Render. Инструкция по полям панели, env и проверке: [DEPLOY_RENDER.md](./DEPLOY_RENDER.md). Dockerfile запускает только шлюз; frontend build остаётся на Vercel. `VITE_GATEWAY_URL` — публичный HTTPS origin Render, `ALLOWED_ORIGINS` — точный origin Vercel. Production сборка не принимает localhost backend. Vite proxy работает исключительно в локальном dev-сервере.
+
 ## Запуск
 
 Node.js 20.19+ или 22.12+.
@@ -52,7 +56,7 @@ Upstream: `/ws/kiwi/<timestamp>/SND` и `/ws/kiwi/<timestamp>/W/F`, одна с�
 
 `SND`: tag (3), flags (1), sequence LE (4), RSSI BE (2), mono PCM signed 16-bit BE. `W/F`: tag (3), pad (1), start bin LE (4), flags/zoom LE (4), sequence LE (4), 1024 unsigned bins. Калибровка waterfall и bandwidth берутся у сервера. PCM воспроизводится через AudioWorklet с интерполяцией реальной входной частоты дискретизации и ограничением очереди.
 
-Downstream `/ws`: `connect` с `receiver`, `frequency` (kHz), `mode`, `zoom`; `tune` с теми же полями без receiver; `disconnect`. Опциональные `lowCut`/`highCut` в Hz, `viewCenter` в kHz. Старые команды без новых полей продолжают работать. Частые команды жестов объединяются в клиенте; при изменении только вида шлюз отправляет только `SET zoom=... cf=...`. Binary: байт 1 + PCM BE, байт 2 + waterfall bins. JSON: sample rate, RSSI, calibration, actual view (start/span/zoom/bandwidth), tuned, limits, errors с `code`/`retryable`. `tuned` подтверждает отправку команды; live-тесты отдельно проверяют реальные частотные границы возвращённого waterfall.
+Downstream `/ws`: `connect` с `receiver`, `frequency` (kHz), `mode`, `zoom`; `tune` с теми же полями без receiver; `disconnect`. Опциональные `lowCut`/`highCut` в Hz, `viewCenter` в kHz, `agc` (`slow` / `fast` / `off`). AGC отправляется реальной командой Kiwi; изменение AGC не пересоздаёт звук или waterfall. Старые команды без новых полей продолжают работать. Частые команды жестов объединяются в клиенте; при изменении только вида шлюз отправляет только `SET zoom=... cf=...`. Binary: байт 1 + PCM BE, байт 2 + waterfall bins. JSON: sample rate, RSSI, calibration, actual view (start/span/zoom/bandwidth), tuned, limits, errors с `code`/`retryable`. `tuned` подтверждает отправку команды; live-тесты отдельно проверяют реальные частотные границы возвращённого waterfall.
 
 ## Проверки
 
@@ -65,6 +69,7 @@ TEST_FILTERS=1 TEST_PAN=1 npm run verify:live
 npm run verify:browser
 npm run verify:sdr
 npm run verify:pwa
+npm run verify:split
 ```
 
 Live-проверки используют реальные публичные каналы: запускайте их последовательно. Сменить тестовый узел: `TEST_RECEIVER=<id>`. Для проверки переключения двух узлов: `TEST_SECOND_RECEIVER=<id> npm run verify:sdr`; ID находятся в `/api/receivers`. Публичные узлы могут стать недоступны между запусками.
@@ -77,6 +82,8 @@ Browser-тесты используют `/usr/bin/chromium` через Playwrigh
 
 ## Интерфейс UR4MTN
 
-Главная с CSS/SVG hero-секцией, крупным позывным и кнопкой запуска реального приёмника. Верхнее меню ведёт к приёмнику, каталогу серверов, избранному и описанию проекта. При прокрутке звук и canvas остаются активными. Популярные диапазоны настраивают частоту и открывают приёмник. Существующие ключи хранения избранного и настроек сохранены.
+Компактная CSS/SVG hero-секция, крупный позывной и кнопка запуска реального приёмника. Цифровая частота в Hz, вращаемый VFO (мышь/палец/клавиатура), шаги 1/10/100/1000/5000/10000 Hz, AGC и диапазоны 160–10m. Частотная шкала реагирует на tap/drag. Оригинальная QSL скопирована без изменений из загруженного ur4mtn.jpg; используется в preview и «О проекте». Анимации учитывают prefers-reduced-motion. Верхнее меню ведёт к приёмнику, каталогу серверов, избранному и описанию проекта. При прокрутке звук и canvas остаются активными. Популярные диапазоны настраивают частоту и открывают приёмник. Существующие ключи хранения избранного и настроек сохранены.
 
 `npm run verify:ui` проверяет навигацию, каталог и отсутствие горизонтального переполнения на 320/390/820/1440 px; снимки — `artifacts/ur4mtn-*-home.png` и `artifacts/ur4mtn-*-studio.png`. `verify:sdr` запускает эфир через hero-кнопку и проверяет реальный звук, частоту и waterfall после каждой операции.
+
+`verify:split` собирает production frontend с внешним HTTPS-origin, запускает локальный TLS edge для отдельного Node gateway и проверяет реальные HTTPS API/CORS, WSS, звук AudioWorklet, настройку частоты и waterfall. Этот тест проверяет разделённую схему, но не означает, что сервис Render уже создан. Docker-демон в среде отсутствует: сборка контейнера выполняется на Render.

@@ -40,7 +40,7 @@ await page.addInitScript(() => {
   };
 });
 try {
-  await page.goto("http://localhost:8787");
+  await page.goto(process.env.TEST_APP_URL || "http://localhost:8787");
   await page.getByRole("button", { name: "Слушать эфир" }).click();
   await page.waitForFunction(
     () =>
@@ -137,7 +137,12 @@ try {
     "PASS: actual AudioWorklet output, tuning, waterfall, desktop/tablet/phone",
   );
 } catch (e) {
-  console.error(await page.evaluate(()=>({status:document.querySelector(".header-right")?.textContent,error:document.querySelector(".error")?.textContent})));
+  console.error(
+    await page.evaluate(() => ({
+      status: document.querySelector(".header-right")?.textContent,
+      error: document.querySelector(".error")?.textContent,
+    })),
+  );
   console.error(errors);
   await page.screenshot({ path: "artifacts/failure.png", fullPage: true });
   throw e;
