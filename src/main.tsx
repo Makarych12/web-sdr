@@ -558,7 +558,9 @@ function App() {
       </header>
       <main>
         <Landing
-          disabled={offline || preparing || !gatewayConfigured}
+          disabled={
+            offline || preparing || !gatewayConfigured || !receivers.length
+          }
           listen={() => {
             if (!wanted) void connect();
             document
