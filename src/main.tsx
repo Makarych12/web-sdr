@@ -642,21 +642,31 @@ function App() {
     const url = nativeAudioURL(gateway.http, config, nativeSession.current);
     native.volume = volume;
     native.muted = muted;
+    function restart() {
+      nativeTuneRequest.current?.abort();
+      // Never let a new stream's commands reach an old serverless instance.
+      nativeSession.current = crypto.randomUUID();
+      nativeSequence.current = 0;
+      const freshURL = nativeAudioURL(
+        gateway.http,
+        config,
+        nativeSession.current,
+      );
+      nativeTuneKey.current = freshURL;
+      native.dataset.frequency = String(config.frequency);
+      native.dataset.mode = config.mode;
+      native.dataset.agc = config.agc;
+      native.dataset.highCut = String(config.highCut);
+      native.src = freshURL;
+      return nativePlayOrFallback();
+    }
     if (
       !native.getAttribute("src") ||
       native.ended ||
       native.error ||
       new URL(native.src).searchParams.get("receiver") !== receiverRef.current
-    ) {
-      nativeTuneRequest.current?.abort();
-      nativeTuneKey.current = url;
-      native.dataset.frequency = String(config.frequency);
-      native.dataset.mode = config.mode;
-      native.dataset.agc = config.agc;
-      native.dataset.highCut = String(config.highCut);
-      native.src = url;
-      return nativePlayOrFallback();
-    }
+    )
+      return restart();
     if (nativeTuneKey.current !== url) {
       nativeTuneRequest.current?.abort();
       const request = new AbortController();
@@ -673,7 +683,7 @@ function App() {
         if (!response.ok) {
           // A restarted/different serverless instance has lost this live session.
           // Reconnect with current settings rather than playing a stale frequency.
-          native.src = url;
+          return restart();
         }
         nativeTuneKey.current = url;
         native.dataset.frequency = String(config.frequency);

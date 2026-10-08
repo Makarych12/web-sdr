@@ -228,6 +228,28 @@ try {
   await page.evaluate(() => window.__handlers.play());
   await healthy();
   pass("Media Session controls both outputs");
+  const oldSession = new URL((await snapshot()).src).searchParams.get(
+    "session",
+  );
+  await page.route(
+    "**/api/audio/tune?**",
+    (route) => route.fulfill({ status: 404, body: "session lost" }),
+    { times: 1 },
+  );
+  await page
+    .locator(".band-selector button")
+    .filter({ hasText: /^40m/ })
+    .click();
+  await healthy();
+  assert.notEqual(
+    new URL((await snapshot()).src).searchParams.get("session"),
+    oldSession,
+  );
+  assert.equal(
+    new URL((await snapshot()).src).searchParams.get("frequency"),
+    "7100",
+  );
+  pass("lost server session reconnects with a new token and current frequency");
   await page
     .getByRole("checkbox", { name: "Фоновый эфир", exact: true })
     .uncheck();
