@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 export function VfoDial({
   frequency,
@@ -14,8 +14,30 @@ export function VfoDial({
   label?: string;
 }) {
   const [rotation, setRotation] = useState(0);
+  const dial = useRef<HTMLDivElement>(null);
   const latest = useRef({ frequency, step, onTune, onEnd });
   latest.current = { frequency, step, onTune, onEnd };
+  function nudge(ticks: number) {
+    const v = latest.current;
+    // Pointer/wheel events can arrive before React renders the next frequency.
+    v.frequency =
+      Math.round(
+        Math.max(0, Math.min(30000, v.frequency + ticks * v.step)) * 1000,
+      ) / 1000;
+    v.onTune(v.frequency);
+  }
+  useEffect(() => {
+    const element = dial.current!;
+    const wheel = (event: WheelEvent) => {
+      if (document.activeElement !== element || event.deltaY === 0) return;
+      event.preventDefault();
+      const sign = event.deltaY < 0 ? 1 : -1;
+      setRotation((r) => r + sign * 6);
+      nudge(sign);
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, []);
   const drag = useRef<{ id: number; angle: number; carry: number } | null>(
     null,
   );
@@ -38,13 +60,13 @@ export function VfoDial({
     const ticks = Math.trunc(d.carry / 6);
     if (ticks) {
       d.carry -= ticks * 6;
-      const v = latest.current;
-      v.onTune(Math.max(0, Math.min(30000, v.frequency + ticks * v.step)));
+      nudge(ticks);
     }
   }
   return (
     <div className="vfo-control">
       <div
+        ref={dial}
         className="vfo-dial"
         role="slider"
         tabIndex={0}
@@ -56,6 +78,7 @@ export function VfoDial({
         onPointerDown={(e) => {
           if (e.pointerType === "mouse" && e.button !== 0) return;
           e.preventDefault();
+          e.currentTarget.focus({ preventScroll: true });
           e.currentTarget.setPointerCapture(e.pointerId);
           drag.current = { id: e.pointerId, angle: angle(e), carry: 0 };
         }}
@@ -102,18 +125,8 @@ export function VfoDial({
             : -1;
           const mult = e.key.startsWith("Page") ? 10 : 1;
           setRotation((r) => r + sign * 6 * mult);
-          latest.current.onTune(
-            latest.current.frequency + sign * mult * latest.current.step,
-          );
+          nudge(sign * mult);
           latest.current.onEnd();
-        }}
-        onWheel={(e) => {
-          if (document.activeElement !== e.currentTarget) return;
-          const sign = e.deltaY < 0 ? 1 : -1;
-          setRotation((r) => r + sign * 6);
-          latest.current.onTune(
-            latest.current.frequency + sign * latest.current.step,
-          );
         }}
       >
         <div

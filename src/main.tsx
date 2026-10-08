@@ -293,7 +293,6 @@ function App() {
           ? old
           : { ...stats.current },
       );
-      setRssi(signal.current);
       if (manager.current?.desired) setClock(Date.now());
     }, 1000);
     const online = () => {
@@ -324,29 +323,38 @@ function App() {
         0.025,
       );
   }, [volume, muted]);
+  useEffect(() => {
+    const timer = setInterval(() => setRssi(signal.current), 100);
+    return () => clearInterval(timer);
+  }, []);
   function tune(
     f = frequency,
     m = mode,
     z = zoom,
     width = widths[m],
-    center = f,
+    center?: number,
   ) {
     f = Math.round(Math.max(0, Math.min(30000, f)) * 1000) / 1000;
+    // Fine tuning moves the VFO inside the existing overview. Recenter only
+    // when it leaves the usable area, or when an explicit view was requested.
+    const currentView = viewRef.current;
+    center ??=
+      f >= currentView.start + currentView.span * 0.1 &&
+      f <= currentView.start + currentView.span * 0.9
+        ? settings.current.viewCenter
+        : f;
     const nextView = viewFor(center, z, viewRef.current.bandwidth ?? 30000);
-    if (
-      f !== settings.current.frequency ||
-      m !== settings.current.mode ||
-      z !== settings.current.zoom ||
-      !sameView(nextView, viewRef.current)
-    ) {
+    const viewChanged = !matchesRequest(currentView, nextView);
+    if (viewChanged || m !== settings.current.mode) {
       renderer.current?.clear(false);
-      awaitingTune.current = wanted;
-      setWaterfallReady(false);
     }
+    if (viewChanged) awaitingTune.current = wanted;
     center = nextView.start + nextView.span / 2;
-    requestedView.current = nextView;
-    setViewPending(wanted);
-    displayView(nextView);
+    if (viewChanged) {
+      requestedView.current = nextView;
+      setViewPending(wanted);
+      displayView(nextView);
+    }
     setViewCenter(center);
     setFrequency(f);
     setDraft(String(Number(f.toFixed(3))));
@@ -426,8 +434,7 @@ function App() {
       if (settings.current.zoom > limit)
         changeView(settings.current.viewCenter, limit);
     }
-    if (v.type === "signal" && typeof v.rssi === "number")
-      signal.current = v.rssi;
+    if (v.type === "signal" && finiteNumber(v.rssi)) signal.current = v.rssi;
     if (v.type === "calibration" && typeof v.value === "number") {
       calibration.current = v.value;
       renderer.current?.setCalibration(v.value);
@@ -613,19 +620,30 @@ function App() {
     z = Math.max(0, Math.min(maxZoom, z));
     const span = bandwidth / 2 ** z;
     center = Math.max(span / 2, Math.min(bandwidth - span / 2, center));
+    const next = viewFor(center, z, bandwidth);
+    if (matchesRequest(viewRef.current, next)) return;
     setViewCenter(center);
     setZoom(z);
     settings.current = { ...settings.current, zoom: z, viewCenter: center };
-    const next = viewFor(center, z, bandwidth);
     if (!sameView(next, viewRef.current)) {
       renderer.current?.clear(false);
       awaitingTune.current = wanted;
-      setWaterfallReady(false);
     }
     requestedView.current = next;
     setViewPending(wanted);
     displayView(next);
     manager.current?.tune();
+  }
+  function changeZoom(z: number) {
+    const current = viewRef.current;
+    const f = settings.current.frequency;
+    // After zoom 0 the geometric center is half the receiver bandwidth.
+    // Zoom controls must still return to the visible VFO, not that midpoint.
+    const center =
+      f >= current.start && f <= current.start + current.span
+        ? f
+        : settings.current.viewCenter;
+    changeView(center, z);
   }
   const gestureOptions = {
     view,
@@ -947,8 +965,14 @@ function App() {
             </div>
             <div className="zoom">
               <button
+                aria-label="Сбросить масштаб: обзор диапазона"
+                onClick={() => changeView(frequency, Math.min(6, maxZoom))}
+              >
+                Обзор
+              </button>
+              <button
                 aria-label="Уменьшить масштаб"
-                onClick={() => changeView(viewCenter, Math.max(0, zoom - 1))}
+                onClick={() => changeZoom(Math.max(0, zoom - 1))}
               >
                 −
               </button>
@@ -957,9 +981,7 @@ function App() {
               </span>
               <button
                 aria-label="Увеличить масштаб"
-                onClick={() =>
-                  changeView(viewCenter, Math.min(maxZoom, zoom + 1))
-                }
+                onClick={() => changeZoom(Math.min(maxZoom, zoom + 1))}
               >
                 +
               </button>
@@ -985,7 +1007,7 @@ function App() {
                 max={maxZoom}
                 step="1"
                 value={zoom}
-                onChange={(e) => changeView(viewCenter, Number(e.target.value))}
+                onChange={(e) => changeZoom(Number(e.target.value))}
               />
             </label>
             <label>
@@ -1136,7 +1158,7 @@ function App() {
             zoom={zoom}
             maxZoom={maxZoom}
             onRecenter={() => changeView(frequency, zoom)}
-            onZoom={(z) => changeView(viewCenter, z)}
+            onZoom={changeZoom}
           />
           <div className="visual-foot">
             <span>Касание — частота · два пальца — масштаб</span>
@@ -1145,7 +1167,9 @@ function App() {
             </span>
           </div>
         </section>
-        <BandSelector tune={(f, m) => tune(f, m)} />
+        <BandSelector
+          tune={(f, m) => tune(f, m, Math.min(6, maxZoom), widths[m], f)}
+        />
         <section className="bottom">
           <div className="volume panel">
             <button

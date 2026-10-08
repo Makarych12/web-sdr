@@ -41,6 +41,7 @@ export function useSpectrumGesture(options: Options) {
   function down(e: PointerEvent<HTMLElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();
+    e.currentTarget.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
     points.current.set(e.pointerId, e.clientX);
     if (points.current.size === 1) {
@@ -155,6 +156,8 @@ export function useSpectrumGesture(options: Options) {
     const canvas = options.canvas.current;
     if (!canvas) return;
     const wheel = (e: WheelEvent) => {
+      // Scrolling the page over the display must not silently magnify it.
+      if (document.activeElement !== canvas && !e.ctrlKey) return;
       e.preventDefault();
       const o = latest.current;
       if (!e.shiftKey && performance.now() - lastWheel.current < 80) return;
