@@ -1,4 +1,29 @@
 import { projectView, sameView, type SpectrumView } from "./spectrumView";
+
+// Calibrated Kiwi power only: gamma expands weak signals without inventing bins.
+export function waterfallColor(bin: number, calibration: number): number[] {
+  const stops = [
+    [0, 5, 10, 26],
+    [0.13, 29, 20, 76],
+    [0.3, 49, 55, 158],
+    [0.46, 31, 133, 219],
+    [0.62, 44, 207, 219],
+    [0.76, 112, 224, 139],
+    [0.9, 255, 194, 79],
+    [1, 255, 245, 207],
+  ];
+  const power = Math.max(0, Math.min(1, (bin - 255 + calibration + 115) / 90));
+  const t = power ** 0.72;
+  const index = stops.findIndex((stop) => stop[0] >= t);
+  const high = stops[Math.max(1, index)],
+    low = stops[Math.max(1, index) - 1];
+  const mix = (t - low[0]) / (high[0] - low[0]);
+  return [1, 2, 3]
+    .map((channel) =>
+      Math.round(low[channel] + (high[channel] - low[channel]) * mix),
+    )
+    .concat(255);
+}
 /** Owns drawing and history; React changes never resize or replace the canvases. */
 export class SpectrumRenderer {
   private history = document.createElement("canvas");
@@ -27,16 +52,7 @@ export class SpectrumRenderer {
     if (this.calibration === value) return;
     this.calibration = value;
     for (let i = 0; i < 256; i++) {
-      const t = Math.max(0, Math.min(1, (i - 255 + value + 115) / 90));
-      this.palette.set(
-        [
-          8 + Math.max(0, t - 0.45) * 400,
-          18 + t * 200,
-          40 + Math.sin(t * Math.PI) * 170,
-          255,
-        ],
-        i * 4,
-      );
+      this.palette.set(waterfallColor(i, value), i * 4);
     }
   }
   setView(view: SpectrumView) {

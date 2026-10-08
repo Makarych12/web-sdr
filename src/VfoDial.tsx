@@ -5,11 +5,13 @@ export function VfoDial({
   step,
   onTune,
   onEnd,
+  label = "VFO — ручка настройки",
 }: {
   frequency: number;
   step: number;
   onTune: (f: number) => void;
   onEnd: () => void;
+  label?: string;
 }) {
   const [rotation, setRotation] = useState(0);
   const latest = useRef({ frequency, step, onTune, onEnd });
@@ -46,7 +48,7 @@ export function VfoDial({
         className="vfo-dial"
         role="slider"
         tabIndex={0}
-        aria-label="VFO — ручка настройки"
+        aria-label={label}
         aria-valuemin={0}
         aria-valuemax={30000000}
         aria-valuenow={Math.round(frequency * 1000)}

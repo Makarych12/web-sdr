@@ -6,6 +6,7 @@ import "./console.css";
 import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
 import { VfoDial } from "./VfoDial";
+import { FineTune } from "./FineTune";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
 import { useStoredState, stringList, finiteNumber } from "./storage";
 import {
@@ -352,7 +353,8 @@ function App() {
   }
   callbacks.current.state = (v) => {
     setWanted(manager.current?.desired ?? false);
-    if (v.phase === "idle" && context.current?.state === "running") void context.current.suspend();
+    if (v.phase === "idle" && context.current?.state === "running")
+      void context.current.suspend();
     setConnected(v.phase === "live");
     setStatus(v.message);
     setRetryAt(v.retryAt);
@@ -384,7 +386,8 @@ function App() {
     if (v.type === "limits" && typeof v.maxZoom === "number") {
       const limit = Math.max(0, Math.min(14, v.maxZoom));
       setMaxZoom(limit);
-      if (settings.current.zoom > limit) changeView(settings.current.viewCenter, limit);
+      if (settings.current.zoom > limit)
+        changeView(settings.current.viewCenter, limit);
     }
     if (v.type === "signal" && typeof v.rssi === "number")
       signal.current = v.rssi;
@@ -404,8 +407,15 @@ function App() {
         zoom: typeof v.zoom === "number" ? v.zoom : settings.current.zoom,
       };
       sourceView.current = incoming;
-      if (requestedView.current && requestedView.current.bandwidth !== incoming.bandwidth) {
-        requestedView.current = viewFor(settings.current.viewCenter, settings.current.zoom, incoming.bandwidth);
+      if (
+        requestedView.current &&
+        requestedView.current.bandwidth !== incoming.bandwidth
+      ) {
+        requestedView.current = viewFor(
+          settings.current.viewCenter,
+          settings.current.zoom,
+          incoming.bandwidth,
+        );
         displayView(requestedView.current);
       }
       if (
@@ -741,47 +751,6 @@ function App() {
                 ↵
               </button>
             </form>
-            <div className="steps">
-              <label className="step-select">
-                Шаг{" "}
-                <select
-                  aria-label="Шаг настройки"
-                  value={step}
-                  onChange={(e) => setStep(Number(e.target.value))}
-                >
-                  {[0.001, 0.01, 0.1, 1, 5, 10].map((s) => (
-                    <option key={s} value={s}>
-                      {`${s * 1000} Hz`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                aria-label="Избранная частота"
-                aria-pressed={favoriteFrequencies.some(
-                  (v) => v.id === `${frequency}-${mode}`,
-                )}
-                onClick={favoriteFrequency}
-              >
-                {favoriteFrequencies.some(
-                  (v) => v.id === `${frequency}-${mode}`,
-                )
-                  ? "★ Сохранено"
-                  : "☆ Сохранить"}
-              </button>
-              <button
-                aria-label="Шаг частоты вниз"
-                onClick={() => tune(frequency - step)}
-              >
-                − {step * 1000} Hz
-              </button>
-              <button
-                aria-label="Шаг частоты вверх"
-                onClick={() => tune(frequency + step)}
-              >
-                + {step * 1000} Hz
-              </button>
-            </div>
           </div>
           <VfoDial
             frequency={frequency}
@@ -789,6 +758,45 @@ function App() {
             onTune={(f) => tune(f)}
             onEnd={() => manager.current?.flushTune()}
           />
+          <div className="steps">
+            <label className="step-select">
+              Шаг{" "}
+              <select
+                aria-label="Шаг настройки"
+                value={step}
+                onChange={(e) => setStep(Number(e.target.value))}
+              >
+                {[0.001, 0.01, 0.1, 1, 5, 10].map((s) => (
+                  <option key={s} value={s}>
+                    {`${s * 1000} Hz`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              aria-label="Избранная частота"
+              aria-pressed={favoriteFrequencies.some(
+                (v) => v.id === `${frequency}-${mode}`,
+              )}
+              onClick={favoriteFrequency}
+            >
+              {favoriteFrequencies.some((v) => v.id === `${frequency}-${mode}`)
+                ? "★ Сохранено"
+                : "☆ Сохранить"}
+            </button>
+            <button
+              aria-label="Шаг частоты вниз"
+              onClick={() => tune(frequency - step)}
+            >
+              − {step * 1000} Hz
+            </button>
+            <button
+              aria-label="Шаг частоты вверх"
+              onClick={() => tune(frequency + step)}
+            >
+              + {step * 1000} Hz
+            </button>
+          </div>
           <div className="mode">
             <label>ДЕМОДУЛЯЦИЯ</label>
             <div className="modes">
@@ -985,6 +993,13 @@ function App() {
             ))}
           </div>
           <div className="fall">
+            {frequency >= view.start && frequency <= view.start + view.span && (
+              <div
+                className="marker waterfall-marker"
+                style={{ left: `${marker}%` }}
+                aria-hidden="true"
+              />
+            )}
             <canvas
               ref={waterfall}
               width={1024}
@@ -1005,6 +1020,12 @@ function App() {
               </div>
             )}
           </div>
+          <FineTune
+            frequency={frequency}
+            step={step}
+            onTune={(f) => tune(f)}
+            onEnd={() => manager.current?.flushTune()}
+          />
           <div className="visual-foot">
             <span>Касание — частота · два пальца — масштаб</span>
             <span>
@@ -1114,9 +1135,12 @@ function App() {
             <span className="eyebrow">О ПРОЕКТЕ</span>
             <h2>UR4MTN WEB SDR</h2>
             <p>
-              Короткие волны объединяют мир. Слушайте публичные KiwiSDR,
-              исследуйте спектр и возвращайтесь к любимым станциям — на
-              телефоне, планшете или компьютере.
+              UR4MTN — радиолюбительский WebSDR-проект Максима Попкова из города
+              Попасная. Максим — радиолюбитель и веб-разработчик радио-систем.
+            </p>
+            <p>
+              Проект объединяет публичные KiwiSDR, реальный звук, spectrum и
+              waterfall, чтобы слушать эфир с телефона, планшета и компьютера.
             </p>
             <p>
               Установите приложение через меню браузера, чтобы открыть эфир с

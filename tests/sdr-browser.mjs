@@ -1,6 +1,7 @@
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
+const testReceiver = process.env.TEST_RECEIVER || "france";
 const browser = await chromium.launch({
   executablePath: "/usr/bin/chromium",
   headless: true,
@@ -52,11 +53,20 @@ await page.addInitScript(() => {
   };
 });
 async function chooseReceiver(id) {
-  const rows = await (await page.request.get(new URL("/api/receivers", process.env.TEST_APP_URL || "https://web-sdr.vercel.app").href)).json();
+  const rows = await (
+    await page.request.get(
+      new URL(
+        "/api/receivers",
+        process.env.TEST_APP_URL || "http://localhost:8787",
+      ).href,
+    )
+  ).json();
   const receiver = rows.find((r) => r.id === id);
   assert.ok(receiver, `receiver ${id}`);
-  await page.getByRole("button", {name:"Приёмник", exact:true}).click();
-  await page.getByRole("textbox", {name:"Поиск приёмников"}).fill(receiver.name);
+  await page.getByRole("button", { name: "Приёмник", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Поиск приёмников" })
+    .fill(receiver.name);
   await page.locator(".catalog-item").first().click();
 }
 async function packets() {
@@ -146,23 +156,55 @@ async function touchDrag(canvas, from, to) {
   });
   await session.detach();
 }
+async function touchRotate(dial) {
+  await dial.evaluate((el) =>
+    el.scrollIntoView({ block: "center", behavior: "instant" }),
+  );
+  const b = await dial.boundingBox(),
+    session = await context.newCDPSession(page);
+  const point = (angle) => ({
+    id: 1,
+    x: b.x + b.width * (0.5 + 0.35 * Math.cos(angle)),
+    y: b.y + b.height * (0.5 + 0.35 * Math.sin(angle)),
+  });
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [point(0)],
+  });
+  for (let i = 1; i <= 8; i++) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [point((i * Math.PI) / 16)],
+    });
+  }
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await session.detach();
+}
 try {
+  if (process.env.TEST_GATEWAY) {
+    // Use the actual catalog and live Kiwi data, explicitly via the local gateway.
+    await page.route("**/api/receivers", async (route) => {
+      const response = await route.fetch();
+      const rows = await response.json();
+      for (const row of rows) delete row.directUrl;
+      await route.fulfill({ response, json: rows });
+    });
+  }
   await page.goto(process.env.TEST_APP_URL || "http://localhost:8787");
   await page.waitForFunction(
     () => +document.querySelector(".receiver-choice")?.dataset.count > 20,
   );
-  await page.getByRole("button", { name: /Все приёмники/ }).click();
-  await page
-    .getByRole("textbox", { name: "Поиск приёмников" })
-    .fill("Montmorillon");
-  assert.ok((await page.locator(".catalog-item").count()) > 0);
-  await page.locator(".catalog-item").first().click();
+  await chooseReceiver(testReceiver);
   await page
     .getByRole("button", { name: "Избранный сервер", exact: true })
     .click();
   await page.reload();
   await page.waitForFunction(
-    () => document.querySelector("#receiver")?.value === "france",
+    (id) => document.querySelector("#receiver")?.value === id,
+    testReceiver,
   );
   assert.equal(
     await page
@@ -173,6 +215,112 @@ try {
   checks.push("catalog search and server favorites persist");
   await page.locator(".hero-cta").click();
   await healthy("initial real audio and waterfall");
+  // The under-waterfall controls must tune the same running audio/session.
+  await page.evaluate(() => {
+    window.__originalAudio = window.__audio;
+    window.__originalAnalyser = window.__analyser;
+    window.__originalSocket = window.__sockets.at(-1);
+  });
+  const fine = page.getByRole("region", {
+    name: "Точная подстройка под waterfall",
+  });
+  for (const [name, delta] of [
+    ["Точная подстройка: частота минус шаг", -1],
+    ["Точная подстройка: частота плюс шаг", 1],
+    ["Подстройка −10 шагов", -10],
+    ["Подстройка −1 шагов", -1],
+    ["Подстройка +1 шагов", 1],
+    ["Подстройка +10 шагов", 10],
+  ]) {
+    const f = +(await page.locator("#frequency").inputValue());
+    await fine.getByRole("button", { name, exact: true }).click();
+    assert.equal(+(await page.locator("#frequency").inputValue()), f + delta);
+    assert.equal(
+      await fine.locator("output").innerText(),
+      `${Math.round((f + delta) * 1000).toLocaleString("de-DE")} Hz`,
+    );
+  }
+  const fineDial = fine.getByRole("slider", {
+    name: "VFO — точная подстройка",
+    exact: true,
+  });
+  for (const [key, delta] of [
+    ["ArrowRight", 1],
+    ["ArrowLeft", -1],
+    ["PageUp", 10],
+    ["PageDown", -10],
+  ]) {
+    const f = +(await page.locator("#frequency").inputValue());
+    await fineDial.press(key);
+    assert.equal(+(await page.locator("#frequency").inputValue()), f + delta);
+  }
+  await fineDial.scrollIntoViewIfNeeded();
+  const fineBox = await fineDial.boundingBox();
+  const fineBefore = +(await page.locator("#frequency").inputValue());
+  await page.mouse.move(
+    fineBox.x + fineBox.width * 0.88,
+    fineBox.y + fineBox.height * 0.5,
+  );
+  await page.mouse.down();
+  for (let a = 0; a <= Math.PI / 2; a += Math.PI / 16) {
+    await page.mouse.move(
+      fineBox.x + fineBox.width * (0.5 + 0.38 * Math.cos(a)),
+      fineBox.y + fineBox.height * (0.5 + 0.38 * Math.sin(a)),
+    );
+  }
+  await page.mouse.up();
+  assert.ok(+(await page.locator("#frequency").inputValue()) > fineBefore);
+  await healthy(
+    "fine tuning buttons, keyboard and mouse dial preserve real audio/waterfall",
+  );
+  assert.ok(
+    await page.evaluate(
+      () =>
+        window.__audio === window.__originalAudio &&
+        window.__analyser === window.__originalAnalyser &&
+        window.__sockets.at(-1) === window.__originalSocket,
+    ),
+  );
+
+  for (const selector of [".scope canvas", ".fall canvas"]) {
+    const canvas = page.locator(selector);
+    await canvas.evaluate((el) =>
+      el.scrollIntoView({ block: "center", behavior: "instant" }),
+    );
+    const v = await viewport(),
+      b = await canvas.boundingBox();
+    await page.mouse.click(b.x + b.width * 0.62, b.y + b.height * 0.5);
+    assert.ok(
+      Math.abs(
+        +(await page.locator("#frequency").inputValue()) -
+          (v.start + v.span * 0.62),
+      ) < 0.01,
+    );
+    await healthy("mouse click tunes " + selector);
+    const dragView = await viewport();
+    await page.mouse.move(b.x + b.width * 0.4, b.y + b.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width * 0.58, b.y + b.height * 0.5, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    assert.ok(
+      Math.abs(
+        +(await page.locator("#frequency").inputValue()) -
+          (dragView.start + dragView.span * 0.58),
+      ) < 0.01,
+    );
+    await healthy("mouse drag tunes " + selector);
+  }
+  const colors = await page.locator(".fall canvas").evaluate((c) => {
+    const bytes = c.getContext("2d").getImageData(0, 0, c.width, 1).data;
+    const colors = new Set();
+    for (let i = 0; i < bytes.length; i += 4)
+      colors.add(Array.from(bytes.slice(i, i + 4)).join(","));
+    return colors.size;
+  });
+  assert.ok(colors > 5, "waterfall renders varied real Kiwi data");
+
   assert.match(
     await page
       .getByRole("meter", { name: "Уровень радиосигнала" })
@@ -321,6 +469,43 @@ try {
   await page.getByRole("button", { name: "К частоте", exact: true }).click();
   await healthy("recenter");
   await page.setViewportSize({ width: 390, height: 844 });
+  const mobileFine = fine.getByRole("button", {
+    name: "Точная подстройка: частота плюс шаг",
+    exact: true,
+  });
+  await mobileFine.scrollIntoViewIfNeeded();
+  let mobileBox = await mobileFine.boundingBox();
+  let mobileFrequency = +(await page.locator("#frequency").inputValue());
+  await page.touchscreen.tap(
+    mobileBox.x + mobileBox.width / 2,
+    mobileBox.y + mobileBox.height / 2,
+  );
+  assert.equal(
+    +(await page.locator("#frequency").inputValue()),
+    mobileFrequency + 1,
+  );
+  await touchRotate(fineDial);
+  assert.notEqual(
+    +(await page.locator("#frequency").inputValue()),
+    mobileFrequency + 1,
+  );
+  await healthy("fine tuning touch button and touch VFO drag");
+  for (const selector of [".scope canvas", ".fall canvas"]) {
+    const target = page.locator(selector);
+    await target.evaluate((el) =>
+      el.scrollIntoView({ block: "center", behavior: "instant" }),
+    );
+    const b = await target.boundingBox(),
+      v = await viewport();
+    await page.touchscreen.tap(b.x + b.width * 0.4, b.y + b.height * 0.5);
+    assert.ok(
+      Math.abs(
+        +(await page.locator("#frequency").inputValue()) -
+          (v.start + v.span * 0.4),
+      ) < 0.01,
+    );
+    await healthy("touch tap tunes " + selector);
+  }
   const canvas = page.locator(".scope canvas");
   before = await viewport();
   await touchDrag(canvas, 0.45, 0.65);
@@ -413,7 +598,7 @@ try {
   if (process.env.TEST_SECOND_RECEIVER) {
     await chooseReceiver(process.env.TEST_SECOND_RECEIVER);
     await healthy("switch to another public KiwiSDR");
-    await chooseReceiver("france");
+    await chooseReceiver(testReceiver);
     await healthy("switch back to original KiwiSDR");
   }
   mkdirSync("artifacts", { recursive: true });
@@ -436,6 +621,33 @@ try {
     });
   }
   checks.push("320/390/820/1440 layouts without overflow");
+  assert.ok(
+    await page.evaluate(() => {
+      const tuner = document.querySelector(".tuner");
+      return (
+        tuner.nextElementSibling.matches(".visual") &&
+        Array.from(tuner.children)
+          .map((e) => e.classList[0])
+          .join(",") === "frequency,vfo-control,steps,mode,smeter" &&
+        document.querySelector(".fall").nextElementSibling.matches(".fine-tune")
+      );
+    }),
+  );
+  const qsl = page.locator(".qsl-card img");
+  for (const image of await qsl.all())
+    assert.equal(await image.getAttribute("src"), "/ur4mtn-qsl.jpg");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  assert.ok(
+    await page.evaluate(() =>
+      [".panel", ".header-right .dot.live", ".radio-rings i"].every(
+        (selector) =>
+          getComputedStyle(document.querySelector(selector)).animationName ===
+          "none",
+      ),
+    ),
+  );
+  checks.push("radio order, original QSL and reduced motion");
+
   await page.getByRole("button", { name: "Отключиться" }).click();
   const stopped = await page.evaluate(() => window.__sockets.length);
   await page.waitForTimeout(2200);

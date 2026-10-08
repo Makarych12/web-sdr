@@ -1,5 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { waterfallColor } from "../src/spectrumRenderer.ts";
+
+test("waterfall palette clamps calibrated power and resolves weak real signals", () => {
+  assert.deepEqual(waterfallColor(0, -13), [5, 10, 26, 255]);
+  assert.deepEqual(waterfallColor(255, -13), [255, 245, 207, 255]);
+  assert.deepEqual(waterfallColor(175, -13), waterfallColor(185, -23));
+  const colors = Array.from({ length: 91 }, (_, i) =>
+    waterfallColor(153 + i, -13),
+  );
+  assert.ok(new Set(colors.map(String)).size > 85);
+  const luminance = ([r, g, b]: number[]) =>
+    r * 0.2126 + g * 0.7152 + b * 0.0722;
+  for (let i = 1; i < colors.length; i++) {
+    assert.ok(luminance(colors[i]) >= luminance(colors[i - 1]) - 0.5);
+  }
+  assert.ok(luminance(waterfallColor(163, -13)) - luminance(colors[0]) > 20);
+});
 import {
   viewFor,
   projectView,
