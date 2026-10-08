@@ -46,7 +46,13 @@ const savedFrequencies = (v: unknown): v is SavedFrequency[] =>
       (x.width === undefined ||
         FILTER_WIDTHS[x.mode as Mode].includes(x.width)),
   );
-type View = { start: number; span: number; bandwidth?: number; zoom?: number };
+type View = {
+  start: number;
+  span: number;
+  bandwidth?: number;
+  zoom?: number;
+  sequence?: number;
+};
 function App() {
   const [agc, setAgc] = useStoredState<"fast" | "slow" | "off">(
     "wave.agc",
@@ -185,7 +191,9 @@ function App() {
   const [receiverChange, setReceiverChange] = useState("");
   const [viewPending, setViewPending] = useState(false);
   const renderer = useRef<SpectrumRenderer | null>(null);
-  const sourceView = useRef<View>({ start: 9765.625, span: 468.75 });
+  const sourceView = useRef<View | null>(null);
+  const awaitingTune = useRef(false);
+  const [waterfallReady, setWaterfallReady] = useState(false);
   const requestedView = useRef<View | null>(null);
   const signal = useRef<number | null>(null);
   const callbacks = useRef<{
@@ -325,6 +333,16 @@ function App() {
   ) {
     f = Math.round(Math.max(0, Math.min(30000, f)) * 1000) / 1000;
     const nextView = viewFor(center, z, viewRef.current.bandwidth ?? 30000);
+    if (
+      f !== settings.current.frequency ||
+      m !== settings.current.mode ||
+      z !== settings.current.zoom ||
+      !sameView(nextView, viewRef.current)
+    ) {
+      renderer.current?.clear(false);
+      awaitingTune.current = wanted;
+      setWaterfallReady(false);
+    }
     center = nextView.start + nextView.span / 2;
     requestedView.current = nextView;
     setViewPending(wanted);
@@ -376,9 +394,27 @@ function App() {
         stats.current.audio++;
       } else if (v[0] === 2) {
         stats.current.wf++;
-        renderer.current?.append(v.subarray(1), sourceView.current);
+        const incoming = sourceView.current;
+        if (
+          !awaitingTune.current &&
+          incoming &&
+          (!requestedView.current ||
+            matchesRequest(incoming, requestedView.current)) &&
+          renderer.current?.append(v.subarray(1), incoming)
+        )
+          setWaterfallReady(true);
       }
       return;
+    }
+    if (v.type === "tuned") {
+      const current = settings.current;
+      if (
+        v.frequency === current.frequency &&
+        v.mode === current.mode &&
+        v.zoom === current.zoom &&
+        (v.viewCenter === undefined || v.viewCenter === current.viewCenter)
+      )
+        awaitingTune.current = false;
     }
     if (v.type === "audio" && typeof v.sampleRate === "number") {
       rate.current = v.sampleRate;
@@ -396,16 +432,40 @@ function App() {
       calibration.current = v.value;
       renderer.current?.setCalibration(v.value);
     }
+    if (v.type === "view") {
+      // An invalid header must never lend the previous row's metadata to its bytes.
+      sourceView.current = null;
+      if (
+        (v.bandwidth !== undefined &&
+          (!finiteNumber(v.bandwidth) || v.bandwidth <= 0)) ||
+        (v.zoom !== undefined &&
+          (!finiteNumber(v.zoom) ||
+            !Number.isInteger(v.zoom) ||
+            v.zoom < 0 ||
+            v.zoom > 14)) ||
+        (v.sequence !== undefined &&
+          (!finiteNumber(v.sequence) ||
+            !Number.isInteger(v.sequence) ||
+            v.sequence < 0 ||
+            v.sequence > 0xffffffff))
+      )
+        return;
+    }
     if (
       v.type === "view" &&
       typeof v.start === "number" &&
-      typeof v.span === "number"
+      Number.isFinite(v.start) &&
+      v.start >= 0 &&
+      typeof v.span === "number" &&
+      Number.isFinite(v.span) &&
+      v.span > 0
     ) {
       const incoming = {
         start: v.start,
         span: v.span,
         bandwidth: typeof v.bandwidth === "number" ? v.bandwidth : 30000,
         zoom: typeof v.zoom === "number" ? v.zoom : settings.current.zoom,
+        sequence: typeof v.sequence === "number" ? v.sequence : undefined,
       };
       sourceView.current = incoming;
       if (
@@ -419,11 +479,14 @@ function App() {
         );
         displayView(requestedView.current);
       }
-      if (
-        requestedView.current &&
-        !matchesRequest(incoming, requestedView.current)
-      )
-        return;
+      const target =
+        requestedView.current ??
+        viewFor(
+          settings.current.viewCenter,
+          settings.current.zoom,
+          incoming.bandwidth,
+        );
+      if (!matchesRequest(incoming, target)) return;
       requestedView.current = null;
       setViewPending(false);
       displayView(incoming);
@@ -480,6 +543,10 @@ function App() {
         return true;
       },
       onReset: () => {
+        renderer.current?.clear();
+        sourceView.current = null;
+        awaitingTune.current = true;
+        setWaterfallReady(false);
         player.current?.port.postMessage({ reset: true });
         signal.current = null;
         setRssi(null);
@@ -550,6 +617,11 @@ function App() {
     setZoom(z);
     settings.current = { ...settings.current, zoom: z, viewCenter: center };
     const next = viewFor(center, z, bandwidth);
+    if (!sameView(next, viewRef.current)) {
+      renderer.current?.clear(false);
+      awaitingTune.current = wanted;
+      setWaterfallReady(false);
+    }
     requestedView.current = next;
     setViewPending(wanted);
     displayView(next);
@@ -1043,7 +1115,7 @@ function App() {
               tabIndex={0}
               aria-label="Waterfall: касание и перетаскивание для настройки"
             />
-            {counts.wf === 0 && (
+            {!waterfallReady && (
               <div className="empty">
                 <span>≋</span>
                 <strong>

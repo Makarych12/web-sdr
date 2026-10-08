@@ -88,6 +88,7 @@ async function healthy(label) {
       if (
         !a ||
         !m ||
+        +document.querySelector(".fall canvas")?.dataset.rows < 2 ||
         +m[1] <= audio + 5 ||
         +m[2] <= wf + 2 ||
         !document
@@ -232,7 +233,7 @@ try {
       c
         .getContext("2d")
         .getImageData(0, 0, c.width, c.height)
-        .data.every((v) => v === 0),
+        .data.every((v, i) => v === [3, 6, 11, 255][i % 4]),
     ),
     "idle waterfall contains no generated rows",
   );

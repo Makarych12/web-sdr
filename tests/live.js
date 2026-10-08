@@ -9,6 +9,29 @@ const stages = [
   { frequency: 7000, mode: "CW", zoom: 8 },
   { frequency: 27000, mode: "FM", zoom: 6 },
 ];
+if (process.env.TEST_WATERFALL) {
+  stages.splice(
+    0,
+    stages.length,
+    ...[7100, 14200, 7100, 28400].map((frequency) => ({
+      frequency,
+      mode: "USB",
+      zoom: 6,
+    })),
+    ...["AM", "USB", "LSB", "CW", "FM"].map((mode) => ({
+      frequency: 14200,
+      mode,
+      zoom: 7,
+    })),
+    ...Array.from({ length: 15 }, (_, zoom) => ({
+      frequency: 14200,
+      mode: "USB",
+      zoom,
+    })),
+    { frequency: 14200, mode: "USB", zoom: 7, viewCenter: 14400 },
+    { frequency: 7100, mode: "USB", zoom: 7, viewCenter: 7200 },
+  );
+}
 if (process.env.TEST_FILTERS) {
   stages.push(
     { frequency: 10000, mode: "AM", zoom: 6, lowCut: -2500, highCut: 2500 },
@@ -48,7 +71,7 @@ const timeout = setTimeout(
           JSON.stringify({ stage, audio, wf, view, rate, rms, verified }),
       ),
     ),
-  60000,
+  process.env.TEST_WATERFALL ? 150000 : 60000,
 );
 function finish(e) {
   if (done) return;
@@ -108,7 +131,8 @@ socket.on("message", (raw, binary) => {
   try {
     if (!binary) {
       const v = JSON.parse(raw);
-      if (v.type === "heartbeat") socket.send(JSON.stringify({type:"heartbeat_ack",at:v.at}));
+      if (v.type === "heartbeat")
+        socket.send(JSON.stringify({ type: "heartbeat_ack", at: v.at }));
       if (v.type === "error") return finish(Error(v.message));
       if (v.type === "audio") rate = v.sampleRate;
       if (v.type === "view") view = v;
@@ -133,7 +157,13 @@ socket.on("message", (raw, binary) => {
       wf++;
     }
     const target = stages[stage];
-    const center = target.viewCenter ?? target.frequency;
+    const requestedCenter = target.viewCenter ?? target.frequency;
+    const actualZoom = acknowledged?.zoom ?? target.zoom;
+    const expectedSpan = (view?.bandwidth ?? 30000) / 2 ** actualZoom;
+    const center = Math.max(
+      expectedSpan / 2,
+      Math.min((view?.bandwidth ?? 30000) - expectedSpan / 2, requestedCenter),
+    );
     if (
       verified &&
       audio >= 10 &&
@@ -141,7 +171,7 @@ socket.on("message", (raw, binary) => {
       view &&
       center >= view.start &&
       center <= view.start + view.span &&
-      Math.abs(view.span - view.bandwidth / 2 ** target.zoom) < 1 &&
+      Math.abs(view.span - view.bandwidth / 2 ** actualZoom) < 1 &&
       Math.abs(center - (view.start + view.span / 2)) <
         Math.max(0.01, view.span / 512) &&
       rms > 0
@@ -153,6 +183,7 @@ socket.on("message", (raw, binary) => {
       console.log("Verified", target.mode);
       report.push({
         ...target,
+        actualZoom,
         audioPackets: audio,
         waterfallRows: wf,
         rms,

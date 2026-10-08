@@ -3,6 +3,7 @@ export type SpectrumView = {
   span: number;
   bandwidth?: number;
   zoom?: number;
+  sequence?: number;
 };
 export function viewFor(
   center: number,
@@ -23,6 +24,9 @@ export function sameView(a: SpectrumView, b: SpectrumView) {
 export function matchesRequest(actual: SpectrumView, request: SpectrumView) {
   return (
     actual.zoom === request.zoom &&
+    Number.isFinite(actual.span) &&
+    Math.abs(actual.span - request.span) <=
+      Math.max(0.000001, request.span * 0.000001) &&
     Math.abs(actual.start - request.start) <=
       Math.max(0.01, (actual.bandwidth ?? 32000) / (1024 * 2 ** 14))
   );

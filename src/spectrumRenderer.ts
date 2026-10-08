@@ -1,47 +1,84 @@
-import { projectView, sameView, type SpectrumView } from "./spectrumView";
+import {
+  projectView,
+  sameView,
+  matchesRequest,
+  type SpectrumView,
+} from "./spectrumView";
 
-// Calibrated Kiwi power only: gamma expands weak signals without inventing bins.
+export function clampByte(value: number) {
+  return Math.round(
+    Math.max(0, Math.min(255, Number.isFinite(value) ? value : 0)),
+  );
+}
+const colorStops = [
+  [0, 2, 5, 13],
+  [0.18, 6, 21, 65],
+  [0.36, 15, 75, 161],
+  [0.54, 13, 175, 201],
+  [0.7, 58, 204, 117],
+  [0.84, 224, 213, 49],
+  [0.95, 247, 121, 24],
+  [1, 226, 44, 29],
+];
+/** One calibrated transfer curve for all receivers, bands and zoom levels. */
 export function waterfallColor(bin: number, calibration: number): number[] {
-  const stops = [
-    [0, 5, 10, 26],
-    [0.13, 29, 20, 76],
-    [0.3, 49, 55, 158],
-    [0.46, 31, 133, 219],
-    [0.62, 44, 207, 219],
-    [0.76, 112, 224, 139],
-    [0.9, 255, 194, 79],
-    [1, 255, 245, 207],
-  ];
-  const power = Math.max(0, Math.min(1, (bin - 255 + calibration + 115) / 90));
-  const t = power ** 0.72;
-  const index = stops.findIndex((stop) => stop[0] >= t);
-  const high = stops[Math.max(1, index)],
-    low = stops[Math.max(1, index) - 1];
+  const db = Math.max(
+    -100,
+    Math.min(100, Number.isFinite(calibration) ? calibration : -13),
+  );
+  const power = Math.max(
+    0,
+    Math.min(1, (clampByte(bin) - 255 + db + 115) / 90),
+  );
+  const t = power ** 0.85;
+  const index = Math.max(
+    1,
+    colorStops.findIndex((stop) => stop[0] >= t),
+  );
+  const low = colorStops[index - 1],
+    high = colorStops[index];
   const mix = (t - low[0]) / (high[0] - low[0]);
   return [1, 2, 3]
     .map((channel) =>
-      Math.round(low[channel] + (high[channel] - low[channel]) * mix),
+      clampByte(low[channel] + (high[channel] - low[channel]) * mix),
     )
     .concat(255);
 }
-/** Owns drawing and history; React changes never resize or replace the canvases. */
+/** Limit only isolated, one-bin spikes; preserve contiguous narrow-band signals. */
+export function limitWaterfallSpikes(bins: Uint8Array) {
+  const result = bins.slice();
+  for (let i = 1; i < bins.length - 1; i++) {
+    const neighbor = Math.max(bins[i - 1], bins[i + 1]);
+    if (bins[i] - neighbor > 80)
+      result[i] = clampByte(neighbor + 48 + (bins[i] - neighbor - 48) * 0.25);
+  }
+  return result;
+}
+function validView(view: SpectrumView) {
+  return (
+    Number.isFinite(view.start) &&
+    view.start >= 0 &&
+    Number.isFinite(view.span) &&
+    view.span > 0 &&
+    (view.bandwidth === undefined ||
+      (Number.isFinite(view.bandwidth) && view.bandwidth > 0)) &&
+    (view.zoom === undefined ||
+      (Number.isInteger(view.zoom) && view.zoom >= 0 && view.zoom <= 14))
+  );
+}
+/** Bounded real-row queue; integer scroll, no interpolation, no redraw animation. */
 export class SpectrumRenderer {
   private history = document.createElement("canvas");
-  private strip: ImageData;
-  private rows: SpectrumView[] = [];
+  private strip!: ImageData;
   private last?: { bins: Uint8Array; view: SpectrumView };
   private view: SpectrumView;
   private frame = 0;
   private palette = new Uint8ClampedArray(256 * 4);
-  private calibration = NaN;
-  private motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  private scrollFrom = 0;
-  private scrollAt = 0;
+  private calibration = -13;
+  private pending: { bins: Uint8Array; view: SpectrumView }[] = [];
+  private sequence?: number;
+  private rowCount = 0;
   private rowHeight = 2;
-  private motionChanged = () => {
-    this.scrollFrom = 0;
-    this.schedule();
-  };
   frames = 0;
   constructor(
     private spectrum: HTMLCanvasElement,
@@ -49,111 +86,146 @@ export class SpectrumRenderer {
     view: SpectrumView,
   ) {
     this.view = view;
-    this.history.width = waterfall.width;
-    this.history.height = waterfall.height;
-    this.strip = this.history
-      .getContext("2d")!
-      .createImageData(waterfall.width, 1);
+    this.resize();
     this.setCalibration(-13);
-    this.motion.addEventListener("change", this.motionChanged);
+    this.clear();
   }
   setCalibration(value: number) {
-    if (this.calibration === value) return;
-    this.calibration = value;
-    for (let i = 0; i < 256; i++) {
-      this.palette.set(waterfallColor(i, value), i * 4);
-    }
-    this.schedule();
+    if (!Number.isFinite(value)) return;
+    const next = Math.max(-100, Math.min(100, value));
+    const changed = next !== this.calibration;
+    this.calibration = next;
+    for (let i = 0; i < 256; i++)
+      this.palette.set(waterfallColor(i, this.calibration), i * 4);
+    if (changed) this.clear(false);
   }
   setView(view: SpectrumView) {
-    this.view = view;
-    this.scrollFrom = 0;
-    this.schedule();
+    if (!validView(view)) return;
+    if (!sameView(view, this.view)) {
+      this.view = { ...view };
+      this.clear(false);
+    }
+  }
+  private resize() {
+    if (this.waterfall.width < 1 || this.waterfall.height < 1) {
+      this.pending = [];
+      this.last = undefined;
+      this.rowCount = 0;
+      this.waterfall.dataset.rows = "0";
+      return true;
+    }
+    if (
+      this.history.width === this.waterfall.width &&
+      this.history.height === this.waterfall.height &&
+      this.strip
+    )
+      return false;
+    this.history.width = this.waterfall.width;
+    this.history.height = this.waterfall.height;
+    this.strip = this.history
+      .getContext("2d")!
+      .createImageData(this.history.width, 1);
+    this.clear(false);
+    return true;
   }
   append(bins: Uint8Array, view: SpectrumView) {
-    if (!bins.length) return;
-    const now = performance.now();
-    // Translate received rows into place; never interpolate signal power or add data.
-    this.scrollFrom = this.motion.matches
-      ? 0
-      : this.scrollOffset(now) - this.rowHeight;
-    this.scrollAt = now;
-    const ctx = this.history.getContext("2d")!;
-    const { width, height } = this.history;
-    ctx.drawImage(
-      this.history,
-      0,
-      0,
-      width,
-      height - this.rowHeight,
-      0,
-      this.rowHeight,
-      width,
-      height - this.rowHeight,
-    );
-    for (let x = 0; x < width; x++) {
-      const bin =
-        bins[Math.min(bins.length - 1, Math.floor((x / width) * bins.length))];
-      this.strip.data.set(this.palette.subarray(bin * 4, bin * 4 + 4), x * 4);
+    if (
+      !(bins instanceof Uint8Array) ||
+      bins.length !== 1024 ||
+      this.waterfall.width < 1 ||
+      this.waterfall.height < 1 ||
+      !validView(view) ||
+      !matchesRequest(view, this.view)
+    )
+      return false;
+    if (view.sequence !== undefined) {
+      if (
+        !Number.isInteger(view.sequence) ||
+        view.sequence < 0 ||
+        view.sequence > 0xffffffff
+      )
+        return false;
+      if (this.sequence !== undefined) {
+        const delta = (view.sequence - this.sequence) >>> 0;
+        if (delta === 0 || delta > 0x7fffffff) return false;
+      }
+      this.sequence = view.sequence;
     }
-    for (let y = 0; y < this.rowHeight; y++) {
-      ctx.putImageData(this.strip, 0, y);
-      this.rows.unshift({ ...view });
-    }
-    this.rows.length = Math.min(this.rows.length, height);
-    this.last = { bins, view };
+    this.resize();
+    this.pending.push({ bins: limitWaterfallSpikes(bins), view: { ...view } });
+    if (this.pending.length > 8) this.pending.shift();
     this.schedule();
+    return true;
   }
-  clear() {
-    this.rows = [];
+  clear(resetSequence = true) {
+    cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.pending = [];
     this.last = undefined;
-    this.scrollFrom = 0;
-    this.history
-      .getContext("2d")!
-      .clearRect(0, 0, this.history.width, this.history.height);
+    this.rowCount = 0;
+    if (resetSequence) this.sequence = undefined;
+    for (const canvas of [this.history, this.waterfall]) {
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#03060b";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    this.waterfall.dataset.rows = "0";
+    delete this.waterfall.dataset.sequence;
     this.schedule();
   }
   private schedule() {
     if (!this.frame)
-      this.frame = requestAnimationFrame((now) => {
+      this.frame = requestAnimationFrame(() => {
         this.frame = 0;
-        this.render(now);
+        this.render();
       });
   }
-  private scrollOffset(now: number) {
-    return this.motion.matches
-      ? 0
-      : this.scrollFrom * Math.max(0, 1 - (now - this.scrollAt) / 100);
-  }
-  private render(now: number) {
+  private render() {
     this.frames++;
-    const wc = this.waterfall.getContext("2d")!,
-      sc = this.spectrum.getContext("2d")!;
-    const width = this.waterfall.width;
-    const offset = this.scrollOffset(now);
-    wc.clearRect(0, 0, width, this.waterfall.height);
-    // Adjacent rows sharing a range are projected in one GPU draw, not per pixel.
-    for (let y = 0; y < this.rows.length;) {
-      const source = this.rows[y];
-      let end = y + 1;
-      while (end < this.rows.length && sameView(source, this.rows[end])) end++;
-      const p = projectView(source, this.view, width);
-      wc.drawImage(
-        this.history,
-        0,
-        y,
-        width,
-        end - y,
-        p.x,
-        y + offset,
-        p.width,
-        end - y,
-      );
-      y = end;
+    if (!this.resize() && this.pending.length) {
+      const queue = this.pending.splice(0);
+      const ctx = this.history.getContext("2d")!;
+      const width = this.history.width,
+        height = this.history.height;
+      const shift = Math.min(height, queue.length * this.rowHeight);
+      ctx.imageSmoothingEnabled = false;
+      if (shift < height)
+        ctx.drawImage(
+          this.history,
+          0,
+          0,
+          width,
+          height - shift,
+          0,
+          shift,
+          width,
+          height - shift,
+        );
+      for (let n = 0; n < queue.length; n++) {
+        const row = queue[n];
+        for (let x = 0; x < width; x++) {
+          const bin = clampByte(
+            row.bins[Math.min(1023, Math.floor((x * 1024) / width))],
+          );
+          this.strip.data.set(
+            this.palette.subarray(bin * 4, bin * 4 + 4),
+            x * 4,
+          );
+        }
+        const y = (queue.length - 1 - n) * this.rowHeight;
+        for (let i = 0; i < this.rowHeight && y + i < height; i++)
+          ctx.putImageData(this.strip, 0, y + i);
+        this.last = row;
+      }
+      this.rowCount = Math.min(height, this.rowCount + shift);
+      const wc = this.waterfall.getContext("2d")!;
+      wc.imageSmoothingEnabled = false;
+      wc.drawImage(this.history, 0, 0);
+      this.waterfall.dataset.rows = String(this.rowCount);
+      this.waterfall.dataset.sequence = String(this.sequence ?? "");
     }
-    this.waterfall.dataset.rows = String(this.rows.length);
     this.waterfall.dataset.frames = String(this.frames);
-    if (offset) this.schedule();
+    const sc = this.spectrum.getContext("2d")!;
     sc.clearRect(0, 0, this.spectrum.width, this.spectrum.height);
     const sw = this.spectrum.width,
       sh = this.spectrum.height;
@@ -213,10 +285,9 @@ export class SpectrumRenderer {
     sc.shadowBlur = 0;
   }
   dispose() {
-    this.motion.removeEventListener("change", this.motionChanged);
     cancelAnimationFrame(this.frame);
     this.frame = 0;
-    this.rows = [];
+    this.pending = [];
     this.last = undefined;
   }
 }
