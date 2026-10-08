@@ -21,6 +21,7 @@ import {
   sameView,
   matchesRequest,
   frequencyLabel,
+  filterPosition,
 } from "./spectrumView";
 import { DirectKiwiSocket } from "./directKiwi";
 import { SMeter } from "./SMeter";
@@ -583,6 +584,12 @@ function App() {
     0,
     Math.min(100, ((frequency - view.start) / view.span) * 100),
   );
+  const filterBand = filterPosition(
+    view,
+    frequency,
+    passband(mode, filterWidth).lowCut,
+    passband(mode, filterWidth).highCut,
+  );
   return (
     <div className={"app" + (wanted ? " playing" : "")}>
       <header className="site-header">
@@ -856,15 +863,15 @@ function App() {
           <SMeter rssi={rssi} />
         </section>
         <section
-          className="visual panel"
+          className={"visual panel malachite" + (connected ? " receiving" : "")}
           data-start={view.start}
           data-span={view.span}
           data-zoom={view.zoom ?? zoom}
         >
           <div className="visual-head">
             <div>
-              <span className={"dot " + (connected ? "live" : "")} /> SPECTRUM{" "}
-              <span className="subtle">/ WATERFALL</span>
+              <span className={"dot " + (connected ? "live" : "")} /> PANORAMA{" "}
+              <span className="subtle">/ LIVE DSP</span>
             </div>
             <div className="zoom">
               <button
@@ -937,9 +944,6 @@ function App() {
                 ↔ Панорама
               </button>
             </div>
-            <button onClick={() => changeView(frequency, zoom)}>
-              К частоте
-            </button>
             <button
               aria-label="Панорама влево"
               onClick={() => changeView(viewCenter - view.span * 0.3)}
@@ -957,22 +961,39 @@ function App() {
             <canvas
               ref={spectrum}
               width={1024}
-              height={160}
+              height={240}
               {...spectrumGesture}
               tabIndex={0}
               aria-label="Спектр: касание и перетаскивание для настройки"
             />
+            <div className="power-axis" aria-hidden="true">
+              <span>−25</span>
+              <span>−55</span>
+              <span>−85</span>
+              <span>−115 dBm</span>
+            </div>
+            <div className="scope-vfo" aria-live="off">
+              <b>VFO A</b> {frequencyLabel(frequency, view.span)}{" "}
+              <small>
+                {mode} · {filterWidth} Hz
+              </small>
+            </div>
+            {filterBand && (
+              <div
+                className="passband"
+                style={{
+                  left: `${filterBand.left}%`,
+                  width: `${filterBand.width}%`,
+                }}
+                aria-hidden="true"
+              />
+            )}
             {frequency >= view.start && frequency <= view.start + view.span && (
-              <>
-                <div
-                  className="passband"
-                  style={{
-                    left: `${Math.max(0, ((frequency + passband(mode, filterWidth).lowCut / 1000 - view.start) / view.span) * 100)}%`,
-                    width: `${(filterWidth / 1000 / view.span) * 100}%`,
-                  }}
-                />
-                <div className="marker" style={{ left: `${marker}%` }} />
-              </>
+              <div
+                className="marker"
+                style={{ left: `${marker}%` }}
+                aria-hidden="true"
+              />
             )}
           </div>
           <div
@@ -987,12 +1008,26 @@ function App() {
             {...scaleGesture}
           >
             {Array.from({ length: 5 }, (_, i) => (
-              <span key={i}>
+              <span
+                key={i}
+                className={i === 2 ? "center-frequency" : undefined}
+              >
+                {i === 2 && <small>ЦЕНТР</small>}
                 {frequencyLabel(view.start + (view.span * i) / 4, view.span)}
               </span>
             ))}
           </div>
           <div className="fall">
+            {filterBand && (
+              <div
+                className="passband waterfall-passband"
+                style={{
+                  left: `${filterBand.left}%`,
+                  width: `${filterBand.width}%`,
+                }}
+                aria-hidden="true"
+              />
+            )}
             {frequency >= view.start && frequency <= view.start + view.span && (
               <div
                 className="marker waterfall-marker"
@@ -1003,7 +1038,7 @@ function App() {
             <canvas
               ref={waterfall}
               width={1024}
-              height={420}
+              height={480}
               {...waterfallGesture}
               tabIndex={0}
               aria-label="Waterfall: касание и перетаскивание для настройки"
@@ -1025,6 +1060,11 @@ function App() {
             step={step}
             onTune={(f) => tune(f)}
             onEnd={() => manager.current?.flushTune()}
+            viewCenter={view.start + view.span / 2}
+            zoom={zoom}
+            maxZoom={maxZoom}
+            onRecenter={() => changeView(frequency, zoom)}
+            onZoom={(z) => changeView(viewCenter, z)}
           />
           <div className="visual-foot">
             <span>Касание — частота · два пальца — масштаб</span>
@@ -1140,7 +1180,7 @@ function App() {
             </p>
             <p>
               Проект объединяет публичные KiwiSDR, реальный звук, spectrum и
-              waterfall, чтобы слушать эфир с телефона, планшета и компьютера.
+              waterfall. Слушайте эфир с телефона, планшета и компьютера.
             </p>
             <p>
               Установите приложение через меню браузера, чтобы открыть эфир с

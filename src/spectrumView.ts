@@ -42,3 +42,19 @@ export function frequencyLabel(khz: number, span: number) {
     ? `${khz.toFixed(3)} kHz`
     : `${(khz / 1000).toFixed(6)} MHz`;
 }
+
+/** Clip both filter edges to the visible range, including off-screen VFOs. */
+export function filterPosition(
+  view: SpectrumView,
+  frequency: number,
+  lowCut: number,
+  highCut: number,
+) {
+  const low = Math.max(view.start, frequency + lowCut / 1000);
+  const high = Math.min(view.start + view.span, frequency + highCut / 1000);
+  if (high <= low) return null;
+  return {
+    left: ((low - view.start) / view.span) * 100,
+    width: ((high - low) / view.span) * 100,
+  };
+}

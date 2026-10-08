@@ -5,11 +5,21 @@ export function FineTune({
   step,
   onTune,
   onEnd,
+  viewCenter,
+  zoom,
+  maxZoom,
+  onRecenter,
+  onZoom,
 }: {
   frequency: number;
   step: number;
   onTune: (frequency: number) => void;
   onEnd: () => void;
+  viewCenter: number;
+  zoom: number;
+  maxZoom: number;
+  onRecenter: () => void;
+  onZoom: (zoom: number) => void;
 }) {
   function nudge(steps: number) {
     onTune(frequency + steps * step);
@@ -61,6 +71,32 @@ export function FineTune({
               {Math.abs(n)} <small>шаг{Math.abs(n) === 1 ? "" : "ов"}</small>
             </button>
           ))}
+        </div>
+        <div className="fine-view" role="group" aria-label="Обзор панорамы">
+          <button onClick={onRecenter}>К частоте</button>
+          <button
+            aria-label="Настроиться на центр обзора"
+            onClick={() => {
+              onTune(viewCenter);
+              onEnd();
+            }}
+          >
+            Центр
+          </button>
+          <button
+            aria-label="Zoom −"
+            disabled={zoom <= 0}
+            onClick={() => onZoom(zoom - 1)}
+          >
+            Zoom −
+          </button>
+          <button
+            aria-label="Zoom +"
+            disabled={zoom >= maxZoom}
+            onClick={() => onZoom(zoom + 1)}
+          >
+            Zoom +
+          </button>
         </div>
       </div>
       <VfoDial

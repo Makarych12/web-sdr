@@ -22,7 +22,24 @@ import {
   projectView,
   matchesRequest,
   frequencyLabel,
+  filterPosition,
 } from "../src/spectrumView.ts";
+test("filter highlight clips USB/LSB edges and remains visible with off-screen VFO", () => {
+  const view = { start: 7000, span: 10 };
+  assert.deepEqual(filterPosition(view, 7000, -3000, 3000), {
+    left: 0,
+    width: 30,
+  });
+  const usb = filterPosition(view, 7009, 300, 2700)!;
+  assert.ok(Math.abs(usb.left - 93) < 1e-8);
+  assert.ok(Math.abs(usb.width - 7) < 1e-8);
+  assert.deepEqual(filterPosition(view, 7011, -3000, -300), {
+    left: 80,
+    width: 20,
+  });
+  assert.equal(filterPosition(view, 6990, 300, 2700), null);
+  assert.equal(filterPosition(view, 7020, -2700, -300), null);
+});
 test("range clamps to real receiver bandwidth and keeps requested zoom", () => {
   assert.deepEqual(viewFor(-100, 6, 32000), {
     start: 0,

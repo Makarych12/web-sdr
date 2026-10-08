@@ -1681,3 +1681,248 @@ button:active:not(:disabled) {
     animation: radio-breathe 9s ease-in-out infinite;
   }
 }
+
+/* Malachite-style display: the existing scope, scale and waterfall share one screen. */
+.malachite.panel {
+  background: #060a0f;
+  border: 1px solid #27343f;
+  border-radius: 16px;
+  box-shadow:
+    0 16px 44px #0006,
+    inset 0 1px 0 #ffffff09;
+  overflow: hidden;
+}
+.malachite .visual-head {
+  padding: 16px 18px 8px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: #b9e9ed;
+  letter-spacing: 1px;
+}
+.malachite .subtle {
+  color: #61737f;
+  font-size: 10px;
+}
+.malachite .view-readout {
+  color: #92c7d6;
+}
+.malachite .view-readout span {
+  color: #7f8c96;
+}
+.malachite .view-sliders {
+  background: #090e14;
+}
+.malachite .view-sliders label {
+  color: #8399a7;
+}
+.malachite .gesture-toolbar {
+  background: #090e14;
+  border-bottom: 1px solid #27343f;
+  padding: 8px 18px;
+}
+.malachite button {
+  background: #101a23;
+  border-color: #2c4554;
+  border-radius: 7px;
+}
+.malachite button:hover:not(:disabled) {
+  background: #18333d;
+  border-color: #40c9d9;
+}
+.malachite button[aria-pressed="true"] {
+  background: #123c43;
+  color: #80eff1;
+  border-color: #40bdc7;
+}
+.malachite button:disabled {
+  opacity: 0.4;
+}
+.malachite .zoom {
+  letter-spacing: 0;
+}
+.malachite .zoom span {
+  font-variant-numeric: tabular-nums;
+}
+.malachite .scope {
+  height: 260px;
+  background: #03070c;
+  overflow: hidden;
+}
+.malachite .fall {
+  height: 400px;
+  background: #03060b;
+  overflow: hidden;
+}
+.malachite .passband {
+  position: absolute;
+  inset-block: 0;
+  min-width: 2px;
+  background: linear-gradient(180deg, #27e2d32d, #20bbd548);
+  border-inline: 1px solid #6cfff0a6;
+  box-shadow:
+    inset 0 0 20px #33ddeb29,
+    0 0 10px #2ad4e633;
+  pointer-events: none;
+  z-index: 1;
+}
+.malachite .waterfall-passband {
+  background: #42dacc09;
+  border-color: #6cfff044;
+  box-shadow: inset 0 0 18px #33ddeb12;
+}
+.malachite .marker {
+  z-index: 2;
+  background: #fff1ab;
+  box-shadow:
+    0 0 4px #ffe5a1,
+    0 0 14px 2px #ffc05466;
+  opacity: 0.9;
+}
+.malachite .power-axis {
+  position: absolute;
+  inset: 7px auto 5px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font:
+    9px ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  color: #66808e;
+  pointer-events: none;
+  z-index: 3;
+  text-shadow: 0 1px 3px #000;
+}
+.malachite .scope-vfo {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 3;
+  padding: 6px 9px;
+  border: 1px solid #a9904844;
+  border-radius: 5px;
+  background: #050c12cf;
+  font:
+    11px ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  color: #d9edee;
+  pointer-events: none;
+}
+.malachite .scope-vfo b {
+  color: #ffe29b;
+  margin-right: 6px;
+}
+.malachite .scope-vfo small {
+  color: #7994a0;
+  margin-left: 8px;
+}
+.malachite.receiving .scope-vfo {
+  box-shadow: 0 0 16px #e2b95720;
+  text-shadow: 0 0 9px #f5d57b66;
+}
+.malachite .axis.frequency-scale {
+  padding: 0 8px;
+  min-height: 46px;
+  background: #0b1118;
+  border-block: 1px solid #293b47;
+  color: #93a9b7;
+  font-size: 11px;
+}
+.malachite .center-frequency {
+  color: #ffe4a3;
+  text-align: center;
+}
+.malachite .center-frequency small {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  color: #af9353;
+}
+.malachite .fine-tune {
+  background: linear-gradient(110deg, #0e1820, #0c131b);
+  border-top: 1px solid #30434d;
+}
+.malachite .fine-readout label {
+  color: #8ca3ac;
+}
+.malachite .fine-readout output {
+  color: #ffe6a5;
+  text-shadow: 0 0 16px #edc16a3b;
+}
+.malachite .fine-primary button {
+  background: linear-gradient(130deg, #17383e, #15232f);
+  border-color: #3d6973;
+}
+.malachite .fine-primary b {
+  color: #95fff1;
+}
+.malachite .fine-view {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.malachite .fine-view button {
+  min-height: 44px;
+  padding: 6px;
+  font-size: 11px;
+}
+.malachite .visual-foot {
+  color: #697f8e;
+  background: #080d13;
+}
+@media (max-width: 820px) {
+  .malachite .scope {
+    height: 200px;
+  }
+  .malachite .fall {
+    height: 300px;
+  }
+  .malachite .fine-readout output {
+    font-size: clamp(23px, 4vw, 36px);
+  }
+}
+@media (max-width: 600px) {
+  .malachite .scope {
+    height: 160px;
+  }
+  .malachite .fall {
+    height: 220px;
+  }
+  .malachite .visual-head {
+    padding: 12px 10px 8px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+  .malachite .gesture-toolbar {
+    padding: 8px 10px;
+  }
+  .malachite .axis.frequency-scale {
+    font-size: 9px;
+    min-height: 46px;
+  }
+  .malachite .scope-vfo {
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+  }
+  .malachite .scope-vfo small {
+    display: block;
+    margin: 3px 0 0;
+    font-size: 9px;
+  }
+  .malachite .fine-readout output {
+    font-size: clamp(22px, 6vw, 32px);
+  }
+  .malachite .fine-view button {
+    font-size: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .malachite *,
+  .malachite {
+    animation: none;
+    transition: none;
+  }
+}

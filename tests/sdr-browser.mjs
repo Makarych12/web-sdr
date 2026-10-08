@@ -213,6 +213,29 @@ try {
     "true",
   );
   checks.push("catalog search and server favorites persist");
+  await page.waitForFunction(
+    () => document.querySelector(".fall canvas")?.dataset.rows === "0",
+  );
+  assert.ok(
+    await page.locator(".scope canvas").evaluate((c) => {
+      const bytes = c
+        .getContext("2d")
+        .getImageData(0, 0, c.width, c.height).data;
+      for (let i = 0; i < bytes.length; i += 4)
+        if (Math.max(bytes[i], bytes[i + 1], bytes[i + 2]) > 80) return false;
+      return true;
+    }),
+    "idle spectrum has only the grid, no artificial signals",
+  );
+  assert.ok(
+    await page.locator(".fall canvas").evaluate((c) =>
+      c
+        .getContext("2d")
+        .getImageData(0, 0, c.width, c.height)
+        .data.every((v) => v === 0),
+    ),
+    "idle waterfall contains no generated rows",
+  );
   await page.locator(".hero-cta").click();
   await healthy("initial real audio and waterfall");
   // The under-waterfall controls must tune the same running audio/session.
@@ -220,6 +243,8 @@ try {
     window.__originalAudio = window.__audio;
     window.__originalAnalyser = window.__analyser;
     window.__originalSocket = window.__sockets.at(-1);
+    window.__originalSpectrum = document.querySelector(".scope canvas");
+    window.__originalWaterfall = document.querySelector(".fall canvas");
   });
   const fine = page.getByRole("region", {
     name: "Точная подстройка под waterfall",
@@ -385,6 +410,14 @@ try {
   await page.locator("#frequency").fill("7074");
   await page.getByRole("button", { name: "Настроить", exact: true }).click();
   await steps.selectOption("1");
+  for (const mode of ["AM", "USB", "LSB", "CW", "FM", "USB"]) {
+    await page.getByRole("button", { name: mode, exact: true }).click();
+    await page.waitForFunction(
+      (m) => window.__commands.at(-1)?.mode === m,
+      mode,
+    );
+    await healthy("real PCM and waterfall in " + mode);
+  }
   for (const agc of ["fast", "off", "slow"]) {
     await page.getByLabel("AGC", { exact: true }).selectOption(agc);
     await page.waitForFunction(
@@ -468,6 +501,49 @@ try {
   await healthy("pan preserves audio frequency");
   await page.getByRole("button", { name: "К частоте", exact: true }).click();
   await healthy("recenter");
+  let fineView = await viewport();
+  await fine
+    .getByRole("button", { name: "Zoom +", exact: true })
+    .press("Enter");
+  await changedView(fineView);
+  assert.equal((await viewport()).zoom, fineView.zoom + 1);
+  await healthy("under-waterfall Zoom + keyboard button");
+  await fine.getByRole("button", { name: "Zoom −", exact: true }).click();
+  await healthy("under-waterfall Zoom − button");
+  assert.equal((await viewport()).zoom, fineView.zoom);
+  await page
+    .getByRole("button", { name: "Панорама вправо", exact: true })
+    .click();
+  await healthy("pan before center tuning");
+  fineView = await viewport();
+  await fine
+    .getByRole("button", { name: "Настроиться на центр обзора", exact: true })
+    .click();
+  assert.ok(
+    Math.abs(
+      +(await page.locator("#frequency").inputValue()) -
+        (fineView.start + fineView.span / 2),
+    ) < 0.01,
+  );
+  await healthy("under-waterfall Center tunes current view midpoint");
+  await page.locator("#frequency").fill("7074");
+  await page.getByRole("button", { name: "Настроить", exact: true }).click();
+  await fine.getByRole("button", { name: "К частоте", exact: true }).click();
+  await healthy("under-waterfall recenter restores VFO overview");
+  assert.ok(
+    await page.evaluate(
+      () =>
+        window.__audio === window.__originalAudio &&
+        window.__analyser === window.__originalAnalyser &&
+        window.__sockets.at(-1) === window.__originalSocket &&
+        document.querySelector(".scope canvas") === window.__originalSpectrum &&
+        document.querySelector(".fall canvas") === window.__originalWaterfall,
+    ),
+  );
+  checks.push(
+    "tuning/pan/zoom reuse original canvases, audio worklet and socket",
+  );
+
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileFine = fine.getByRole("button", {
     name: "Точная подстройка: частота плюс шаг",
@@ -614,6 +690,27 @@ try {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     );
+    assert.ok(
+      await page.evaluate(() => {
+        const spectrum = document
+          .querySelector(".scope")
+          .getBoundingClientRect();
+        const waterfall = document
+          .querySelector(".fall")
+          .getBoundingClientRect();
+        return (
+          spectrum.height + waterfall.height >= 380 &&
+          document.querySelectorAll(".scope canvas").length === 1 &&
+          document.querySelectorAll(".fall canvas").length === 1
+        );
+      }),
+      "one full-height panorama at " + width,
+    );
+    for (const button of await fine.getByRole("button").all())
+      assert.ok((await button.boundingBox()).height >= 44);
+    await page
+      .locator(".visual")
+      .screenshot({ path: `artifacts/malachite-${name}.png` });
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: `artifacts/sdr-${name}.png`,
