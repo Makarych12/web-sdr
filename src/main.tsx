@@ -31,7 +31,16 @@ import {
   filterPosition,
 } from "./spectrumView";
 import { DirectKiwiSocket } from "./directKiwi";
-import { nativeAudioURL, needsNativeBackground } from "./nativeAudio";
+import {
+  nativeAudioURL,
+  needsNativeBackground,
+  nativeStreamUnavailable,
+} from "./nativeAudio";
+import {
+  audioDiagnostic,
+  audioDiagnosticReport,
+  audioSnapshot,
+} from "./audioDiagnostics";
 import { SMeter } from "./SMeter";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
 type SavedFrequency = {
@@ -64,6 +73,8 @@ type View = {
 function App() {
   const [restored] = useState(readRadioSession);
   const [nativeUnavailable, setNativeUnavailable] = useState(false);
+  const [audioReport, setAudioReport] = useState("");
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const [restoreNeeded, setRestoreNeeded] = useState(
     restored?.playing ?? false,
   );
@@ -413,6 +424,11 @@ function App() {
     setView(next);
   }
   callbacks.current.state = (v) => {
+    audioDiagnostic("connection:" + v.phase, {
+      desired: manager.current?.desired,
+      hidden: document.hidden,
+      native: audioSnapshot(nativeAudioElement.current),
+    });
     setWanted(manager.current?.desired ?? false);
     if (v.phase === "idle" || v.phase === "blocked") {
       clearNativeAudio();
@@ -616,6 +632,11 @@ function App() {
   function clearNativeAudio() {
     const native = nativeAudioElement.current;
     if (!native) return;
+    if (native.getAttribute("src"))
+      audioDiagnostic("native:clear", {
+        hidden: document.hidden,
+        desired: manager.current?.desired,
+      });
     nativeTuneRequest.current?.abort();
     nativeTuneKey.current = "";
     native.pause();
@@ -623,9 +644,21 @@ function App() {
     native.load();
   }
   async function nativePlayOrFallback() {
+    const native = nativeAudioElement.current!;
+    const source = native.src;
     try {
-      await nativeAudioElement.current!.play();
-    } catch {
+      await native.play();
+    } catch (error) {
+      // An old play promise can reject after a newer stream or explicit stop.
+      if (native.src !== source || !native.getAttribute("src")) return;
+      audioDiagnostic("native:play-error", {
+        name: error instanceof Error ? error.name : String(error),
+        hidden: document.hidden,
+        native: audioSnapshot(native),
+      });
+      if (!nativeStreamUnavailable(error, native.error?.code ?? null))
+        throw error;
+      audioDiagnostic("native:fallback-pcm");
       setNativeUnavailable(true);
       nativeOutput.current = false;
       clearNativeAudio();
@@ -643,6 +676,11 @@ function App() {
     native.volume = volume;
     native.muted = muted;
     function restart() {
+      audioDiagnostic("native:restart", {
+        frequency: config.frequency,
+        mode: config.mode,
+        hidden: document.hidden,
+      });
       nativeTuneRequest.current?.abort();
       // Never let a new stream's commands reach an old serverless instance.
       nativeSession.current = crypto.randomUUID();
@@ -714,6 +752,11 @@ function App() {
         audio.srcObject = mediaDestination.current.stream;
         fresh = true;
         context.current.onstatechange = () => {
+          audioDiagnostic("context:state", {
+            state: context.current?.state,
+            native: nativeOutput.current,
+            hidden: document.hidden,
+          });
           if (nativeOutput.current) return;
           const paused = context.current?.state !== "running" || audio.paused;
           setAudioPaused(paused);
@@ -1199,6 +1242,38 @@ function App() {
           {lifecycle.wakeError && lifecycle.wakeEnabled && (
             <p>{lifecycle.wakeError}</p>
           )}
+          <details className="audio-diagnostics">
+            <summary>Диагностика фонового звука</summary>
+            <p>
+              После блокировки и разблокировки экрана скопируйте журнал. Он
+              покажет выбранный аудиовывод и события остановки. Журнал хранится
+              только в этой вкладке.
+            </p>
+            <button
+              onClick={async () => {
+                lifecycle.recordDiagnostic("user:report");
+                const report = audioDiagnosticReport();
+                setAudioReport(report);
+                try {
+                  await navigator.clipboard.writeText(report);
+                  setDiagnosticCopied(true);
+                } catch {
+                  setDiagnosticCopied(false);
+                }
+              }}
+            >
+              {diagnosticCopied
+                ? "Журнал скопирован"
+                : "Скопировать диагностику звука"}
+            </button>
+            {audioReport && (
+              <textarea
+                readOnly
+                aria-label="Журнал фонового звука"
+                value={audioReport}
+              />
+            )}
+          </details>
         </section>
         {error && (
           <div role="alert" className="error">

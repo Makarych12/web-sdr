@@ -1,6 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nativeAudioURL } from "../src/nativeAudio.ts";
+import { nativeAudioURL, nativeStreamUnavailable } from "../src/nativeAudio.ts";
+test("interrupted playback and autoplay denial preserve the native background route", () => {
+  assert.equal(nativeStreamUnavailable({ name: "AbortError" }, 4), false);
+  assert.equal(
+    nativeStreamUnavailable({ name: "NotAllowedError" }, null),
+    false,
+  );
+  assert.equal(
+    nativeStreamUnavailable(new Error("temporary failure"), null),
+    false,
+  );
+  assert.equal(
+    nativeStreamUnavailable({ name: "NotSupportedError" }, null),
+    true,
+  );
+  for (const code of [2, 3, 4])
+    assert.equal(
+      nativeStreamUnavailable(new Error("media failure"), code),
+      true,
+    );
+});
 test("native audio follows frequency/mode/filter/AGC but ignores panorama zoom/pan", () => {
   const config = {
     receiver: "niendorf",

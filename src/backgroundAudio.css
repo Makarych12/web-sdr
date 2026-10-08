@@ -44,6 +44,31 @@
   color: #91adbf;
   margin: 8px 0 0;
 }
+.audio-diagnostics {
+  margin-top: 12px;
+  min-width: 0;
+}
+.audio-diagnostics summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 12px 0;
+  font-size: 13px;
+}
+.audio-diagnostics button {
+  min-height: 44px;
+  max-width: 100%;
+  margin-top: 10px;
+  white-space: normal;
+}
+.audio-diagnostics textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 180px;
+  margin-top: 10px;
+  font-size: 11px;
+}
 @media (max-width: 600px) {
   .background-audio {
     padding: 12px 14px;

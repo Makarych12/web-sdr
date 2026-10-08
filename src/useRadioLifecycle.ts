@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { useStoredState } from "./storage";
 import type { StreamConnection } from "./connection";
 import "./backgroundAudio.css";
+import { audioDiagnostic, audioSnapshot } from "./audioDiagnostics";
 type Options = {
   audio: RefObject<HTMLAudioElement | null>;
   nativeAudio: RefObject<HTMLAudioElement | null>;
@@ -40,6 +41,21 @@ export function useRadioLifecycle(options: Options) {
   const recovering = useRef<Promise<void> | null>(null);
   const policy = useRef(background);
   policy.current = background;
+  function recordDiagnostic(event: string) {
+    const v = latest.current;
+    audioDiagnostic(event, {
+      hidden: document.hidden,
+      background: policy.current,
+      output: v.native && policy.current ? "http-mp3" : "pcm-worklet",
+      wanted: v.manager.current?.desired,
+      context: v.context.current?.state,
+      frequency: v.frequency,
+      mode: v.mode,
+      receiver: v.receiverName,
+      native: audioSnapshot(v.nativeAudio.current),
+      pcm: audioSnapshot(v.audio.current),
+    });
+  }
   async function recover() {
     if (
       !latest.current.manager.current?.desired ||
@@ -59,10 +75,12 @@ export function useRadioLifecycle(options: Options) {
   }
   useEffect(() => {
     const audio = latest.current.audio.current!;
-    const synchronize = () => {
+    const synchronize = (event?: Event) => {
       const v = latest.current;
       const output =
         v.native && policy.current ? v.nativeAudio.current! : audio;
+      if (event?.currentTarget === output)
+        recordDiagnostic("audio:" + event.type);
       const paused =
         output.paused ||
         output.ended ||
@@ -77,10 +95,12 @@ export function useRadioLifecycle(options: Options) {
       const v = latest.current;
       const output = v.native && policy.current ? v.nativeAudio.current : audio;
       if (event.currentTarget !== output) return;
+      recordDiagnostic("audio:" + event.type);
       synchronize();
       if (latest.current.manager.current?.desired) void recover();
     };
     const visible = () => {
+      recordDiagnostic("page:visibility");
       const shown = !document.hidden;
       latest.current.manager.current?.setBackground(!shown);
       latest.current.onVisible(shown);
@@ -91,20 +111,21 @@ export function useRadioLifecycle(options: Options) {
         audio.pause();
         latest.current.nativeAudio.current?.pause();
         void latest.current.context.current?.suspend();
-      } else if (latest.current.native) {
-        void latest.current.context.current?.suspend();
       }
     };
     const freeze = () => {
+      recordDiagnostic("page:freeze-or-hide");
       setFrozen(true);
       latest.current.manager.current?.setBackground(true);
       latest.current.onVisible(false);
     };
     const resume = () => {
+      recordDiagnostic("page:resume-or-show");
       setFrozen(false);
       visible();
     };
     const offline = () => {
+      recordDiagnostic("page:offline");
       latest.current.setAudioPaused(true);
     };
     document.addEventListener("visibilitychange", visible);
@@ -148,14 +169,17 @@ export function useRadioLifecycle(options: Options) {
     if (!session) return;
     const handlers: { [key: string]: () => void } = {
       play: () => {
+        recordDiagnostic("media-session:play");
         setMediaPaused(false);
         void latest.current.start();
       },
       pause: () => {
+        recordDiagnostic("media-session:pause");
         latest.current.stop();
         setMediaPaused(true);
       },
       stop: () => {
+        recordDiagnostic("media-session:stop");
         latest.current.stop();
         setMediaPaused(false);
       },
@@ -271,6 +295,7 @@ export function useRadioLifecycle(options: Options) {
     frozen,
     mediaPaused,
     recover,
+    recordDiagnostic,
     wakeSupported: !!navigator.wakeLock,
   };
 }

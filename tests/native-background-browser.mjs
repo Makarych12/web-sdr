@@ -154,6 +154,32 @@ try {
   await page.waitForTimeout(400);
   assert.equal((await snapshot()).src, source);
   pass("panorama zoom retains native media URL");
+  await page.evaluate(() => {
+    const audio = document.querySelector(".native-radio-output");
+    const play = audio.play.bind(audio);
+    let once = true;
+    audio.play = () => {
+      if (once) {
+        once = false;
+        return Promise.reject(new DOMException("interrupted", "AbortError"));
+      }
+      return play();
+    };
+  });
+  await page
+    .locator(".fine-tune")
+    .getByRole("button", { name: "Точная подстройка: частота плюс шаг" })
+    .click();
+  await page.waitForTimeout(1500);
+  assert.equal((await snapshot()).src, source);
+  assert.equal(
+    await page
+      .locator("audio")
+      .first()
+      .evaluate((a) => a.muted),
+    true,
+  );
+  pass("transient AbortError does not switch native audio back to PCM");
   const before = await snapshot(),
     at = Date.now();
   await page.evaluate(async () => {
@@ -167,6 +193,8 @@ try {
       get: () => "hidden",
     });
     document.dispatchEvent(new Event("visibilitychange"));
+    if (window.__context.state !== "running")
+      throw new Error("App suspended AudioContext when hidden");
     await window.__context.suspend();
   });
   const seconds = Number(process.env.TEST_NATIVE_SECONDS || 120);
@@ -183,6 +211,32 @@ try {
   }
 
   const after = await snapshot();
+  await page.locator(".audio-diagnostics summary").click();
+  await page
+    .getByRole("button", { name: "Скопировать диагностику звука" })
+    .click();
+  const report = JSON.parse(
+    await page
+      .getByRole("textbox", { name: "Журнал фонового звука" })
+      .inputValue(),
+  );
+  assert.ok(
+    report.events.some(
+      (e) =>
+        e.event === "page:visibility" &&
+        e.state.hidden &&
+        e.state.output === "http-mp3",
+    ),
+  );
+  assert.ok(
+    report.events.some(
+      (e) => e.event === "native:play-error" && e.state.name === "AbortError",
+    ),
+  );
+  assert.ok(!JSON.stringify(report).includes("session="));
+  pass(
+    "local diagnostic report records selected route and interruptions without stream tokens",
+  );
   assert.equal(await page.evaluate(() => window.__context.state), "suspended");
   assert.equal(after.paused, false);
   assert.ok(after.time > 0);
