@@ -445,7 +445,7 @@ function App() {
   callbacks.current.message = (v) => {
     if (v instanceof Uint8Array) {
       if (v[0] === 1) {
-        if (nativeOutput.current && document.hidden) {
+        if (nativeOutput.current) {
           stats.current.audio++;
           return;
         }
@@ -663,13 +663,15 @@ function App() {
       nativeOutput.current = false;
       clearNativeAudio();
       audioElement.current!.muted = false;
-      await Promise.all([
-        context.current?.resume(),
-        audioElement.current!.play(),
-      ]);
+      await preparePCM();
     }
   }
   async function playNativeAudio() {
+    // Only one output owns playback. Do not keep a silent MediaStream player
+    // active beside the HTTP player (especially in Android WebView).
+    audioElement.current!.pause();
+    audioElement.current!.srcObject = null;
+    if (context.current?.state === "running") void context.current.suspend();
     const native = nativeAudioElement.current!;
     const config = { receiver: receiverRef.current, ...settings.current };
     const url = nativeAudioURL(gateway.http, config, nativeSession.current);
@@ -735,51 +737,49 @@ function App() {
     }
     return nativePlayOrFallback();
   }
+  async function preparePCM() {
+    const audio = audioElement.current!;
+    let fresh = false;
+    if (!context.current || context.current.state === "closed") {
+      mediaDestination.current?.stream
+        .getTracks()
+        .forEach((track) => track.stop());
+      context.current = new AudioContext({ latencyHint: "playback" });
+      player.current = null;
+      mediaDestination.current = context.current.createMediaStreamDestination();
+      fresh = true;
+      context.current.onstatechange = () => {
+        audioDiagnostic("context:state", {
+          state: context.current?.state,
+          native: nativeOutput.current,
+          hidden: document.hidden,
+        });
+        if (nativeOutput.current) return;
+        const paused = context.current?.state !== "running" || audio.paused;
+        setAudioPaused(paused);
+        if (paused && manager.current?.desired) void lifecycle.recover();
+      };
+    }
+    if (audio.srcObject !== mediaDestination.current!.stream)
+      audio.srcObject = mediaDestination.current!.stream;
+    // Invoke playback while the user gesture still grants permission.
+    const playing = Promise.all([context.current.resume(), audio.play()]);
+    void playing.catch(() => {});
+    if (fresh || !player.current) {
+      await context.current.audioWorklet.addModule("/audio-worklet.js");
+      player.current = new AudioWorkletNode(context.current, "pcm-player");
+      gain.current = context.current.createGain();
+      gain.current.gain.value = muted ? 0 : volume;
+      player.current.connect(gain.current).connect(mediaDestination.current!);
+    }
+    await playing;
+  }
   async function prepareAudio() {
     if (pendingAudio.current) return pendingAudio.current;
     const task = (async () => {
       playbackSession();
-      const audio = audioElement.current!;
-      let fresh = false;
-      if (!context.current || context.current.state === "closed") {
-        mediaDestination.current?.stream
-          .getTracks()
-          .forEach((track) => track.stop());
-        context.current = new AudioContext({ latencyHint: "playback" });
-        player.current = null;
-        mediaDestination.current =
-          context.current.createMediaStreamDestination();
-        audio.srcObject = mediaDestination.current.stream;
-        fresh = true;
-        context.current.onstatechange = () => {
-          audioDiagnostic("context:state", {
-            state: context.current?.state,
-            native: nativeOutput.current,
-            hidden: document.hidden,
-          });
-          if (nativeOutput.current) return;
-          const paused = context.current?.state !== "running" || audio.paused;
-          setAudioPaused(paused);
-          if (paused && manager.current?.desired) void lifecycle.recover();
-        };
-      }
-      // Both calls happen before awaiting module loading, while the user gesture
-      // still grants playback permission. The element and stream persist on tune.
-      const localPlaying =
-        nativeOutput.current && document.hidden
-          ? Promise.resolve()
-          : Promise.all([context.current.resume(), audio.play()]);
-      void localPlaying.catch(() => {});
-      // A suspended WebAudio graph must not block the independent media URL.
-      const playing = nativeOutput.current ? playNativeAudio() : localPlaying;
-      void playing.catch(() => {});
-      if (fresh || !player.current) {
-        await context.current.audioWorklet.addModule("/audio-worklet.js");
-        player.current = new AudioWorkletNode(context.current, "pcm-player");
-        gain.current = context.current.createGain();
-        gain.current.gain.value = muted ? 0 : volume;
-        player.current.connect(gain.current).connect(mediaDestination.current!);
-      }
+      // HTTP playback must not create or run an AudioContext/MediaStream sink.
+      const playing = nativeOutput.current ? playNativeAudio() : preparePCM();
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
@@ -803,7 +803,8 @@ function App() {
               nativeAudioElement.current!.ended ||
               nativeAudioElement.current!.error !== null ||
               nativeAudioElement.current!.readyState < 3
-          : context.current.state !== "running" || audio.paused,
+          : context.current?.state !== "running" ||
+              audioElement.current!.paused,
       );
     })();
     pendingAudio.current = task;
@@ -1026,7 +1027,6 @@ function App() {
       <audio
         ref={audioElement}
         className="radio-audio-output"
-        autoPlay
         muted={lifecycle.nativeEnabled}
         playsInline
         preload="auto"
@@ -1249,6 +1249,20 @@ function App() {
               покажет выбранный аудиовывод и события остановки. Журнал хранится
               только в этой вкладке.
             </p>
+            <a
+              href={
+                "/audio-check.html" +
+                new URL(
+                  nativeAudioURL(gateway.http, {
+                    receiver,
+                    ...settings.current,
+                  }),
+                ).search
+              }
+              onClick={stopRadio}
+            >
+              Проверить звук отдельно от SDR
+            </a>
             <button
               onClick={async () => {
                 lifecycle.recordDiagnostic("user:report");

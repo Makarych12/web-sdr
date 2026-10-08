@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 const browser = await chromium.launch({
   executablePath: "/usr/bin/chromium",
   headless: true,
-  args: ["--no-sandbox", "--autoplay-policy=no-user-gesture-required"],
+  args: ["--no-sandbox"],
 });
 const context = await browser.newContext({
   viewport: { width: 390, height: 844 },
@@ -115,6 +115,17 @@ try {
   assert.ok(initial.src.includes("/api/audio"));
   assert.ok(initial.localMuted);
   assert.ok(initial.decoded > 0);
+  assert.equal(await page.evaluate(() => !!window.__context), false);
+  assert.equal(
+    await page
+      .locator("audio")
+      .first()
+      .evaluate((a) => a.paused && a.srcObject === null),
+    true,
+  );
+  pass(
+    "HTTP output starts without AudioContext or a second MediaStream player",
+  );
   pass("Android/DuckDuckGo UA selects real HTTP media output", initial);
   for (const band of ["40", "20"]) {
     await page
@@ -193,9 +204,8 @@ try {
       get: () => "hidden",
     });
     document.dispatchEvent(new Event("visibilitychange"));
-    if (window.__context.state !== "running")
-      throw new Error("App suspended AudioContext when hidden");
-    await window.__context.suspend();
+    if (window.__context)
+      throw new Error("HTTP playback unexpectedly created AudioContext");
   });
   const seconds = Number(process.env.TEST_NATIVE_SECONDS || 120);
   for (let elapsed = 0; elapsed < seconds; elapsed += 30) {
@@ -237,24 +247,21 @@ try {
   pass(
     "local diagnostic report records selected route and interruptions without stream tokens",
   );
-  assert.equal(await page.evaluate(() => window.__context.state), "suspended");
+  assert.equal(await page.evaluate(() => !!window.__context), false);
   assert.equal(after.paused, false);
   assert.ok(after.time > 0);
   assert.equal(after.error, undefined);
   assert.ok(
     after.time - before.time > seconds - 8,
-    "native media clock did not advance independently of suspended AudioContext",
+    "native media clock did not advance without WebAudio",
   );
-  pass(
-    "native playback continues with suspended AudioContext and suppressed PCM delivery",
-    {
-      seconds,
-      tickDelta: after.ticks - before.ticks,
-      before,
-      after,
-      requestsWhileBackground: requests.filter((r) => r.at >= at),
-    },
-  );
+  pass("native playback continues without AudioContext or PCM delivery", {
+    seconds,
+    tickDelta: after.ticks - before.ticks,
+    before,
+    after,
+    requestsWhileBackground: requests.filter((r) => r.at >= at),
+  });
   await page.evaluate(() => {
     window.__suspendPCM = false;
     Object.defineProperty(document, "hidden", {
@@ -310,13 +317,25 @@ try {
   await page.waitForFunction(
     () =>
       !document.querySelector(".native-radio-output").getAttribute("src") &&
-      !document.querySelector("audio").muted,
+      !document.querySelector("audio").muted &&
+      !document.querySelector("audio").paused &&
+      window.__context?.state === "running",
   );
   await page
     .getByRole("checkbox", { name: "Фоновый эфир", exact: true })
     .check();
   await healthy();
-  pass("background switch restores original PCM or native output");
+  await page.waitForFunction(() => window.__context?.state === "suspended");
+  assert.equal(
+    await page
+      .locator("audio")
+      .first()
+      .evaluate((a) => a.paused && a.srcObject === null),
+    true,
+  );
+  pass(
+    "background switch restores PCM, then completely detaches the inactive MediaStream output",
+  );
   for (const width of [320, 390, 820]) {
     await page.setViewportSize({ width, height: 844 });
     assert.ok(
@@ -383,7 +402,7 @@ try {
       {
         testedAt: new Date().toISOString(),
         platform:
-          "desktop Chromium with Android/DuckDuckGo UA; suspended AudioContext and suppressed PCM delivery; live Kiwi; not physical Xiaomi/DuckDuckGo",
+          "desktop Chromium with Android/DuckDuckGo UA; no AudioContext during native playback; live Kiwi; not physical Xiaomi/DuckDuckGo",
         checks,
         errors,
       },

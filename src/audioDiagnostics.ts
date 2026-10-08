@@ -19,7 +19,7 @@ export function audioDiagnostic(
 export function audioDiagnosticReport() {
   return JSON.stringify(
     {
-      version: "background-9",
+      version: "background-10",
       userAgent: navigator.userAgent,
       events: entries,
     },

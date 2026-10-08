@@ -60,6 +60,13 @@
   margin-top: 10px;
   white-space: normal;
 }
+.audio-diagnostics a {
+  display: inline-block;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 10px 0;
+  color: #8deaf7;
+}
 .audio-diagnostics textarea {
   display: block;
   width: 100%;

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Проверка фонового звука — UR4MTN</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font:
+        16px/1.6 system-ui,
+        sans-serif;
+      background: #0b1724;
+      color: #d7e8ef;
+    }
+    body {
+      max-width: 640px;
+      margin: 36px auto;
+      padding: 0 18px;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    audio {
+      width: 100%;
+      margin: 20px 0;
+    }
+    button,
+    a {
+      display: inline-block;
+      padding: 12px 16px;
+      min-height: 44px;
+      box-sizing: border-box;
+      color: #8deaf7;
+    }
+    button {
+      border: 1px solid #398694;
+      border-radius: 8px;
+      background: #152b3e;
+      font: inherit;
+    }
+    #status {
+      overflow-wrap: anywhere;
+    }
+  </style>
+  <h1>Проверка фонового звука</h1>
+  <p>
+    Это отдельный плеер настоящего эфира KiwiSDR. Нажмите «Включить звук»,
+    дождитесь эфира и заблокируйте экран на одну минуту.
+  </p>
+  <p>
+    Если звук выключится и здесь, проблема воспроизводится без WebAudio,
+    waterfall и основной страницы SDR. Для сравнения откройте эту же страницу в
+    Chrome.
+  </p>
+  <p id="tune"></p>
+  <button id="start">Включить звук</button>
+  <audio id="radio" controls playsinline preload="none"></audio>
+  <p id="status" role="status">Ожидаем запуска.</p>
+  <p>
+    Проверка рассчитана на одну минуту. Текущий сервер завершает аудиопоток
+    через четыре минуты; этот плеер не запускает его заново автоматически.
+  </p>
+  <a href="/#listen">Вернуться к WebSDR</a>
+  <script>
+    const query = new URLSearchParams(location.search);
+    const stream = new URL("/api/audio", location.origin);
+    for (const [key, fallback] of Object.entries({
+      receiver: "niendorf",
+      frequency: "14200",
+      mode: "USB",
+      lowCut: "300",
+      highCut: "2700",
+      agc: "slow",
+    })) {
+      stream.searchParams.set(key, query.get(key) || fallback);
+    }
+    const audio = document.getElementById("radio");
+    const status = document.getElementById("status");
+    document.getElementById("tune").textContent =
+      `${stream.searchParams.get("frequency")} kHz · ${stream.searchParams.get("mode")}`;
+    document.getElementById("start").onclick = async () => {
+      if (!audio.getAttribute("src") || audio.ended || audio.error)
+        audio.src = stream.href;
+      try {
+        await audio.play();
+      } catch {
+        status.textContent =
+          "Не удалось запустить поток. Попробуйте ещё раз или вернитесь к WebSDR.";
+      }
+    };
+    for (const [event, label] of Object.entries({
+      playing: "Настоящий эфир играет. Можно заблокировать экран.",
+      pause: "Браузер приостановил плеер.",
+      waiting: "Плеер ожидает данные.",
+      ended: "Поток завершён.",
+      error: "Ошибка аудиопотока.",
+    })) {
+      audio.addEventListener(event, () => {
+        status.textContent = label;
+      });
+    }
+    // No AudioContext, WebSocket, reconnect timer or background lifecycle handler.
+  </script>
+</html>
