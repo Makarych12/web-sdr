@@ -140,3 +140,64 @@ test("native HTTP stream is uncached and releases upstream on client disconnect"
   assert.equal(sessions[0].options.audioOnly, true);
   assert.equal(sessions[0].closed, true);
 });
+
+test("cold audio request still streams after the serverless adapter drains and destroys the request", async (t) => {
+  const app = express();
+  let ready,
+    drainedRequestDestroyed = false,
+    session;
+  const catalogReady = new Promise((resolve) => {
+    ready = resolve;
+  });
+  app.use((req, res, next) => {
+    // Real IncomingMessage autoDestroy, as with adapters consuming the body.
+    req.resume();
+    req.once("end", () =>
+      setTimeout(() => {
+        drainedRequestDestroyed = req.destroyed;
+        assert.equal(res.destroyed, false);
+        ready();
+      }, 20),
+    );
+    next();
+  });
+  class ColdSession {
+    constructor(url, emit) {
+      this.emit = emit;
+      session = this;
+    }
+    start() {
+      this.emit({ type: "audio", sampleRate: 12000 });
+      this.timer = setInterval(() => {
+        const pcm = new Uint8Array(2401);
+        pcm[0] = 1;
+        this.emit(pcm);
+      }, 5);
+    }
+    close() {
+      clearInterval(this.timer);
+    }
+  }
+  installNativeAudio(
+    app,
+    { find: () => ({ url: "https://example.org" }) },
+    catalogReady,
+    { Session: ColdSession, lifetimeMs: 0 },
+  );
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => {
+    session?.close();
+    server.closeAllConnections();
+    server.close();
+  });
+  const response = await fetch(
+    `http://127.0.0.1:${server.address().port}/api/audio?receiver=valid&frequency=14200&mode=USB`,
+    { signal: AbortSignal.timeout(2000) },
+  );
+  const reader = response.body.getReader();
+  assert.ok((await reader.read()).value.length > 0);
+  assert.equal(drainedRequestDestroyed, true);
+  assert.equal(response.status, 200);
+  await reader.cancel();
+});

@@ -105,7 +105,9 @@ export function installNativeAudio(
       return res.status(400).json({ error: "Некорректная настройка эфира" });
     }
     await catalogReady;
-    if (req.destroyed) return;
+    // Vercel/Node may auto-destroy a fully consumed IncomingMessage while its
+    // response is still open. Only the response tells us the listener left.
+    if (res.destroyed || res.writableEnded) return;
     const receiver = catalog.find(tune.receiver);
     if (!receiver)
       return res.status(404).json({ error: "Неизвестный приёмник" });
