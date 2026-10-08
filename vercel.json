@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
+  "regions": ["iad1"],
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "headers": [
@@ -17,10 +18,18 @@
   "functions": {
     "api/gateway.js": {
       "maxDuration": 300,
-      "includeFiles": "server/*.json"
+      "includeFiles": "{server/*.json,node_modules/ffmpeg-static/ffmpeg}"
     }
   },
   "rewrites": [
+    {
+      "source": "/api/hls",
+      "destination": "/api/gateway"
+    },
+    {
+      "source": "/api/hls/:path*",
+      "destination": "/api/gateway"
+    },
     {
       "source": "/ws",
       "destination": "/api/gateway"

@@ -7,6 +7,7 @@ type Options = {
   audio: RefObject<HTMLAudioElement | null>;
   nativeAudio: RefObject<HTMLAudioElement | null>;
   native: boolean;
+  nativeTransport?: "http-hls" | "http-mp3";
   context: RefObject<AudioContext | null>;
   manager: RefObject<StreamConnection | null>;
   wanted: boolean;
@@ -46,7 +47,10 @@ export function useRadioLifecycle(options: Options) {
     audioDiagnostic(event, {
       hidden: document.hidden,
       background: policy.current,
-      output: v.native && policy.current ? "http-mp3" : "pcm-worklet",
+      output:
+        v.native && policy.current
+          ? v.nativeTransport || "http-mp3"
+          : "pcm-worklet",
       wanted: v.manager.current?.desired,
       context: v.context.current?.state,
       frequency: v.frequency,

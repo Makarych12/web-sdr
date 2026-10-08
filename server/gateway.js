@@ -7,6 +7,7 @@ import { KiwiSession, validateTune } from "./kiwi.js";
 import { ReceiverCatalog } from "./catalog.js";
 import { originAllowed } from "./origins.js";
 import { installNativeAudio } from "./nativeAudio.js";
+import { installHlsAudio } from "./hlsAudio.js";
 const receivers = JSON.parse(
   readFileSync(new URL("./receivers.json", import.meta.url)),
 );
@@ -50,6 +51,7 @@ app.get("/api/health", (_, res) =>
   }),
 );
 installNativeAudio(app, catalog, catalogReady);
+installHlsAudio(app, catalog, catalogReady);
 app.use(express.static("dist"));
 const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
 server.on("upgrade", (req, socket, head) => {

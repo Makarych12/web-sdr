@@ -45,7 +45,7 @@
   <h1>Проверка фонового звука</h1>
   <p>
     Это отдельный плеер настоящего эфира KiwiSDR. Нажмите «Включить звук»,
-    дождитесь эфира и заблокируйте экран на одну минуту.
+    дождитесь эфира и заблокируйте экран на пять минут.
   </p>
   <p>
     Если звук выключится и здесь, проблема воспроизводится без WebAudio,
@@ -57,13 +57,24 @@
   <audio id="radio" controls playsinline preload="none"></audio>
   <p id="status" role="status">Ожидаем запуска.</p>
   <p>
-    Проверка рассчитана на одну минуту. Текущий сервер завершает аудиопоток
-    через четыре минуты; этот плеер не запускает его заново автоматически.
+    <span id="transport">Проверяем доступный аудиовывод.</span>
   </p>
   <a href="/#listen">Вернуться к WebSDR</a>
   <script>
     const query = new URLSearchParams(location.search);
     const stream = new URL("/api/audio", location.origin);
+    const hls = !!document
+      .createElement("audio")
+      .canPlayType("application/vnd.apple.mpegurl");
+    if (hls && query.get("transport") !== "mp3") {
+      stream.pathname = "/api/hls";
+      stream.searchParams.set("session", crypto.randomUUID());
+      document.getElementById("transport").textContent =
+        "Используется HLS. Новые сегменты запрашивает плеер браузера. Запуск занимает около 12 секунд.";
+    } else {
+      document.getElementById("transport").textContent =
+        "Этот браузер использует MP3-поток с лимитом четыре минуты. Автоматического перезапуска в этом проверочном плеере нет.";
+    }
     for (const [key, fallback] of Object.entries({
       receiver: "niendorf",
       frequency: "14200",

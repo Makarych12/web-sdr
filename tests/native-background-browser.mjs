@@ -19,7 +19,7 @@ const page = await context.newPage(),
   checks = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("request", (r) => {
-  if (new URL(r.url()).pathname === "/api/audio")
+  if (["/api/audio", "/api/hls"].includes(new URL(r.url()).pathname))
     requests.push({ at: Date.now(), url: r.url() });
 });
 await page.addInitScript(() => {
@@ -112,7 +112,8 @@ try {
   await page.locator(".connect").click();
   await healthy();
   const initial = await snapshot();
-  assert.ok(initial.src.includes("/api/audio"));
+  const hls = new URL(initial.src).pathname === "/api/hls";
+  assert.ok(hls || initial.src.includes("/api/audio"));
   assert.ok(initial.localMuted);
   assert.ok(initial.decoded > 0);
   assert.equal(await page.evaluate(() => !!window.__context), false);
@@ -147,7 +148,7 @@ try {
   await page.getByLabel("AGC", { exact: true }).selectOption("fast");
   await healthy();
   assert.equal((await snapshot()).src, initial.src);
-  assert.equal(requests.length, 1);
+  if (!hls) assert.equal(requests.length, 1);
   const source = (await snapshot()).src;
   assert.equal(
     await page.locator(".native-radio-output").getAttribute("data-high-cut"),
@@ -235,7 +236,7 @@ try {
       (e) =>
         e.event === "page:visibility" &&
         e.state.hidden &&
-        e.state.output === "http-mp3",
+        e.state.output === (hls ? "http-hls" : "http-mp3"),
     ),
   );
   assert.ok(
@@ -293,7 +294,7 @@ try {
     "session",
   );
   await page.route(
-    "**/api/audio/tune?**",
+    (url) => ["/api/audio/tune", "/api/hls/tune"].includes(url.pathname),
     (route) => route.fulfill({ status: 404, body: "session lost" }),
     { times: 1 },
   );
@@ -356,8 +357,9 @@ try {
   );
   pass("explicit stop releases native stream");
   const fallback = await context.newPage();
-  await fallback.route("**/api/audio?**", (route) =>
-    route.fulfill({ status: 403, body: "unavailable" }),
+  await fallback.route(
+    (url) => ["/api/audio", "/api/hls"].includes(url.pathname),
+    (route) => route.fulfill({ status: 403, body: "unavailable" }),
   );
   await fallback.goto(
     process.env.TEST_NATIVE_URL || "http://127.0.0.1:8790/#listen",

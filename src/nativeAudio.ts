@@ -4,8 +4,9 @@ export function nativeAudioURL(
   base: string,
   config: StreamConfig,
   session?: string,
+  transport: "mp3" | "hls" = "mp3",
 ) {
-  const url = new URL("/api/audio", base);
+  const url = new URL(transport === "hls" ? "/api/hls" : "/api/audio", base);
   if (session) url.searchParams.set("session", session);
   for (const key of [
     "receiver",
@@ -18,6 +19,12 @@ export function nativeAudioURL(
     if (config[key] !== undefined)
       url.searchParams.set(key, String(config[key]));
   return url.href;
+}
+export function canPlayNativeHls() {
+  if (typeof document === "undefined") return false;
+  return !!document
+    .createElement("audio")
+    .canPlayType("application/vnd.apple.mpegurl");
 }
 export const needsNativeBackground =
   typeof navigator !== "undefined" &&

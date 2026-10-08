@@ -35,6 +35,7 @@ import {
   nativeAudioURL,
   needsNativeBackground,
   nativeStreamUnavailable,
+  canPlayNativeHls,
 } from "./nativeAudio";
 import {
   audioDiagnostic,
@@ -43,6 +44,14 @@ import {
 } from "./audioDiagnostics";
 import { SMeter } from "./SMeter";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
+const nativeTransport = canPlayNativeHls() ? "hls" : "mp3";
+function releaseHls(source: string) {
+  if (!source) return;
+  const url = new URL(source);
+  if (url.pathname !== "/api/hls") return;
+  url.pathname = "/api/hls/stop";
+  void fetch(url, { cache: "no-store", keepalive: true }).catch(() => {});
+}
 type SavedFrequency = {
   id: string;
   frequency: number;
@@ -639,6 +648,7 @@ function App() {
       });
     nativeTuneRequest.current?.abort();
     nativeTuneKey.current = "";
+    releaseHls(native.getAttribute("src") ? native.src : "");
     native.pause();
     native.removeAttribute("src");
     native.load();
@@ -674,7 +684,12 @@ function App() {
     if (context.current?.state === "running") void context.current.suspend();
     const native = nativeAudioElement.current!;
     const config = { receiver: receiverRef.current, ...settings.current };
-    const url = nativeAudioURL(gateway.http, config, nativeSession.current);
+    const url = nativeAudioURL(
+      gateway.http,
+      config,
+      nativeSession.current,
+      nativeTransport,
+    );
     native.volume = volume;
     native.muted = muted;
     function restart() {
@@ -684,6 +699,7 @@ function App() {
         hidden: document.hidden,
       });
       nativeTuneRequest.current?.abort();
+      releaseHls(native.getAttribute("src") ? native.src : "");
       // Never let a new stream's commands reach an old serverless instance.
       nativeSession.current = crypto.randomUUID();
       nativeSequence.current = 0;
@@ -691,6 +707,7 @@ function App() {
         gateway.http,
         config,
         nativeSession.current,
+        nativeTransport,
       );
       nativeTuneKey.current = freshURL;
       native.dataset.frequency = String(config.frequency);
@@ -712,7 +729,8 @@ function App() {
       const request = new AbortController();
       nativeTuneRequest.current = request;
       const control = new URL(url);
-      control.pathname = "/api/audio/tune";
+      control.pathname =
+        nativeTransport === "hls" ? "/api/hls/tune" : "/api/audio/tune";
       control.searchParams.set("sequence", String(++nativeSequence.current));
       try {
         const response = await fetch(control, {
@@ -979,6 +997,7 @@ function App() {
     audio: audioElement,
     nativeAudio: nativeAudioElement,
     native: needsNativeBackground && !nativeUnavailable,
+    nativeTransport: nativeTransport === "hls" ? "http-hls" : "http-mp3",
     context,
     manager,
     wanted,
@@ -1231,9 +1250,11 @@ function App() {
           )}
           {lifecycle.nativeEnabled && (
             <p>
-              На телефоне используется прямой аудиопоток для фонового
-              воспроизведения. Если браузер отключает эфир во сне, разрешите ему
-              работу без ограничений в настройках батареи телефона.
+              {nativeTransport === "hls"
+                ? "Фоновый эфир воспроизводит системный HLS-плеер браузера. Запуск и смена частоты слышны с задержкой около 12 секунд. "
+                : "На телефоне используется прямой аудиопоток для фонового воспроизведения. "}
+              Если браузер отключает эфир во сне, разрешите ему работу без
+              ограничений в настройках батареи телефона.
             </p>
           )}
           {lifecycle.wakeHeld && (
@@ -1253,10 +1274,15 @@ function App() {
               href={
                 "/audio-check.html" +
                 new URL(
-                  nativeAudioURL(gateway.http, {
-                    receiver,
-                    ...settings.current,
-                  }),
+                  nativeAudioURL(
+                    gateway.http,
+                    {
+                      receiver,
+                      ...settings.current,
+                    },
+                    undefined,
+                    nativeTransport,
+                  ),
                 ).search
               }
               onClick={stopRadio}

@@ -14,11 +14,14 @@
     "verify:sdr": "node tests/sdr-browser.mjs",
     "verify:ui": "node tests/ui-preview.mjs",
     "verify:production": "node tests/vercel-production.mjs",
-    "verify:quality": "node tests/quality-production.mjs"
+    "verify:quality": "node tests/quality-production.mjs",
+    "verify:hls": "node tests/hls-browser.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
+    "@vercel/functions": "^3.9.11",
     "express": "^5.1.0",
+    "ffmpeg-static": "^5.3.0",
     "json5": "^2.2.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -34,5 +37,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.0",
     "vite": "^7.1.0"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.3.0": true
   }
 }
