@@ -175,3 +175,43 @@ test("application heartbeat is acknowledged without resetting the stream", (t) =
   assert.equal(sockets.length, 1);
   c.stop();
 });
+
+test("returning from sleep preserves a fresh connection and reconnects a stale one with current settings", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+  const { c, sockets, setConfig } = setup();
+  c.start();
+  sockets[0].open();
+  sockets[0].onmessage({ data: new Uint8Array([1, 0, 0]).buffer });
+  c.recoverAfterSleep();
+  assert.equal(sockets.length, 1);
+  c.setBackground(true);
+  for (let i = 0; i < 30; i++) {
+    t.mock.timers.tick(1000);
+    sockets[0].onmessage({ data: new Uint8Array([1, 0, 0]).buffer });
+  }
+  assert.equal(
+    sockets.length,
+    1,
+    "waterfall inactivity must not interrupt background PCM",
+  );
+  setConfig({
+    receiver: "france",
+    frequency: 14200,
+    mode: "USB",
+    zoom: 6,
+    lowCut: 300,
+    highCut: 2100,
+  });
+  sockets[0].readyState = 3;
+  c.recoverAfterSleep();
+  assert.equal(sockets.length, 2);
+  sockets[1].open();
+  assert.equal(JSON.parse(sockets[1].sent[0]).frequency, 14200);
+  c.stop();
+  c.recoverAfterSleep();
+  assert.equal(
+    sockets.length,
+    2,
+    "user stop must never restart from visibility events",
+  );
+});

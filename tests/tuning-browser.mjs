@@ -47,7 +47,7 @@ await page.addInitScript(() => {
   };
   const connect = AudioNode.prototype.connect;
   AudioNode.prototype.connect = function (...a) {
-    if (this instanceof GainNode && a[0] === this.context.destination) {
+    if (this instanceof GainNode && (a[0] === this.context.destination || a[0] instanceof MediaStreamAudioDestinationNode)) {
       window.__output = this.context.createAnalyser();
       connect.call(this, window.__output);
     }

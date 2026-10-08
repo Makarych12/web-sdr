@@ -35,6 +35,26 @@ export class StreamConnection {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private watchdog: ReturnType<typeof setInterval> | undefined;
   private options: Options;
+  private lastAudioAt = 0;
+  private startedAt = 0;
+  private background = false;
+  get hasFreshAudio() {
+    return (
+      this.desired &&
+      this.socket?.readyState === 1 &&
+      this.lastAudioAt > 0 &&
+      Date.now() - this.lastAudioAt < 22000
+    );
+  }
+  setBackground(hidden: boolean) {
+    this.background = hidden;
+  }
+  recoverAfterSleep() {
+    if (!this.desired) return;
+    const age = Date.now() - (this.lastAudioAt || this.startedAt);
+    if (!this.socket || this.socket.readyState > 1 || age >= 22000)
+      this.reconnectNow();
+  }
   constructor(options: Options) {
     this.options = options;
   }
@@ -108,6 +128,8 @@ export class StreamConnection {
     if (!this.desired) return;
     this.disposeSocket();
     const generation = this.generation;
+    this.startedAt = Date.now();
+    this.lastAudioAt = 0;
     this.options.onState({
       phase: "connecting",
       message: "Подключение…",
@@ -192,6 +214,7 @@ export class StreamConnection {
           if (bytes[0] === 1) {
             audio++;
             lastAudio = Date.now();
+            this.lastAudioAt = lastAudio;
           }
           if (bytes[0] === 2) {
             wf++;
@@ -236,7 +259,9 @@ export class StreamConnection {
     this.watchdog = setInterval(() => {
       if (
         current() &&
-        Date.now() - Math.min(lastAudio, lastWaterfall) > 22000
+        Date.now() -
+          (this.background ? lastAudio : Math.min(lastAudio, lastWaterfall)) >
+          22000
       ) {
         this.options.onDiagnostic?.({
           type: "stream_timeout",

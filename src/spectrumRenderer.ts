@@ -124,6 +124,15 @@ export class SpectrumRenderer {
   private sequence?: number;
   private rowCount = 0;
   private rowHeight = 2;
+  private visible = document.visibilityState !== "hidden";
+  setVisible(visible: boolean) {
+    if (visible === this.visible) return;
+    this.visible = visible;
+    cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.pending = [];
+    if (visible) this.clear(false);
+  }
   frames = 0;
   constructor(
     private spectrum: HTMLCanvasElement,
@@ -174,6 +183,7 @@ export class SpectrumRenderer {
     return true;
   }
   append(bins: Uint8Array, view: SpectrumView) {
+    if (!this.visible) return false;
     if (
       !(bins instanceof Uint8Array) ||
       bins.length !== 1024 ||
@@ -222,7 +232,7 @@ export class SpectrumRenderer {
     this.schedule();
   }
   private schedule() {
-    if (!this.frame)
+    if (this.visible && !this.frame)
       this.frame = requestAnimationFrame(() => {
         this.frame = 0;
         this.render();

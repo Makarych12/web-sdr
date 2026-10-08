@@ -18,7 +18,7 @@ await page.addInitScript(()=>{
   const connect=AudioNode.prototype.connect;
   AudioNode.prototype.connect=function(...args){
     if(this instanceof AudioWorkletNode){this.port.addEventListener('message',e=>{if(e.data.type==='playback')window.__playback=e.data;});this.port.start();}
-    if(this instanceof GainNode && args[0]===this.context.destination){window.__analyser=this.context.createAnalyser();connect.call(this,window.__analyser);}
+    if(this instanceof GainNode && (args[0]===this.context.destination || args[0] instanceof MediaStreamAudioDestinationNode)){window.__analyser=this.context.createAnalyser();connect.call(this,window.__analyser);}
     return connect.apply(this,args);
   };
   new PerformanceObserver(list=>{for(const e of list.getEntries())if(!e.hadRecentInput)window.__cls+=e.value;}).observe({type:'layout-shift',buffered:true});

@@ -8,6 +8,12 @@ import { gateway, gatewayConfigured } from "./gateway";
 import { VfoDial } from "./VfoDial";
 import { FineTune } from "./FineTune";
 import { QuickTune } from "./QuickTune";
+import { useRadioLifecycle } from "./useRadioLifecycle";
+import {
+  readRadioSession,
+  saveRadioSession,
+  playbackSession,
+} from "./radioSession";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
 import { useStoredState, stringList, finiteNumber } from "./storage";
 import {
@@ -55,6 +61,10 @@ type View = {
   sequence?: number;
 };
 function App() {
+  const [restored] = useState(readRadioSession);
+  const [restoreNeeded, setRestoreNeeded] = useState(
+    restored?.playing ?? false,
+  );
   const [agc, setAgc] = useStoredState<"fast" | "slow" | "off">(
     "wave.agc",
     "slow",
@@ -118,11 +128,11 @@ function App() {
     (v): v is string => typeof v === "string",
   );
   const [receivers, setReceivers] = useState<Receiver[]>([]),
-    [frequency, setFrequency] = useState(10000),
-    [draft, setDraft] = useState("10000"),
-    [mode, setMode] = useState<Mode>("AM"),
-    [zoom, setZoom] = useState(6),
-    [viewCenter, setViewCenter] = useState(10000),
+    [frequency, setFrequency] = useState(restored?.frequency ?? 10000),
+    [draft, setDraft] = useState(String(restored?.frequency ?? 10000)),
+    [mode, setMode] = useState<Mode>(restored?.mode ?? "AM"),
+    [zoom, setZoom] = useState(restored?.zoom ?? 6),
+    [viewCenter, setViewCenter] = useState(restored?.viewCenter ?? 10000),
     [maxZoom, setMaxZoom] = useState(14),
     [gestureMode, setGestureMode] = useState<"tune" | "pan">("tune"),
     [step, setStep] = useStoredState(
@@ -142,7 +152,9 @@ function App() {
     [error, setError] = useState(""),
     [rssi, setRssi] = useState<number | null>(null),
     [counts, setCounts] = useState({ audio: 0, wf: 0 }),
-    [view, setView] = useState<View>({ start: 9765.625, span: 468.75 }),
+    [view, setView] = useState<View>(() =>
+      viewFor(restored?.viewCenter ?? 10000, restored?.zoom ?? 6, 30000),
+    ),
     [offline, setOffline] = useState(!navigator.onLine);
   const [volume, setVolume] = useStoredState(
     "wave.volume",
@@ -203,6 +215,10 @@ function App() {
   }>({ message: () => {}, state: () => {} });
   const context = useRef<AudioContext | null>(null),
     player = useRef<AudioWorkletNode | null>(null),
+    audioElement = useRef<HTMLAudioElement | null>(null),
+    mediaDestination = useRef<MediaStreamAudioDestinationNode | null>(null),
+    pendingAudio = useRef<Promise<void> | null>(null),
+    startGeneration = useRef(0),
     gain = useRef<GainNode | null>(null),
     spectrum = useRef<HTMLCanvasElement>(null),
     waterfall = useRef<HTMLCanvasElement>(null),
@@ -300,7 +316,7 @@ function App() {
       setOffline(!navigator.onLine);
       if (navigator.onLine) {
         void loadCatalog();
-        manager.current?.reconnectNow();
+        manager.current?.recoverAfterSleep();
       }
     };
     window.addEventListener("online", online);
@@ -313,6 +329,10 @@ function App() {
       window.removeEventListener("online", online);
       window.removeEventListener("offline", online);
       manager.current?.stop();
+      audioElement.current?.pause();
+      mediaDestination.current?.stream
+        .getTracks()
+        .forEach((track) => track.stop());
       void context.current?.close();
     };
   }, []);
@@ -381,8 +401,10 @@ function App() {
   }
   callbacks.current.state = (v) => {
     setWanted(manager.current?.desired ?? false);
-    if (v.phase === "idle" && context.current?.state === "running")
-      void context.current.suspend();
+    if (v.phase === "idle" || v.phase === "blocked") {
+      audioElement.current?.pause();
+      if (context.current?.state === "running") void context.current.suspend();
+    }
     setConnected(v.phase === "live");
     setStatus(v.message);
     setRetryAt(v.retryAt);
@@ -573,49 +595,160 @@ function App() {
     },
     [setReceiver],
   );
-  async function connect() {
-    if (initializing.current || !gatewayConfigured) return;
-    if (manager.current?.desired) {
-      manager.current.stop();
-      return;
-    }
-    initializing.current = true;
-    setPreparing(true);
-    setError("");
-    try {
+  async function prepareAudio() {
+    if (pendingAudio.current) return pendingAudio.current;
+    const task = (async () => {
+      playbackSession();
+      const audio = audioElement.current!;
+      let fresh = false;
       if (!context.current || context.current.state === "closed") {
-        context.current = new AudioContext();
-        void context.current.resume();
+        mediaDestination.current?.stream
+          .getTracks()
+          .forEach((track) => track.stop());
+        context.current = new AudioContext({ latencyHint: "playback" });
+        player.current = null;
+        mediaDestination.current =
+          context.current.createMediaStreamDestination();
+        audio.srcObject = mediaDestination.current.stream;
+        fresh = true;
+        context.current.onstatechange = () => {
+          const paused = context.current?.state !== "running" || audio.paused;
+          setAudioPaused(paused);
+          if (paused && manager.current?.desired) void lifecycle.recover();
+        };
+      }
+      // Both calls happen before awaiting module loading, while the user gesture
+      // still grants playback permission. The element and stream persist on tune.
+      const playing = Promise.all([context.current.resume(), audio.play()]);
+      void playing.catch(() => {});
+      if (fresh || !player.current) {
         await context.current.audioWorklet.addModule("/audio-worklet.js");
         player.current = new AudioWorkletNode(context.current, "pcm-player");
         gain.current = context.current.createGain();
         gain.current.gain.value = muted ? 0 : volume;
-        player.current
-          .connect(gain.current)
-          .connect(context.current.destination);
-        context.current.onstatechange = () =>
-          setAudioPaused(context.current?.state !== "running");
+        player.current.connect(gain.current).connect(mediaDestination.current!);
       }
-      await context.current.resume();
-      setAudioPaused(false);
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          playing,
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(
+              () =>
+                reject(
+                  new Error("Браузер ожидает нажатия для включения звука"),
+                ),
+              4000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
+      }
+      setAudioPaused(context.current.state !== "running" || audio.paused);
+    })();
+    pendingAudio.current = task;
+    try {
+      await task;
+    } finally {
+      pendingAudio.current = null;
+    }
+  }
+  function stopRadio() {
+    ++startGeneration.current;
+    setRestoreNeeded(false);
+    manager.current?.stop();
+    audioElement.current?.pause();
+    void context.current?.suspend();
+  }
+  async function startRadio() {
+    if (initializing.current || !gatewayConfigured) return;
+    if (manager.current?.desired) {
+      manager.current.recoverAfterSleep();
+      try {
+        await prepareAudio();
+      } catch {
+        setAudioPaused(true);
+      }
+      return;
+    }
+    initializing.current = true;
+    const generation = ++startGeneration.current;
+    setPreparing(true);
+    setError("");
+    try {
+      await prepareAudio();
+      if (generation !== startGeneration.current) {
+        audioElement.current?.pause();
+        void context.current?.suspend();
+        return;
+      }
+      setRestoreNeeded(false);
       stats.current = { audio: 0, wf: 0 };
       setCounts({ ...stats.current });
       renderer.current?.clear();
       failedReceivers.current.clear();
       manager.current!.start();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStatus("Не удалось включить звук");
-      manager.current?.stop();
+      if (generation !== startGeneration.current) return;
+      setAudioPaused(true);
+      setRestoreNeeded(true);
+      setStatus("Нажмите «Возобновить звук»");
       if (!player.current) {
         await context.current?.close();
         context.current = null;
+        setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
       initializing.current = false;
       setPreparing(false);
     }
   }
+  async function connect() {
+    if (manager.current?.desired) stopRadio();
+    else await startRadio();
+  }
+  useEffect(() => {
+    if (!restored) return;
+    receiverRef.current = restored.receiver;
+    setReceiver(restored.receiver);
+    setAgc(restored.agc);
+    setWidths((prev) => ({ ...prev, [restored.mode]: restored.width }));
+  }, []);
+  useEffect(() => {
+    saveRadioSession({
+      frequency,
+      mode,
+      width: filterWidth,
+      zoom,
+      viewCenter,
+      agc,
+      receiver,
+      playing: wanted || restoreNeeded,
+    });
+  }, [
+    frequency,
+    mode,
+    filterWidth,
+    zoom,
+    viewCenter,
+    agc,
+    receiver,
+    wanted,
+    restoreNeeded,
+  ]);
+  const restoreAttempted = useRef(false);
+  useEffect(() => {
+    if (
+      !restoreAttempted.current &&
+      restored?.playing &&
+      receivers.length &&
+      !offline
+    ) {
+      restoreAttempted.current = true;
+      void startRadio();
+    }
+  }, [receivers.length, offline]);
   function changeView(center: number, z = zoom) {
     const bandwidth = viewRef.current.bandwidth ?? 30000;
     z = Math.max(0, Math.min(maxZoom, z));
@@ -681,8 +814,38 @@ function App() {
     passband(mode, filterWidth).lowCut,
     passband(mode, filterWidth).highCut,
   );
+  const lifecycle = useRadioLifecycle({
+    audio: audioElement,
+    context,
+    manager,
+    wanted,
+    live:
+      connected && !audioPaused && !offline && !!manager.current?.hasFreshAudio,
+    frequency,
+    mode,
+    receiverName: receivers.find((r) => r.id === receiver)?.name ?? receiver,
+    start: startRadio,
+    recover: prepareAudio,
+    stop: stopRadio,
+    setAudioPaused,
+    onVisible: (visible) => renderer.current?.setVisible(visible),
+  });
+  const live =
+    connected &&
+    !audioPaused &&
+    !lifecycle.frozen &&
+    !offline &&
+    !!manager.current?.hasFreshAudio;
   return (
     <div className={"app" + (wanted ? " playing" : "")}>
+      <audio
+        ref={audioElement}
+        className="radio-audio-output"
+        autoPlay
+        playsInline
+        preload="auto"
+        aria-hidden="true"
+      />
       <header className="site-header">
         <a className="brand" href="#home" aria-label="UR4MTN WEB SDR — главная">
           <Antenna />
@@ -728,16 +891,18 @@ function App() {
           </a>
         </nav>
         <div className="header-right" role="status">
-          <span className={"dot " + (connected ? "live" : "")} />
+          <span className={"dot " + (live ? "live" : "")} />
           {offline
             ? "Нет сети"
             : retryAt
               ? "Переподключение…"
               : error && !wanted
                 ? "Ошибка"
-                : connected
+                : live
                   ? "ONLINE · В эфире"
-                  : status}
+                  : wanted && (audioPaused || lifecycle.frozen)
+                    ? "Звук приостановлен"
+                    : status}
         </div>
       </header>
       <main>
@@ -786,7 +951,14 @@ function App() {
             {receivers.find((r) => r.id === receiver)?.name || receiver}
           </strong>
           <span>
-            {connected ? "Играет" : wanted ? "Подключение" : "Выбран"} ·{" "}
+            {live
+              ? "Играет"
+              : wanted && audioPaused
+                ? "Звук приостановлен"
+                : wanted
+                  ? "Подключение"
+                  : "Выбран"}{" "}
+            ·{" "}
             {receivers.find((r) => r.id === receiver)?.directUrl
               ? "Прямой WSS Kiwi"
               : "Через шлюз · восстановление каждые 5 минут"}
@@ -805,14 +977,58 @@ function App() {
             </button>
           </div>
         )}
-        {wanted && audioPaused && (
+        {(wanted || restoreNeeded) && audioPaused && (
           <div className="reconnect-banner">
             <span>Браузер приостановил звук</span>
-            <button onClick={() => void context.current?.resume()}>
-              Возобновить звук
-            </button>
+            <button onClick={() => void startRadio()}>Возобновить звук</button>
           </div>
         )}
+        <section className="background-audio panel" aria-label="Фоновый эфир">
+          <div className="background-audio-controls">
+            <label>
+              <input
+                type="checkbox"
+                checked={lifecycle.background}
+                onChange={(e) => lifecycle.setBackground(e.target.checked)}
+              />
+              Фоновый эфир
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={lifecycle.wakeEnabled}
+                disabled={!lifecycle.wakeSupported}
+                onChange={(e) => lifecycle.setWakeEnabled(e.target.checked)}
+              />
+              Оставлять экран включённым
+            </label>
+          </div>
+          <strong role="status">
+            {live
+              ? lifecycle.background
+                ? "Фоновый звук активен"
+                : "Эфир играет · фоновый режим выключен"
+              : lifecycle.frozen
+                ? "Система приостановила страницу. Восстанавливаем эфир…"
+                : (wanted || restoreNeeded) && audioPaused
+                  ? "Браузер приостановил звук — нажмите «Возобновить звук»"
+                  : wanted
+                    ? "Ожидаем аудиопоток"
+                    : "Запустите эфир"}
+          </strong>
+          <p>
+            При выключенном экране waterfall может не обновляться, звук
+            продолжает работать. Если система выгрузит страницу, эфир
+            восстановится после возвращения; браузер может запросить нажатие для
+            включения звука.
+          </p>
+          {lifecycle.wakeHeld && (
+            <p>Экран остаётся включённым во время просмотра.</p>
+          )}
+          {lifecycle.wakeError && lifecycle.wakeEnabled && (
+            <p>{lifecycle.wakeError}</p>
+          )}
+        </section>
         {error && (
           <div role="alert" className="error">
             {error}
@@ -961,7 +1177,7 @@ function App() {
         >
           <div className="visual-head">
             <div>
-              <span className={"dot " + (connected ? "live" : "")} /> PANORAMA{" "}
+              <span className={"dot " + (live ? "live" : "")} /> PANORAMA{" "}
               <span className="subtle">/ LIVE DSP</span>
             </div>
             <div className="zoom">
@@ -1195,7 +1411,7 @@ function App() {
             frequency={frequency}
             mode={mode}
             width={filterWidth}
-            connected={connected}
+            connected={live}
             onTune={(f, m, width) => tune(f, m, zoom, width ?? widths[m])}
           />
         </section>

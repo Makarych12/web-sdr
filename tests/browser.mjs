@@ -29,7 +29,7 @@ await page.addInitScript(() => {
           window.__analyser = this.context.createAnalyser();
           connect.call(this, window.__analyser);
         }
-        if (this instanceof GainNode && a[0] === this.context.destination) {
+        if (this instanceof GainNode && (a[0] === this.context.destination || a[0] instanceof MediaStreamAudioDestinationNode)) {
           window.__outputAnalyser = this.context.createAnalyser();
           connect.call(this, window.__outputAnalyser);
           window.__gain = this;

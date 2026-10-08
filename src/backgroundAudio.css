@@ -1,0 +1,56 @@
+.radio-audio-output {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  pointer-events: none;
+}
+.background-audio {
+  padding: 16px 20px;
+  margin: 12px 0;
+}
+.background-audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+}
+.background-audio label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #c9e6ef;
+  margin: 0;
+  letter-spacing: 0;
+  font-size: 13px;
+  min-height: 44px;
+}
+.background-audio input {
+  width: 20px;
+  height: 20px;
+  accent-color: #26bed1;
+  flex-shrink: 0;
+}
+.background-audio strong {
+  display: block;
+  font-size: 12px;
+  color: #72dabb;
+  margin-top: 8px;
+}
+.background-audio p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #91adbf;
+  margin: 8px 0 0;
+}
+@media (max-width: 600px) {
+  .background-audio {
+    padding: 12px 14px;
+  }
+  .background-audio-controls {
+    gap: 4px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
