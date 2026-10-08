@@ -7,6 +7,7 @@ import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
 import { VfoDial } from "./VfoDial";
 import { FineTune } from "./FineTune";
+import { QuickTune } from "./QuickTune";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
 import { useStoredState, stringList, finiteNumber } from "./storage";
 import {
@@ -1190,19 +1191,13 @@ function App() {
             />
             <span>{muted ? "MUTE" : Math.round(volume * 100) + "%"}</span>
           </div>
-          <div className="presets panel">
-            <label>БЫСТРАЯ НАСТРОЙКА</label>
-            {[
-              [4625, "USB"],
-              [7074, "USB"],
-              [10000, "AM"],
-              [14200, "USB"],
-            ].map(([f, m]) => (
-              <button key={f} onClick={() => tune(Number(f), m as Mode)}>
-                {Number(f) / 1000} <small>MHz</small>
-              </button>
-            ))}
-          </div>
+          <QuickTune
+            frequency={frequency}
+            mode={mode}
+            width={filterWidth}
+            connected={connected}
+            onTune={(f, m, width) => tune(f, m, zoom, width ?? widths[m])}
+          />
         </section>
         <section id="favorites" className="favorites-section">
           <div className="section-heading">
