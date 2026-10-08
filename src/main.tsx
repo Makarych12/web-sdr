@@ -31,6 +31,7 @@ import {
   filterPosition,
 } from "./spectrumView";
 import { DirectKiwiSocket } from "./directKiwi";
+import { nativeAudioURL, needsNativeBackground } from "./nativeAudio";
 import { SMeter } from "./SMeter";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
 type SavedFrequency = {
@@ -62,6 +63,7 @@ type View = {
 };
 function App() {
   const [restored] = useState(readRadioSession);
+  const [nativeUnavailable, setNativeUnavailable] = useState(false);
   const [restoreNeeded, setRestoreNeeded] = useState(
     restored?.playing ?? false,
   );
@@ -216,6 +218,12 @@ function App() {
   const context = useRef<AudioContext | null>(null),
     player = useRef<AudioWorkletNode | null>(null),
     audioElement = useRef<HTMLAudioElement | null>(null),
+    nativeAudioElement = useRef<HTMLAudioElement | null>(null),
+    nativeOutput = useRef(false),
+    nativeSession = useRef(crypto.randomUUID()),
+    nativeTuneKey = useRef(""),
+    nativeSequence = useRef(0),
+    nativeTuneRequest = useRef<AbortController | null>(null),
     mediaDestination = useRef<MediaStreamAudioDestinationNode | null>(null),
     pendingAudio = useRef<Promise<void> | null>(null),
     startGeneration = useRef(0),
@@ -329,6 +337,7 @@ function App() {
       window.removeEventListener("online", online);
       window.removeEventListener("offline", online);
       manager.current?.stop();
+      clearNativeAudio();
       audioElement.current?.pause();
       mediaDestination.current?.stream
         .getTracks()
@@ -343,6 +352,10 @@ function App() {
         context.current!.currentTime,
         0.025,
       );
+    if (nativeAudioElement.current) {
+      nativeAudioElement.current.volume = volume;
+      nativeAudioElement.current.muted = muted;
+    }
   }, [volume, muted]);
   useEffect(() => {
     const timer = setInterval(() => setRssi(signal.current), 100);
@@ -402,6 +415,7 @@ function App() {
   callbacks.current.state = (v) => {
     setWanted(manager.current?.desired ?? false);
     if (v.phase === "idle" || v.phase === "blocked") {
+      clearNativeAudio();
       audioElement.current?.pause();
       if (context.current?.state === "running") void context.current.suspend();
     }
@@ -415,6 +429,10 @@ function App() {
   callbacks.current.message = (v) => {
     if (v instanceof Uint8Array) {
       if (v[0] === 1) {
+        if (nativeOutput.current && document.hidden) {
+          stats.current.audio++;
+          return;
+        }
         const dv = new DataView(v.buffer, v.byteOffset, v.byteLength);
         const samples = new Float32Array((v.length - 1) / 2);
         for (let i = 0; i < samples.length; i++)
@@ -595,6 +613,80 @@ function App() {
     },
     [setReceiver],
   );
+  function clearNativeAudio() {
+    const native = nativeAudioElement.current;
+    if (!native) return;
+    nativeTuneRequest.current?.abort();
+    nativeTuneKey.current = "";
+    native.pause();
+    native.removeAttribute("src");
+    native.load();
+  }
+  async function nativePlayOrFallback() {
+    try {
+      await nativeAudioElement.current!.play();
+    } catch {
+      setNativeUnavailable(true);
+      nativeOutput.current = false;
+      clearNativeAudio();
+      audioElement.current!.muted = false;
+      await Promise.all([
+        context.current?.resume(),
+        audioElement.current!.play(),
+      ]);
+    }
+  }
+  async function playNativeAudio() {
+    const native = nativeAudioElement.current!;
+    const config = { receiver: receiverRef.current, ...settings.current };
+    const url = nativeAudioURL(gateway.http, config, nativeSession.current);
+    native.volume = volume;
+    native.muted = muted;
+    if (
+      !native.getAttribute("src") ||
+      native.ended ||
+      native.error ||
+      new URL(native.src).searchParams.get("receiver") !== receiverRef.current
+    ) {
+      nativeTuneRequest.current?.abort();
+      nativeTuneKey.current = url;
+      native.dataset.frequency = String(config.frequency);
+      native.dataset.mode = config.mode;
+      native.dataset.agc = config.agc;
+      native.dataset.highCut = String(config.highCut);
+      native.src = url;
+      return nativePlayOrFallback();
+    }
+    if (nativeTuneKey.current !== url) {
+      nativeTuneRequest.current?.abort();
+      const request = new AbortController();
+      nativeTuneRequest.current = request;
+      const control = new URL(url);
+      control.pathname = "/api/audio/tune";
+      control.searchParams.set("sequence", String(++nativeSequence.current));
+      try {
+        const response = await fetch(control, {
+          cache: "no-store",
+          signal: request.signal,
+        });
+        if (request.signal.aborted) return;
+        if (!response.ok) {
+          // A restarted/different serverless instance has lost this live session.
+          // Reconnect with current settings rather than playing a stale frequency.
+          native.src = url;
+        }
+        nativeTuneKey.current = url;
+        native.dataset.frequency = String(config.frequency);
+        native.dataset.mode = config.mode;
+        native.dataset.agc = config.agc;
+        native.dataset.highCut = String(config.highCut);
+      } catch (error) {
+        if (request.signal.aborted) return;
+        throw error;
+      }
+    }
+    return nativePlayOrFallback();
+  }
   async function prepareAudio() {
     if (pendingAudio.current) return pendingAudio.current;
     const task = (async () => {
@@ -612,6 +704,7 @@ function App() {
         audio.srcObject = mediaDestination.current.stream;
         fresh = true;
         context.current.onstatechange = () => {
+          if (nativeOutput.current) return;
           const paused = context.current?.state !== "running" || audio.paused;
           setAudioPaused(paused);
           if (paused && manager.current?.desired) void lifecycle.recover();
@@ -619,7 +712,13 @@ function App() {
       }
       // Both calls happen before awaiting module loading, while the user gesture
       // still grants playback permission. The element and stream persist on tune.
-      const playing = Promise.all([context.current.resume(), audio.play()]);
+      const localPlaying =
+        nativeOutput.current && document.hidden
+          ? Promise.resolve()
+          : Promise.all([context.current.resume(), audio.play()]);
+      void localPlaying.catch(() => {});
+      // A suspended WebAudio graph must not block the independent media URL.
+      const playing = nativeOutput.current ? playNativeAudio() : localPlaying;
       void playing.catch(() => {});
       if (fresh || !player.current) {
         await context.current.audioWorklet.addModule("/audio-worklet.js");
@@ -638,14 +737,21 @@ function App() {
                 reject(
                   new Error("Браузер ожидает нажатия для включения звука"),
                 ),
-              4000,
+              nativeOutput.current ? 20000 : 4000,
             );
           }),
         ]);
       } finally {
         clearTimeout(timeout);
       }
-      setAudioPaused(context.current.state !== "running" || audio.paused);
+      setAudioPaused(
+        nativeOutput.current
+          ? nativeAudioElement.current!.paused ||
+              nativeAudioElement.current!.ended ||
+              nativeAudioElement.current!.error !== null ||
+              nativeAudioElement.current!.readyState < 3
+          : context.current.state !== "running" || audio.paused,
+      );
     })();
     pendingAudio.current = task;
     try {
@@ -658,6 +764,7 @@ function App() {
     ++startGeneration.current;
     setRestoreNeeded(false);
     manager.current?.stop();
+    clearNativeAudio();
     audioElement.current?.pause();
     void context.current?.suspend();
   }
@@ -816,6 +923,8 @@ function App() {
   );
   const lifecycle = useRadioLifecycle({
     audio: audioElement,
+    nativeAudio: nativeAudioElement,
+    native: needsNativeBackground && !nativeUnavailable,
     context,
     manager,
     wanted,
@@ -830,10 +939,33 @@ function App() {
     setAudioPaused,
     onVisible: (visible) => renderer.current?.setVisible(visible),
   });
+  nativeOutput.current = lifecycle.nativeEnabled;
+  useEffect(() => {
+    audioElement.current!.muted = lifecycle.nativeEnabled;
+    if (!wanted) return;
+    if (!lifecycle.nativeEnabled) {
+      clearNativeAudio();
+      void prepareAudio().catch(() => setAudioPaused(true));
+      return;
+    }
+    // Coalesce rapid VFO changes; view zoom/pan don't affect this URL.
+    const timer = setTimeout(() => {
+      void playNativeAudio().catch(() => setAudioPaused(true));
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [
+    wanted,
+    lifecycle.nativeEnabled,
+    frequency,
+    mode,
+    filterWidth,
+    agc,
+    receiver,
+  ]);
   const live =
     connected &&
     !audioPaused &&
-    !lifecycle.frozen &&
+    (!lifecycle.frozen || lifecycle.nativeEnabled) &&
     !offline &&
     !!manager.current?.hasFreshAudio;
   return (
@@ -842,8 +974,16 @@ function App() {
         ref={audioElement}
         className="radio-audio-output"
         autoPlay
+        muted={lifecycle.nativeEnabled}
         playsInline
         preload="auto"
+        aria-hidden="true"
+      />
+      <audio
+        ref={nativeAudioElement}
+        className="radio-audio-output native-radio-output"
+        playsInline
+        preload="none"
         aria-hidden="true"
       />
       <header className="site-header">
@@ -959,9 +1099,11 @@ function App() {
                   ? "Подключение"
                   : "Выбран"}{" "}
             ·{" "}
-            {receivers.find((r) => r.id === receiver)?.directUrl
-              ? "Прямой WSS Kiwi"
-              : "Через шлюз · восстановление каждые 5 минут"}
+            {lifecycle.nativeEnabled
+              ? "Фоновый аудиопоток"
+              : receivers.find((r) => r.id === receiver)?.directUrl
+                ? "Прямой WSS Kiwi"
+                : "Через шлюз · восстановление каждые 5 минут"}
           </span>
           {receiverChange && <small>{receiverChange}</small>}
         </div>
@@ -989,7 +1131,10 @@ function App() {
               <input
                 type="checkbox"
                 checked={lifecycle.background}
-                onChange={(e) => lifecycle.setBackground(e.target.checked)}
+                onChange={(e) => {
+                  setNativeUnavailable(false);
+                  lifecycle.setBackground(e.target.checked);
+                }}
               />
               Фоновый эфир
             </label>
@@ -1005,9 +1150,11 @@ function App() {
           </div>
           <strong role="status">
             {live
-              ? lifecycle.background
-                ? "Фоновый звук активен"
-                : "Эфир играет · фоновый режим выключен"
+              ? nativeUnavailable
+                ? "Эфир играет · фоновый поток недоступен"
+                : lifecycle.background
+                  ? "Фоновый звук активен"
+                  : "Эфир играет · фоновый режим выключен"
               : lifecycle.frozen
                 ? "Система приостановила страницу. Восстанавливаем эфир…"
                 : (wanted || restoreNeeded) && audioPaused
@@ -1017,11 +1164,25 @@ function App() {
                     : "Запустите эфир"}
           </strong>
           <p>
-            При выключенном экране waterfall может не обновляться, звук
-            продолжает работать. Если система выгрузит страницу, эфир
-            восстановится после возвращения; браузер может запросить нажатие для
-            включения звука.
+            При выключенном экране waterfall может не обновляться. Фоновый звук
+            работает, пока браузер разрешает воспроизведение. Если система
+            выгрузит страницу, эфир восстановится после возвращения; браузер
+            может запросить нажатие для включения звука.
           </p>
+          {nativeUnavailable && (
+            <p>
+              Не удалось запустить фоновый аудиопоток. Обычный эфир сохранён;
+              для повтора выключите и включите «Фоновый эфир». Приёмнику нужен
+              свободный канал.
+            </p>
+          )}
+          {lifecycle.nativeEnabled && (
+            <p>
+              На телефоне используется прямой аудиопоток для фонового
+              воспроизведения. Если браузер отключает эфир во сне, разрешите ему
+              работу без ограничений в настройках батареи телефона.
+            </p>
+          )}
           {lifecycle.wakeHeld && (
             <p>Экран остаётся включённым во время просмотра.</p>
           )}

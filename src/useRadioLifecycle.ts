@@ -4,6 +4,8 @@ import type { StreamConnection } from "./connection";
 import "./backgroundAudio.css";
 type Options = {
   audio: RefObject<HTMLAudioElement | null>;
+  nativeAudio: RefObject<HTMLAudioElement | null>;
+  native: boolean;
   context: RefObject<AudioContext | null>;
   manager: RefObject<StreamConnection | null>;
   wanted: boolean;
@@ -34,6 +36,7 @@ export function useRadioLifecycle(options: Options) {
     [wakeError, setWakeError] = useState(""),
     [frozen, setFrozen] = useState(false);
   const [mediaPaused, setMediaPaused] = useState(false);
+  const [outputPlaying, setOutputPlaying] = useState(false);
   const recovering = useRef<Promise<void> | null>(null);
   const policy = useRef(background);
   policy.current = background;
@@ -58,11 +61,22 @@ export function useRadioLifecycle(options: Options) {
     const audio = latest.current.audio.current!;
     const synchronize = () => {
       const v = latest.current;
+      const output =
+        v.native && policy.current ? v.nativeAudio.current! : audio;
       const paused =
-        audio.paused || audio.ended || v.context.current?.state !== "running";
+        output.paused ||
+        output.ended ||
+        output.error !== null ||
+        (v.native && policy.current && output.readyState < 3) ||
+        (!(v.native && policy.current) &&
+          v.context.current?.state !== "running");
       v.setAudioPaused(paused);
+      setOutputPlaying(!paused);
     };
-    const interrupted = () => {
+    const interrupted = (event: Event) => {
+      const v = latest.current;
+      const output = v.native && policy.current ? v.nativeAudio.current : audio;
+      if (event.currentTarget !== output) return;
       synchronize();
       if (latest.current.manager.current?.desired) void recover();
     };
@@ -75,6 +89,9 @@ export function useRadioLifecycle(options: Options) {
         void recover();
       } else if (!policy.current) {
         audio.pause();
+        latest.current.nativeAudio.current?.pause();
+        void latest.current.context.current?.suspend();
+      } else if (latest.current.native) {
         void latest.current.context.current?.suspend();
       }
     };
@@ -97,9 +114,12 @@ export function useRadioLifecycle(options: Options) {
     window.addEventListener("pageshow", resume);
     window.addEventListener("online", resume);
     window.addEventListener("offline", offline);
-    for (const event of ["pause", "stalled", "waiting", "ended", "error"])
-      audio.addEventListener(event, interrupted);
-    audio.addEventListener("playing", synchronize);
+    const outputs = [audio, latest.current.nativeAudio.current!];
+    for (const output of outputs) {
+      for (const event of ["pause", "stalled", "waiting", "ended", "error"])
+        output.addEventListener(event, interrupted);
+      output.addEventListener("playing", synchronize);
+    }
     visible();
     return () => {
       document.removeEventListener("visibilitychange", visible);
@@ -109,14 +129,17 @@ export function useRadioLifecycle(options: Options) {
       window.removeEventListener("pageshow", resume);
       window.removeEventListener("online", resume);
       window.removeEventListener("offline", offline);
-      for (const event of ["pause", "stalled", "waiting", "ended", "error"])
-        audio.removeEventListener(event, interrupted);
-      audio.removeEventListener("playing", synchronize);
+      for (const output of outputs) {
+        for (const event of ["pause", "stalled", "waiting", "ended", "error"])
+          output.removeEventListener(event, interrupted);
+        output.removeEventListener("playing", synchronize);
+      }
     };
   }, []);
   useEffect(() => {
     if (!background && document.hidden) {
       latest.current.audio.current?.pause();
+      latest.current.nativeAudio.current?.pause();
       void latest.current.context.current?.suspend();
     } else if (background) void recover();
   }, [background]);
@@ -162,12 +185,15 @@ export function useRadioLifecycle(options: Options) {
           { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
         ],
       });
-    navigator.mediaSession.playbackState =
-      options.live && !frozen
-        ? "playing"
-        : options.wanted || mediaPaused
-          ? "paused"
-          : "none";
+    const playing =
+      options.native && background
+        ? options.wanted && outputPlaying
+        : options.live && !frozen;
+    navigator.mediaSession.playbackState = playing
+      ? "playing"
+      : options.wanted || mediaPaused
+        ? "paused"
+        : "none";
   }, [
     options.frequency,
     options.mode,
@@ -176,6 +202,9 @@ export function useRadioLifecycle(options: Options) {
     options.live,
     frozen,
     mediaPaused,
+    options.native,
+    outputPlaying,
+    background,
   ]);
   useEffect(() => {
     let disposed = false,
@@ -233,6 +262,7 @@ export function useRadioLifecycle(options: Options) {
   }, [wakeEnabled, options.wanted]);
   return {
     background,
+    nativeEnabled: options.native && background,
     setBackground,
     wakeEnabled,
     setWakeEnabled,

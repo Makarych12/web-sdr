@@ -1,4 +1,4 @@
-const CACHE = "ur4mtn-v7";
+const CACHE = "ur4mtn-v8";
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches

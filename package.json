@@ -17,6 +17,7 @@
     "verify:quality": "node tests/quality-production.mjs"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "express": "^5.1.0",
     "json5": "^2.2.3",
     "react": "^19.1.0",

@@ -36,6 +36,14 @@
     {
       "source": "/api/health",
       "destination": "/api/gateway"
+    },
+    {
+      "source": "/api/audio",
+      "destination": "/api/gateway"
+    },
+    {
+      "source": "/api/audio/tune",
+      "destination": "/api/gateway"
     }
   ]
 }

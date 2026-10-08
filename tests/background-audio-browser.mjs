@@ -279,6 +279,7 @@ try {
   for (const event of ["waiting", "stalled", "ended"]) {
     await page
       .locator("audio")
+      .first()
       .evaluate((audio, event) => audio.dispatchEvent(new Event(event)), event);
     await healthy();
   }
