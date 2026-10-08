@@ -307,7 +307,7 @@ try {
       {
         testedAt: new Date().toISOString(),
         platform:
-          "desktop Chromium with Android/DuckDuckGo UA; real renderer freeze and live Kiwi; not physical Xiaomi/DuckDuckGo",
+          "desktop Chromium with Android/DuckDuckGo UA; suspended AudioContext and suppressed PCM delivery; live Kiwi; not physical Xiaomi/DuckDuckGo",
         checks,
         errors,
       },
