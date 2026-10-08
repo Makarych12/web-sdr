@@ -1593,14 +1593,14 @@ button:active:not(:disabled) {
 .visual-foot i {
   background: linear-gradient(
     90deg,
-    #050a1a,
-    #311f70,
-    #31569e,
-    #1f85db,
-    #2ccfdb,
-    #70e08b,
-    #ffc24f,
-    #fff5cf
+    #02050d,
+    #061541,
+    #0f4ba1,
+    #0dafc9,
+    #3acc75,
+    #e0d531,
+    #f77918,
+    #e22c1d
   );
 }
 

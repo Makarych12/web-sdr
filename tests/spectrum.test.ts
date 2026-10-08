@@ -100,3 +100,40 @@ test("clamp and isolated-spike protection preserve contiguous real carriers", ()
   assert.equal(limited[6], 250);
   assert.equal(bins[2], 255);
 });
+
+import { WaterfallLevels } from "../src/spectrumRenderer.ts";
+test("waterfall normalizes elevated band noise without erasing relative signal contrast", () => {
+  // Fixtures model the same noise/carrier distribution with a different floor.
+  const low = Uint8Array.from(
+    { length: 1024 },
+    (_, i) => 160 + (i % 11) + (i >= 950 ? 25 : 0),
+  );
+  const high = low.map((v) => v + 30);
+  const a = new WaterfallLevels().update(low, -13);
+  const b = new WaterfallLevels().update(high, -13);
+  assert.equal(b.blackDb - a.blackDb, 30);
+  for (let i = 0; i < 1024; i++)
+    assert.deepEqual(
+      waterfallColor(low[i], -13, a.blackDb, a.rangeDb),
+      waterfallColor(high[i], -13, b.blackDb, b.rangeDb),
+    );
+  const background = waterfallColor(165, -13, a.blackDb, a.rangeDb);
+  const carrier = waterfallColor(190, -13, a.blackDb, a.rangeDb);
+  assert.ok(background[1] < 70, "noise remains dark, not a cyan wash");
+  assert.ok(carrier[1] > background[1] + 70, "real carrier remains visible");
+  assert.deepEqual(low.slice(0, 3), new Uint8Array([160, 161, 162]));
+});
+test("waterfall contrast ignores sparse carriers, tracks slowly and resets immediately for a new view", () => {
+  const levels = new WaterfallLevels();
+  const noise = new Uint8Array(1024).fill(170);
+  const baseline = levels.update(noise, -13);
+  const carrier = noise.slice();
+  carrier.fill(250, 500, 600);
+  assert.equal(levels.update(carrier, -13).noiseDb, baseline.noiseDb);
+  const shifted = new Uint8Array(1024).fill(200);
+  const next = levels.update(shifted, -13);
+  assert.ok(next.noiseDb - baseline.noiseDb <= 0.25);
+  levels.reset();
+  assert.equal(levels.update(shifted, -13).noiseDb, 200 - 255 - 13);
+  assert.ok(waterfallColor(200, NaN, NaN, 0).every(Number.isFinite));
+});

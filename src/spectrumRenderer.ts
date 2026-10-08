@@ -21,14 +21,21 @@ const colorStops = [
   [1, 226, 44, 29],
 ];
 /** One calibrated transfer curve for all receivers, bands and zoom levels. */
-export function waterfallColor(bin: number, calibration: number): number[] {
+export function waterfallColor(
+  bin: number,
+  calibration: number,
+  blackDb = -115,
+  rangeDb = 90,
+): number[] {
+  blackDb = Number.isFinite(blackDb) ? blackDb : -115;
+  rangeDb = Number.isFinite(rangeDb) && rangeDb > 0 ? rangeDb : 90;
   const db = Math.max(
     -100,
     Math.min(100, Number.isFinite(calibration) ? calibration : -13),
   );
   const power = Math.max(
     0,
-    Math.min(1, (clampByte(bin) - 255 + db + 115) / 90),
+    Math.min(1, (clampByte(bin) - 255 + db - blackDb) / rangeDb),
   );
   const t = power ** 0.85;
   const index = Math.max(
@@ -43,6 +50,43 @@ export function waterfallColor(bin: number, calibration: number): number[] {
       clampByte(low[channel] + (high[channel] - low[channel]) * mix),
     )
     .concat(255);
+}
+/** The same robust noise estimate on every band, independent of its frequency.
+ * A low percentile ignores isolated carriers; slow tracking avoids brightness
+ * pumping. Only display contrast changes: PCM, RSSI and spectrum stay absolute.
+ */
+export class WaterfallLevels {
+  private noise: number | undefined;
+  readonly rangeDb = 75;
+  reset() {
+    this.noise = undefined;
+  }
+  update(bins: Uint8Array, calibration: number) {
+    const histogram = new Uint16Array(256);
+    for (const value of bins) histogram[value]++;
+    const rank = Math.ceil(bins.length * 0.3);
+    let count = 0,
+      percentile = 0;
+    for (; percentile < 255; percentile++) {
+      count += histogram[percentile];
+      if (count >= rank) break;
+    }
+    const db = Number.isFinite(calibration)
+      ? Math.max(-100, Math.min(100, calibration))
+      : -13;
+    const target = percentile - 255 + db;
+    this.noise =
+      this.noise === undefined
+        ? target
+        : this.noise +
+          Math.max(-0.25, Math.min(0.25, (target - this.noise) * 0.04));
+    // Noise occupies dark navy/blue; power above it retains the full palette.
+    return {
+      blackDb: this.noise - 10,
+      noiseDb: this.noise,
+      rangeDb: this.rangeDb,
+    };
+  }
 }
 /** Limit only isolated, one-bin spikes; preserve contiguous narrow-band signals. */
 export function limitWaterfallSpikes(bins: Uint8Array) {
@@ -75,6 +119,7 @@ export class SpectrumRenderer {
   private frame = 0;
   private palette = new Uint8ClampedArray(256 * 4);
   private calibration = -13;
+  private levels = new WaterfallLevels();
   private pending: { bins: Uint8Array; view: SpectrumView }[] = [];
   private sequence?: number;
   private rowCount = 0;
@@ -163,6 +208,7 @@ export class SpectrumRenderer {
     this.pending = [];
     this.last = undefined;
     this.rowCount = 0;
+    this.levels.reset();
     if (resetSequence) this.sequence = undefined;
     for (const canvas of [this.history, this.waterfall]) {
       const ctx = canvas.getContext("2d")!;
@@ -170,6 +216,8 @@ export class SpectrumRenderer {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     this.waterfall.dataset.rows = "0";
+    delete this.waterfall.dataset.noiseDb;
+    delete this.waterfall.dataset.blackDb;
     delete this.waterfall.dataset.sequence;
     this.schedule();
   }
@@ -203,6 +251,14 @@ export class SpectrumRenderer {
         );
       for (let n = 0; n < queue.length; n++) {
         const row = queue[n];
+        const levels = this.levels.update(row.bins, this.calibration);
+        for (let i = 0; i < 256; i++)
+          this.palette.set(
+            waterfallColor(i, this.calibration, levels.blackDb, levels.rangeDb),
+            i * 4,
+          );
+        this.waterfall.dataset.noiseDb = levels.noiseDb.toFixed(2);
+        this.waterfall.dataset.blackDb = levels.blackDb.toFixed(2);
         for (let x = 0; x < width; x++) {
           const bin = clampByte(
             row.bins[Math.min(1023, Math.floor((x * 1024) / width))],

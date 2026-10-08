@@ -1163,7 +1163,7 @@ function App() {
           <div className="visual-foot">
             <span>Касание — частота · два пальца — масштаб</span>
             <span>
-              −115 <i /> −25 dBm
+              Шум · авто <i /> Сильный сигнал
             </span>
           </div>
         </section>
