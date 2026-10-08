@@ -134,12 +134,26 @@ export function installNativeAudio(
       retry,
       session,
       attempts = 0;
+    const startedAt = Date.now();
+    let totalBytes = 0;
+    const log = (event, detail = {}) =>
+      console.info(
+        JSON.stringify({
+          event,
+          receiver: tune.receiver,
+          seconds: (Date.now() - startedAt) / 1000,
+          ...detail,
+        }),
+      );
+    log("native_audio_start");
     const encode = new MP3Stream((bytes) => {
       if (finished || res.destroyed) return;
       if (res.writableLength > 256 * 1024) {
         end();
         return;
       }
+      if (!totalBytes) log("native_audio_first_bytes");
+      totalBytes += bytes.length;
       res.write(bytes);
     });
     function end() {
@@ -155,6 +169,7 @@ export function installNativeAudio(
     }
     record.end = end;
     res.on("close", () => {
+      log("native_audio_close", { bytes: totalBytes });
       forget();
       finished = true;
       clearTimeout(timer);
@@ -168,6 +183,10 @@ export function installNativeAudio(
         (value) => {
           if (finished) return;
           if (value.type === "error") {
+            log("native_audio_upstream_error", {
+              code: value.code,
+              message: value.message,
+            });
             session?.close();
             if (value.retryable === false || ++attempts > 3) {
               end();
@@ -180,7 +199,8 @@ export function installNativeAudio(
           if (value instanceof Uint8Array && value[0] === 1) attempts = 0;
           try {
             encode.accept(value);
-          } catch {
+          } catch (error) {
+            log("native_audio_encode_error", { message: error.message });
             end();
           }
         },
