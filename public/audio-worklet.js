@@ -18,10 +18,13 @@ class PCMPlayer extends AudioWorkletProcessor {
         this.buffered = 0;
         this.started = false;
         this.everStarted = false;
+        this.targetSeconds = 0.2;
         return;
       }
       if (data.rate) this.rate = data.rate;
       if (data.samples) {
+        this.queue.push(data.samples);
+        this.buffered += data.samples.length;
         if (this.buffered > this.rate * 0.75) {
           // Catch up to live audio without discarding the entire queue.
           while (this.buffered > this.rate * 0.3 && this.queue.length > 1) {
@@ -29,8 +32,13 @@ class PCMPlayer extends AudioWorkletProcessor {
             this.pos = 0;
           }
         }
-        this.queue.push(data.samples);
-        this.buffered += data.samples.length;
+        // Bound even a single oversized delivery to the latest live samples.
+        if (this.buffered > this.rate * 0.75) {
+          const tail = this.queue[0].subarray(-Math.floor(this.rate * 0.3));
+          this.queue = [tail];
+          this.pos = 0;
+          this.buffered = tail.length;
+        }
       }
     };
   }

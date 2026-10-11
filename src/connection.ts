@@ -38,14 +38,6 @@ export class StreamConnection {
   private lastAudioAt = 0;
   private startedAt = 0;
   private background = false;
-  get hasFreshAudio() {
-    return (
-      this.desired &&
-      this.socket?.readyState === 1 &&
-      this.lastAudioAt > 0 &&
-      Date.now() - this.lastAudioAt < 22000
-    );
-  }
   setBackground(hidden: boolean) {
     this.background = hidden;
   }
@@ -87,7 +79,7 @@ export class StreamConnection {
   private lastTune = 0;
   tune() {
     if (!this.desired || this.socket?.readyState !== 1) return;
-    const delay = Math.max(0, 80 - (Date.now() - this.lastTune));
+    const delay = Math.max(0, 40 - (Date.now() - this.lastTune));
     if (!delay) {
       this.flushTune();
       return;
@@ -127,6 +119,7 @@ export class StreamConnection {
   private connect() {
     if (!this.desired) return;
     this.disposeSocket();
+    this.lastTune = -Infinity;
     const generation = this.generation;
     this.startedAt = Date.now();
     this.lastAudioAt = 0;

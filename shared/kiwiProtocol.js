@@ -47,8 +47,7 @@ export function validateTune(v) {
 }
 let lastStamp = 0;
 export class KiwiProtocol {
-  constructor(url, emit, socketFactory, { audioOnly = false } = {}) {
-    this.audioOnly = audioOnly;
+  constructor(url, emit, socketFactory) {
     this.socketFactory = socketFactory;
     this.url = url;
     this.emit = emit;
@@ -68,7 +67,7 @@ export class KiwiProtocol {
   start(tune) {
     this.tune = validateTune(tune);
     const stamp = (lastStamp = Math.max(Date.now(), lastStamp + 1));
-    for (const type of this.audioOnly ? ["SND"] : ["SND", "W/F"]) {
+    for (const type of ["SND", "W/F"]) {
       const u = new URL(this.url);
       u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
       u.pathname = `/ws/kiwi/${stamp}/${type}`;
@@ -88,13 +87,7 @@ export class KiwiProtocol {
     }
     this.timer = setInterval(() => {
       this.sockets.forEach((w) => this.send(w, "SET keepalive"));
-      if (
-        Date.now() -
-          (this.audioOnly
-            ? this.lastAudio
-            : Math.min(this.lastAudio, this.lastWaterfall)) >
-        20000
-      )
+      if (Date.now() - Math.min(this.lastAudio, this.lastWaterfall) > 20000)
         this.fail("Поток звука или waterfall прерван");
     }, 1000);
     this.timeout = setTimeout(
@@ -115,6 +108,7 @@ export class KiwiProtocol {
     this.close();
   }
   parse(ws, type, b) {
+    if (this.closed) return;
     const text = new TextDecoder();
     const tag = text.decode(b.subarray(0, 3));
     const data = new DataView(b.buffer, b.byteOffset, b.byteLength);
@@ -209,6 +203,7 @@ export class KiwiProtocol {
     }
   }
   apply(tune = this.tune) {
+    if (this.closed) return;
     tune = this.tune = validateTune(tune);
     tune.zoom = Math.min(this.maxZoom, tune.zoom);
     const [mod, defaultLo, defaultHi] = modes[tune.mode];

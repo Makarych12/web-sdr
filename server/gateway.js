@@ -6,8 +6,6 @@ import { WebSocketServer, WebSocket } from "ws";
 import { KiwiSession, validateTune } from "./kiwi.js";
 import { ReceiverCatalog } from "./catalog.js";
 import { originAllowed } from "./origins.js";
-import { installNativeAudio } from "./nativeAudio.js";
-import { installHlsAudio } from "./hlsAudio.js";
 const receivers = JSON.parse(
   readFileSync(new URL("./receivers.json", import.meta.url)),
 );
@@ -50,8 +48,6 @@ app.get("/api/health", (_, res) =>
     revision: process.env.VERCEL_GIT_COMMIT_SHA || "local",
   }),
 );
-installNativeAudio(app, catalog, catalogReady);
-installHlsAudio(app, catalog, catalogReady);
 app.use(express.static("dist"));
 const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
 server.on("upgrade", (req, socket, head) => {
@@ -99,6 +95,7 @@ wss.on("connection", async (client) => {
     JSON.stringify({ event: "gateway_open", connection: client.id }),
   );
   let session;
+  let generation = 0;
   const emit = (v) => {
     if (v.type === "error")
       console.warn(
@@ -125,8 +122,15 @@ wss.on("connection", async (client) => {
       client.lastSeen = Date.now();
       if (v.type === "heartbeat_ack") return;
       if (v.type === "connect") {
+        const currentGeneration = ++generation;
+        session?.close();
+        session = undefined;
         await catalogReady;
-        if (client.readyState !== WebSocket.OPEN) return;
+        if (
+          client.readyState !== WebSocket.OPEN ||
+          generation !== currentGeneration
+        )
+          return;
         const r = catalog.find(v.receiver);
         if (!r) throw Error("Неизвестный приёмник");
         validateTune(v);
@@ -145,6 +149,7 @@ wss.on("connection", async (client) => {
         if (!session || session.closed) throw Error("Нет подключения");
         session.apply(v);
       } else if (v.type === "disconnect") {
+        ++generation;
         session?.close();
         emit({ type: "disconnected" });
       } else throw Error("Неизвестная команда");
@@ -158,6 +163,7 @@ wss.on("connection", async (client) => {
     }
   });
   client.on("close", (code, reason) => {
+    ++generation;
     console.info(
       JSON.stringify({
         event: "gateway_close",

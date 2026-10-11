@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "regions": ["iad1"],
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "headers": [
@@ -18,18 +17,10 @@
   "functions": {
     "api/gateway.js": {
       "maxDuration": 300,
-      "includeFiles": "{server/*.json,node_modules/ffmpeg-static/ffmpeg}"
+      "includeFiles": "server/*.json"
     }
   },
   "rewrites": [
-    {
-      "source": "/api/hls",
-      "destination": "/api/gateway"
-    },
-    {
-      "source": "/api/hls/:path*",
-      "destination": "/api/gateway"
-    },
     {
       "source": "/ws",
       "destination": "/api/gateway"
@@ -44,14 +35,6 @@
     },
     {
       "source": "/api/health",
-      "destination": "/api/gateway"
-    },
-    {
-      "source": "/api/audio",
-      "destination": "/api/gateway"
-    },
-    {
-      "source": "/api/audio/tune",
       "destination": "/api/gateway"
     }
   ]

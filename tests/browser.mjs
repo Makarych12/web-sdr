@@ -29,7 +29,10 @@ await page.addInitScript(() => {
           window.__analyser = this.context.createAnalyser();
           connect.call(this, window.__analyser);
         }
-        if (this instanceof GainNode && (a[0] === this.context.destination || a[0] instanceof MediaStreamAudioDestinationNode)) {
+        if (
+          this instanceof GainNode &&
+          a[0] === this.context.destination
+        ) {
           window.__outputAnalyser = this.context.createAnalyser();
           connect.call(this, window.__outputAnalyser);
           window.__gain = this;
@@ -64,7 +67,7 @@ try {
   await page.getByRole("button", { name: "Настроить", exact: true }).click();
   await page.getByRole("button", { name: "USB", exact: true }).click();
   await page.waitForFunction(
-    () => document.querySelector(".axis")?.textContent?.includes("7.074"),
+    () => document.querySelector("#frequency")?.value === "7074",
     { timeout: 10000 },
   );
   await page.waitForFunction(

@@ -215,3 +215,66 @@ test("returning from sleep preserves a fresh connection and reconnects a stale o
     "user stop must never restart from visibility events",
   );
 });
+
+test("rapid VFO uses latest config within 40ms; release flush cancels old pending tune", (t) => {
+  t.mock.timers.enable({
+    apis: ["setTimeout", "setInterval", "Date"],
+    now: 1000,
+  });
+  const { c, sockets, setConfig } = setup();
+  const config = (frequency: number) => ({
+    receiver: "france",
+    frequency,
+    mode: "USB",
+    zoom: 7,
+    lowCut: 300,
+    highCut: 2100,
+  });
+  c.start();
+  sockets[0].open();
+  setConfig(config(7075));
+  c.tune();
+  for (let i = 1; i <= 20; i++) {
+    setConfig(config(7075 + i / 1000));
+    c.tune();
+  }
+  assert.equal(sockets[0].sent.length, 2);
+  t.mock.timers.tick(39);
+  assert.equal(sockets[0].sent.length, 2);
+  t.mock.timers.tick(1);
+  assert.equal(JSON.parse(sockets[0].sent.at(-1)!).frequency, 7075.02);
+  setConfig(config(7074));
+  c.tune();
+  c.flushTune();
+  assert.equal(JSON.parse(sockets[0].sent.at(-1)!).frequency, 7074);
+  const count = sockets[0].sent.length;
+  t.mock.timers.tick(1000);
+  assert.equal(sockets[0].sent.length, count);
+  c.stop();
+});
+
+test("receiver switch cancels pending tune and manual restart bypasses retry timeout", (t) => {
+  t.mock.timers.enable({
+    apis: ["setTimeout", "setInterval", "Date"],
+    now: 1000,
+  });
+  const { c, sockets } = setup();
+  c.start();
+  sockets[0].open();
+  c.tune();
+  c.tune();
+  c.switchReceiver();
+  sockets[1].open();
+  t.mock.timers.tick(100);
+  assert.equal(sockets[1].sent.length, 1);
+  sockets[1].close();
+  c.stop();
+  c.start();
+  sockets[2].open();
+  t.mock.timers.tick(1000);
+  assert.equal(sockets.length, 3);
+  sockets[0].open();
+  sockets[0].message({ type: "tuned", frequency: 1 });
+  assert.equal(sockets[0].sent.length, 2);
+  c.stop();
+});

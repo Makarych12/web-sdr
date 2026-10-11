@@ -131,34 +131,72 @@ test("AGC mode reaches Kiwi without retuning or resetting waterfall", () => {
   s.close();
 });
 
-for (const order of [["SND", "W/F"], ["W/F", "SND"]]) {
+for (const order of [
+  ["SND", "W/F"],
+  ["W/F", "SND"],
+]) {
   test(`tuning waits for both Kiwi channel handshakes (${order.join(" first, ")})`, () => {
     const sent = { SND: [], "W/F": [] };
     const session = new KiwiSession("http://example.org", () => {});
-    const sockets = Object.fromEntries(Object.keys(sent).map((type) => [type, {
-      readyState: 1, send: (value) => sent[type].push(value), close() {},
-    }]));
+    const sockets = Object.fromEntries(
+      Object.keys(sent).map((type) => [
+        type,
+        {
+          readyState: 1,
+          send: (value) => sent[type].push(value),
+          close() {},
+        },
+      ]),
+    );
     session.sockets = [sockets.SND, sockets["W/F"]];
     session.apply({ frequency: 7074, mode: "USB", zoom: 7 });
     assert.equal(sent.SND.length + sent["W/F"].length, 0);
     for (const type of order) {
-      session.parse(sockets[type], type, Buffer.from(type === "SND" ? "MSG sample_rate=12000" : "MSG wf_setup=1"));
+      session.parse(
+        sockets[type],
+        type,
+        Buffer.from(
+          type === "SND" ? "MSG sample_rate=12000" : "MSG wf_setup=1",
+        ),
+      );
       if (type === order[0]) assert.equal(sent[order[1]].length, 0);
     }
     assert.equal(sent.SND.filter((v) => v.startsWith("SET mod=")).length, 1);
-    assert.equal(sent["W/F"].filter((v) => v.startsWith("SET zoom=")).length, 1);
+    assert.equal(
+      sent["W/F"].filter((v) => v.startsWith("SET zoom=")).length,
+      1,
+    );
     session.close();
   });
 }
 
 test("Kiwi zoom_cap overrides nominal zoom_max and clamps real commands", () => {
-  const events = [], sent = [];
+  const events = [],
+    sent = [];
   const session = new KiwiSession("http://example.org", (v) => events.push(v));
-  const socket = {readyState:1,send:(v)=>sent.push(v),close(){}};
-  session.sockets=[socket,socket];
-  session.parse(socket,"W/F",Buffer.from("MSG zoom_max=14 zoom_cap=11 wf_setup"));
-  assert.equal(events.filter((v)=>v.type === "limits").at(-1).maxZoom,11);
-  session.apply({frequency:7074,mode:"USB",zoom:14});
-  assert.ok(sent.some((v)=>v.startsWith("SET zoom=11")));
+  const socket = { readyState: 1, send: (v) => sent.push(v), close() {} };
+  session.sockets = [socket, socket];
+  session.parse(
+    socket,
+    "W/F",
+    Buffer.from("MSG zoom_max=14 zoom_cap=11 wf_setup"),
+  );
+  assert.equal(events.filter((v) => v.type === "limits").at(-1).maxZoom, 11);
+  session.apply({ frequency: 7074, mode: "USB", zoom: 14 });
+  assert.ok(sent.some((v) => v.startsWith("SET zoom=11")));
   session.close();
+});
+
+test("closed Kiwi session ignores late PCM, waterfall, handshake and tune", () => {
+  const output = [],
+    sent = [];
+  const s = new KiwiSession("http://example.org", (v) => output.push(v));
+  s.close();
+  const socket = { readyState: 1, send: (v) => sent.push(v) };
+  s.parse(socket, "SND", Buffer.from("MSG sample_rate=12000"));
+  s.parse(socket, "SND", Buffer.from("SND" + "\0".repeat(12)));
+  s.parse(socket, "W/F", Buffer.from("W/F" + "\0".repeat(1037)));
+  s.apply({ frequency: 14200, mode: "USB", zoom: 6 });
+  assert.deepEqual(output, []);
+  assert.deepEqual(sent, []);
 });

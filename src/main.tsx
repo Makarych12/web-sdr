@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import "./style.css";
 import "./brand.css";
 import "./console.css";
@@ -8,12 +9,6 @@ import { gateway, gatewayConfigured } from "./gateway";
 import { VfoDial } from "./VfoDial";
 import { FineTune } from "./FineTune";
 import { QuickTune } from "./QuickTune";
-import { useRadioLifecycle } from "./useRadioLifecycle";
-import {
-  readRadioSession,
-  saveRadioSession,
-  playbackSession,
-} from "./radioSession";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
 import { useStoredState, stringList, finiteNumber } from "./storage";
 import {
@@ -31,27 +26,8 @@ import {
   filterPosition,
 } from "./spectrumView";
 import { DirectKiwiSocket } from "./directKiwi";
-import {
-  nativeAudioURL,
-  needsNativeBackground,
-  nativeStreamUnavailable,
-  canPlayNativeHls,
-} from "./nativeAudio";
-import {
-  audioDiagnostic,
-  audioDiagnosticReport,
-  audioSnapshot,
-} from "./audioDiagnostics";
 import { SMeter } from "./SMeter";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
-const nativeTransport = canPlayNativeHls() ? "hls" : "mp3";
-function releaseHls(source: string) {
-  if (!source) return;
-  const url = new URL(source);
-  if (url.pathname !== "/api/hls") return;
-  url.pathname = "/api/hls/stop";
-  void fetch(url, { cache: "no-store", keepalive: true }).catch(() => {});
-}
 type SavedFrequency = {
   id: string;
   frequency: number;
@@ -80,13 +56,6 @@ type View = {
   sequence?: number;
 };
 function App() {
-  const [restored] = useState(readRadioSession);
-  const [nativeUnavailable, setNativeUnavailable] = useState(false);
-  const [audioReport, setAudioReport] = useState("");
-  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
-  const [restoreNeeded, setRestoreNeeded] = useState(
-    restored?.playing ?? false,
-  );
   const [agc, setAgc] = useStoredState<"fast" | "slow" | "off">(
     "wave.agc",
     "slow",
@@ -150,11 +119,11 @@ function App() {
     (v): v is string => typeof v === "string",
   );
   const [receivers, setReceivers] = useState<Receiver[]>([]),
-    [frequency, setFrequency] = useState(restored?.frequency ?? 10000),
-    [draft, setDraft] = useState(String(restored?.frequency ?? 10000)),
-    [mode, setMode] = useState<Mode>(restored?.mode ?? "AM"),
-    [zoom, setZoom] = useState(restored?.zoom ?? 6),
-    [viewCenter, setViewCenter] = useState(restored?.viewCenter ?? 10000),
+    [frequency, setFrequency] = useState(10000),
+    [draft, setDraft] = useState("10000"),
+    [mode, setMode] = useState<Mode>("AM"),
+    [zoom, setZoom] = useState(6),
+    [viewCenter, setViewCenter] = useState(10000),
     [maxZoom, setMaxZoom] = useState(14),
     [gestureMode, setGestureMode] = useState<"tune" | "pan">("tune"),
     [step, setStep] = useStoredState(
@@ -174,9 +143,7 @@ function App() {
     [error, setError] = useState(""),
     [rssi, setRssi] = useState<number | null>(null),
     [counts, setCounts] = useState({ audio: 0, wf: 0 }),
-    [view, setView] = useState<View>(() =>
-      viewFor(restored?.viewCenter ?? 10000, restored?.zoom ?? 6, 30000),
-    ),
+    [view, setView] = useState<View>({ start: 9765.625, span: 468.75 }),
     [offline, setOffline] = useState(!navigator.onLine);
   const [volume, setVolume] = useStoredState(
     "wave.volume",
@@ -237,16 +204,6 @@ function App() {
   }>({ message: () => {}, state: () => {} });
   const context = useRef<AudioContext | null>(null),
     player = useRef<AudioWorkletNode | null>(null),
-    audioElement = useRef<HTMLAudioElement | null>(null),
-    nativeAudioElement = useRef<HTMLAudioElement | null>(null),
-    nativeOutput = useRef(false),
-    nativeSession = useRef(crypto.randomUUID()),
-    nativeTuneKey = useRef(""),
-    nativeSequence = useRef(0),
-    nativeTuneRequest = useRef<AbortController | null>(null),
-    mediaDestination = useRef<MediaStreamAudioDestinationNode | null>(null),
-    pendingAudio = useRef<Promise<void> | null>(null),
-    startGeneration = useRef(0),
     gain = useRef<GainNode | null>(null),
     spectrum = useRef<HTMLCanvasElement>(null),
     waterfall = useRef<HTMLCanvasElement>(null),
@@ -261,6 +218,7 @@ function App() {
     }),
     stats = useRef({ audio: 0, wf: 0 }),
     initializing = useRef(false),
+    startGeneration = useRef(0),
     rate = useRef(12000),
     viewRef = useRef(view),
     calibration = useRef(-13);
@@ -356,13 +314,43 @@ function App() {
       clearInterval(t);
       window.removeEventListener("online", online);
       window.removeEventListener("offline", online);
+      ++startGeneration.current;
       manager.current?.stop();
-      clearNativeAudio();
-      audioElement.current?.pause();
-      mediaDestination.current?.stream
-        .getTracks()
-        .forEach((track) => track.stop());
       void context.current?.close();
+    };
+  }, []);
+  useEffect(() => {
+    let recovering: Promise<void> | null = null;
+    const visible = () => {
+      const shown = !document.hidden;
+      renderer.current?.setVisible(shown);
+      manager.current?.setBackground(!shown);
+      if (!shown || !manager.current?.desired) return;
+      manager.current.recoverAfterSleep();
+      if (
+        context.current &&
+        context.current.state !== "running" &&
+        !recovering
+      ) {
+        player.current?.port.postMessage({ reset: true });
+        recovering = context.current
+          .resume()
+          .then(() => {
+            if (!manager.current?.desired) void context.current?.suspend();
+            else setAudioPaused(context.current?.state !== "running");
+          })
+          .catch(() => setAudioPaused(true))
+          .finally(() => {
+            recovering = null;
+          });
+      }
+    };
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("pageshow", visible);
+    visible();
+    return () => {
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("pageshow", visible);
     };
   }, []);
   useEffect(() => {
@@ -372,10 +360,6 @@ function App() {
         context.current!.currentTime,
         0.025,
       );
-    if (nativeAudioElement.current) {
-      nativeAudioElement.current.volume = volume;
-      nativeAudioElement.current.muted = muted;
-    }
   }, [volume, muted]);
   useEffect(() => {
     const timer = setInterval(() => setRssi(signal.current), 100);
@@ -392,6 +376,18 @@ function App() {
     // Fine tuning moves the VFO inside the existing overview. Recenter only
     // when it leaves the usable area, or when an explicit view was requested.
     const currentView = viewRef.current;
+    const previous = settings.current;
+    const cuts = passband(m, width);
+    const audioChanged =
+      f !== previous.frequency ||
+      m !== previous.mode ||
+      cuts.lowCut !== previous.lowCut ||
+      cuts.highCut !== previous.highCut;
+    const immediate =
+      center !== undefined ||
+      m !== previous.mode ||
+      cuts.lowCut !== previous.lowCut ||
+      cuts.highCut !== previous.highCut;
     center ??=
       f >= currentView.start + currentView.span * 0.1 &&
       f <= currentView.start + currentView.span * 0.9
@@ -404,17 +400,21 @@ function App() {
     }
     if (viewChanged) awaitingTune.current = wanted;
     center = nextView.start + nextView.span / 2;
-    if (viewChanged) {
-      requestedView.current = nextView;
-      setViewPending(wanted);
-      displayView(nextView);
-    }
-    setViewCenter(center);
-    setFrequency(f);
-    setDraft(String(Number(f.toFixed(3))));
-    setMode(m);
-    setZoom(z);
-    setWidths((prev) => (prev[m] === width ? prev : { ...prev, [m]: width }));
+    // Native wheel/pointer handlers can run just before paint. Commit the
+    // VFO and filter marker in this event rather than waiting another frame.
+    flushSync(() => {
+      if (viewChanged) {
+        requestedView.current = nextView;
+        setViewPending(wanted);
+        displayView(nextView);
+      }
+      setViewCenter(center);
+      setFrequency(f);
+      setDraft(String(Number(f.toFixed(3))));
+      setMode(m);
+      setZoom(z);
+      setWidths((prev) => (prev[m] === width ? prev : { ...prev, [m]: width }));
+    });
     settings.current = {
       frequency: f,
       mode: m,
@@ -423,7 +423,9 @@ function App() {
       agc,
       ...passband(m, width),
     };
-    manager.current?.tune();
+    if (audioChanged) player.current?.port.postMessage({ reset: true });
+    if (immediate) manager.current?.flushTune();
+    else manager.current?.tune();
   }
 
   function displayView(next: View) {
@@ -433,17 +435,12 @@ function App() {
     setView(next);
   }
   callbacks.current.state = (v) => {
-    audioDiagnostic("connection:" + v.phase, {
-      desired: manager.current?.desired,
-      hidden: document.hidden,
-      native: audioSnapshot(nativeAudioElement.current),
-    });
     setWanted(manager.current?.desired ?? false);
-    if (v.phase === "idle" || v.phase === "blocked") {
-      clearNativeAudio();
-      audioElement.current?.pause();
-      if (context.current?.state === "running") void context.current.suspend();
-    }
+    if (
+      (v.phase === "idle" || v.phase === "blocked") &&
+      context.current?.state === "running"
+    )
+      void context.current.suspend();
     setConnected(v.phase === "live");
     setStatus(v.message);
     setRetryAt(v.retryAt);
@@ -454,10 +451,6 @@ function App() {
   callbacks.current.message = (v) => {
     if (v instanceof Uint8Array) {
       if (v[0] === 1) {
-        if (nativeOutput.current) {
-          stats.current.audio++;
-          return;
-        }
         const dv = new DataView(v.buffer, v.byteOffset, v.byteLength);
         const samples = new Float32Array((v.length - 1) / 2);
         for (let i = 0; i < samples.length; i++)
@@ -638,296 +631,68 @@ function App() {
     },
     [setReceiver],
   );
-  function clearNativeAudio() {
-    const native = nativeAudioElement.current;
-    if (!native) return;
-    if (native.getAttribute("src"))
-      audioDiagnostic("native:clear", {
-        hidden: document.hidden,
-        desired: manager.current?.desired,
-      });
-    nativeTuneRequest.current?.abort();
-    nativeTuneKey.current = "";
-    releaseHls(native.getAttribute("src") ? native.src : "");
-    native.pause();
-    native.removeAttribute("src");
-    native.load();
-  }
-  async function nativePlayOrFallback() {
-    const native = nativeAudioElement.current!;
-    const source = native.src;
-    try {
-      await native.play();
-    } catch (error) {
-      // An old play promise can reject after a newer stream or explicit stop.
-      if (native.src !== source || !native.getAttribute("src")) return;
-      audioDiagnostic("native:play-error", {
-        name: error instanceof Error ? error.name : String(error),
-        hidden: document.hidden,
-        native: audioSnapshot(native),
-      });
-      if (!nativeStreamUnavailable(error, native.error?.code ?? null))
-        throw error;
-      audioDiagnostic("native:fallback-pcm");
-      setNativeUnavailable(true);
-      nativeOutput.current = false;
-      clearNativeAudio();
-      audioElement.current!.muted = false;
-      await preparePCM();
-    }
-  }
-  async function playNativeAudio() {
-    // Only one output owns playback. Do not keep a silent MediaStream player
-    // active beside the HTTP player (especially in Android WebView).
-    audioElement.current!.pause();
-    audioElement.current!.srcObject = null;
-    if (context.current?.state === "running") void context.current.suspend();
-    const native = nativeAudioElement.current!;
-    const config = { receiver: receiverRef.current, ...settings.current };
-    const url = nativeAudioURL(
-      gateway.http,
-      config,
-      nativeSession.current,
-      nativeTransport,
-    );
-    native.volume = volume;
-    native.muted = muted;
-    function restart() {
-      audioDiagnostic("native:restart", {
-        frequency: config.frequency,
-        mode: config.mode,
-        hidden: document.hidden,
-      });
-      nativeTuneRequest.current?.abort();
-      releaseHls(native.getAttribute("src") ? native.src : "");
-      // Never let a new stream's commands reach an old serverless instance.
-      nativeSession.current = crypto.randomUUID();
-      nativeSequence.current = 0;
-      const freshURL = nativeAudioURL(
-        gateway.http,
-        config,
-        nativeSession.current,
-        nativeTransport,
-      );
-      nativeTuneKey.current = freshURL;
-      native.dataset.frequency = String(config.frequency);
-      native.dataset.mode = config.mode;
-      native.dataset.agc = config.agc;
-      native.dataset.highCut = String(config.highCut);
-      native.src = freshURL;
-      return nativePlayOrFallback();
-    }
-    if (
-      !native.getAttribute("src") ||
-      native.ended ||
-      native.error ||
-      new URL(native.src).searchParams.get("receiver") !== receiverRef.current
-    )
-      return restart();
-    if (nativeTuneKey.current !== url) {
-      nativeTuneRequest.current?.abort();
-      const request = new AbortController();
-      nativeTuneRequest.current = request;
-      const control = new URL(url);
-      control.pathname =
-        nativeTransport === "hls" ? "/api/hls/tune" : "/api/audio/tune";
-      control.searchParams.set("sequence", String(++nativeSequence.current));
-      try {
-        const response = await fetch(control, {
-          cache: "no-store",
-          signal: request.signal,
-        });
-        if (request.signal.aborted) return;
-        if (!response.ok) {
-          // A restarted/different serverless instance has lost this live session.
-          // Reconnect with current settings rather than playing a stale frequency.
-          return restart();
-        }
-        nativeTuneKey.current = url;
-        native.dataset.frequency = String(config.frequency);
-        native.dataset.mode = config.mode;
-        native.dataset.agc = config.agc;
-        native.dataset.highCut = String(config.highCut);
-      } catch (error) {
-        if (request.signal.aborted) return;
-        throw error;
-      }
-    }
-    return nativePlayOrFallback();
-  }
-  async function preparePCM() {
-    const audio = audioElement.current!;
-    let fresh = false;
-    if (!context.current || context.current.state === "closed") {
-      mediaDestination.current?.stream
-        .getTracks()
-        .forEach((track) => track.stop());
-      context.current = new AudioContext({ latencyHint: "playback" });
-      player.current = null;
-      mediaDestination.current = context.current.createMediaStreamDestination();
-      fresh = true;
-      context.current.onstatechange = () => {
-        audioDiagnostic("context:state", {
-          state: context.current?.state,
-          native: nativeOutput.current,
-          hidden: document.hidden,
-        });
-        if (nativeOutput.current) return;
-        const paused = context.current?.state !== "running" || audio.paused;
-        setAudioPaused(paused);
-        if (paused && manager.current?.desired) void lifecycle.recover();
-      };
-    }
-    if (audio.srcObject !== mediaDestination.current!.stream)
-      audio.srcObject = mediaDestination.current!.stream;
-    // Invoke playback while the user gesture still grants permission.
-    const playing = Promise.all([context.current.resume(), audio.play()]);
-    void playing.catch(() => {});
-    if (fresh || !player.current) {
-      await context.current.audioWorklet.addModule("/audio-worklet.js");
-      player.current = new AudioWorkletNode(context.current, "pcm-player");
-      gain.current = context.current.createGain();
-      gain.current.gain.value = muted ? 0 : volume;
-      player.current.connect(gain.current).connect(mediaDestination.current!);
-    }
-    await playing;
-  }
-  async function prepareAudio() {
-    if (pendingAudio.current) return pendingAudio.current;
-    const task = (async () => {
-      playbackSession();
-      // HTTP playback must not create or run an AudioContext/MediaStream sink.
-      const playing = nativeOutput.current ? playNativeAudio() : preparePCM();
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          playing,
-          new Promise<never>((_, reject) => {
-            timeout = setTimeout(
-              () =>
-                reject(
-                  new Error("Браузер ожидает нажатия для включения звука"),
-                ),
-              nativeOutput.current ? 20000 : 4000,
-            );
-          }),
-        ]);
-      } finally {
-        clearTimeout(timeout);
-      }
-      setAudioPaused(
-        nativeOutput.current
-          ? nativeAudioElement.current!.paused ||
-              nativeAudioElement.current!.ended ||
-              nativeAudioElement.current!.error !== null ||
-              nativeAudioElement.current!.readyState < 3
-          : context.current?.state !== "running" ||
-              audioElement.current!.paused,
-      );
-    })();
-    pendingAudio.current = task;
-    try {
-      await task;
-    } finally {
-      pendingAudio.current = null;
-    }
-  }
-  function stopRadio() {
-    ++startGeneration.current;
-    setRestoreNeeded(false);
-    manager.current?.stop();
-    clearNativeAudio();
-    audioElement.current?.pause();
-    void context.current?.suspend();
-  }
-  async function startRadio() {
-    if (initializing.current || !gatewayConfigured) return;
+  async function connect() {
+    if (!gatewayConfigured) return;
     if (manager.current?.desired) {
-      manager.current.recoverAfterSleep();
-      try {
-        await prepareAudio();
-      } catch {
-        setAudioPaused(true);
-      }
+      ++startGeneration.current;
+      manager.current.stop();
       return;
     }
+    if (initializing.current) return;
     initializing.current = true;
     const generation = ++startGeneration.current;
     setPreparing(true);
     setError("");
+    stats.current = { audio: 0, wf: 0 };
+    setCounts({ ...stats.current });
+    failedReceivers.current.clear();
+    manager.current!.start();
     try {
-      await prepareAudio();
-      if (generation !== startGeneration.current) {
-        audioElement.current?.pause();
-        void context.current?.suspend();
+      if (
+        !context.current ||
+        context.current.state === "closed" ||
+        !player.current
+      ) {
+        if (context.current && context.current.state !== "closed")
+          await context.current.close();
+        if (generation !== startGeneration.current) return;
+        context.current = new AudioContext();
+        void context.current.resume();
+        await context.current.audioWorklet.addModule("/audio-worklet.js");
+        if (generation !== startGeneration.current) {
+          if (context.current.state !== "closed")
+            void context.current.suspend();
+          return;
+        }
+        player.current = new AudioWorkletNode(context.current, "pcm-player");
+        gain.current = context.current.createGain();
+        gain.current.gain.value = muted ? 0 : volume;
+        player.current
+          .connect(gain.current)
+          .connect(context.current.destination);
+        context.current.onstatechange = () =>
+          setAudioPaused(context.current?.state !== "running");
+      }
+      await context.current.resume();
+      if (generation !== startGeneration.current || !manager.current?.desired) {
+        void context.current.suspend();
         return;
       }
-      setRestoreNeeded(false);
-      stats.current = { audio: 0, wf: 0 };
-      setCounts({ ...stats.current });
-      renderer.current?.clear();
-      failedReceivers.current.clear();
-      manager.current!.start();
+      setAudioPaused(false);
     } catch (e) {
       if (generation !== startGeneration.current) return;
-      setAudioPaused(true);
-      setRestoreNeeded(true);
-      setStatus("Нажмите «Возобновить звук»");
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("Не удалось включить звук");
+      manager.current?.stop();
       if (!player.current) {
         await context.current?.close();
         context.current = null;
-        setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
       initializing.current = false;
       setPreparing(false);
     }
   }
-  async function connect() {
-    if (manager.current?.desired) stopRadio();
-    else await startRadio();
-  }
-  useEffect(() => {
-    if (!restored) return;
-    receiverRef.current = restored.receiver;
-    setReceiver(restored.receiver);
-    setAgc(restored.agc);
-    setWidths((prev) => ({ ...prev, [restored.mode]: restored.width }));
-  }, []);
-  useEffect(() => {
-    saveRadioSession({
-      frequency,
-      mode,
-      width: filterWidth,
-      zoom,
-      viewCenter,
-      agc,
-      receiver,
-      playing: wanted || restoreNeeded,
-    });
-  }, [
-    frequency,
-    mode,
-    filterWidth,
-    zoom,
-    viewCenter,
-    agc,
-    receiver,
-    wanted,
-    restoreNeeded,
-  ]);
-  const restoreAttempted = useRef(false);
-  useEffect(() => {
-    if (
-      !restoreAttempted.current &&
-      restored?.playing &&
-      receivers.length &&
-      !offline
-    ) {
-      restoreAttempted.current = true;
-      void startRadio();
-    }
-  }, [receivers.length, offline]);
   function changeView(center: number, z = zoom) {
     const bandwidth = viewRef.current.bandwidth ?? 30000;
     z = Math.max(0, Math.min(maxZoom, z));
@@ -993,71 +758,8 @@ function App() {
     passband(mode, filterWidth).lowCut,
     passband(mode, filterWidth).highCut,
   );
-  const lifecycle = useRadioLifecycle({
-    audio: audioElement,
-    nativeAudio: nativeAudioElement,
-    native: needsNativeBackground && !nativeUnavailable,
-    nativeTransport: nativeTransport === "hls" ? "http-hls" : "http-mp3",
-    context,
-    manager,
-    wanted,
-    live:
-      connected && !audioPaused && !offline && !!manager.current?.hasFreshAudio,
-    frequency,
-    mode,
-    receiverName: receivers.find((r) => r.id === receiver)?.name ?? receiver,
-    start: startRadio,
-    recover: prepareAudio,
-    stop: stopRadio,
-    setAudioPaused,
-    onVisible: (visible) => renderer.current?.setVisible(visible),
-  });
-  nativeOutput.current = lifecycle.nativeEnabled;
-  useEffect(() => {
-    audioElement.current!.muted = lifecycle.nativeEnabled;
-    if (!wanted) return;
-    if (!lifecycle.nativeEnabled) {
-      clearNativeAudio();
-      void prepareAudio().catch(() => setAudioPaused(true));
-      return;
-    }
-    // Coalesce rapid VFO changes; view zoom/pan don't affect this URL.
-    const timer = setTimeout(() => {
-      void playNativeAudio().catch(() => setAudioPaused(true));
-    }, 180);
-    return () => clearTimeout(timer);
-  }, [
-    wanted,
-    lifecycle.nativeEnabled,
-    frequency,
-    mode,
-    filterWidth,
-    agc,
-    receiver,
-  ]);
-  const live =
-    connected &&
-    !audioPaused &&
-    (!lifecycle.frozen || lifecycle.nativeEnabled) &&
-    !offline &&
-    !!manager.current?.hasFreshAudio;
   return (
     <div className={"app" + (wanted ? " playing" : "")}>
-      <audio
-        ref={audioElement}
-        className="radio-audio-output"
-        muted={lifecycle.nativeEnabled}
-        playsInline
-        preload="auto"
-        aria-hidden="true"
-      />
-      <audio
-        ref={nativeAudioElement}
-        className="radio-audio-output native-radio-output"
-        playsInline
-        preload="none"
-        aria-hidden="true"
-      />
       <header className="site-header">
         <a className="brand" href="#home" aria-label="UR4MTN WEB SDR — главная">
           <Antenna />
@@ -1103,18 +805,16 @@ function App() {
           </a>
         </nav>
         <div className="header-right" role="status">
-          <span className={"dot " + (live ? "live" : "")} />
+          <span className={"dot " + (connected ? "live" : "")} />
           {offline
             ? "Нет сети"
             : retryAt
               ? "Переподключение…"
               : error && !wanted
                 ? "Ошибка"
-                : live
+                : connected
                   ? "ONLINE · В эфире"
-                  : wanted && (audioPaused || lifecycle.frozen)
-                    ? "Звук приостановлен"
-                    : status}
+                  : status}
         </div>
       </header>
       <main>
@@ -1151,7 +851,7 @@ function App() {
             disabled={
               (!wanted &&
                 (offline || !gatewayConfigured || !receivers.length)) ||
-              preparing
+              (!wanted && preparing)
             }
           >
             {" "}
@@ -1163,19 +863,10 @@ function App() {
             {receivers.find((r) => r.id === receiver)?.name || receiver}
           </strong>
           <span>
-            {live
-              ? "Играет"
-              : wanted && audioPaused
-                ? "Звук приостановлен"
-                : wanted
-                  ? "Подключение"
-                  : "Выбран"}{" "}
-            ·{" "}
-            {lifecycle.nativeEnabled
-              ? "Фоновый аудиопоток"
-              : receivers.find((r) => r.id === receiver)?.directUrl
-                ? "Прямой WSS Kiwi"
-                : "Через шлюз · восстановление каждые 5 минут"}
+            {connected ? "Играет" : wanted ? "Подключение" : "Выбран"} ·{" "}
+            {receivers.find((r) => r.id === receiver)?.directUrl
+              ? "Прямой WSS Kiwi"
+              : "Через шлюз · восстановление каждые 5 минут"}
           </span>
           {receiverChange && <small>{receiverChange}</small>}
         </div>
@@ -1191,130 +882,14 @@ function App() {
             </button>
           </div>
         )}
-        {(wanted || restoreNeeded) && audioPaused && (
+        {wanted && audioPaused && (
           <div className="reconnect-banner">
             <span>Браузер приостановил звук</span>
-            <button onClick={() => void startRadio()}>Возобновить звук</button>
+            <button onClick={() => void context.current?.resume()}>
+              Возобновить звук
+            </button>
           </div>
         )}
-        <section className="background-audio panel" aria-label="Фоновый эфир">
-          <div className="background-audio-controls">
-            <label>
-              <input
-                type="checkbox"
-                checked={lifecycle.background}
-                onChange={(e) => {
-                  setNativeUnavailable(false);
-                  lifecycle.setBackground(e.target.checked);
-                }}
-              />
-              Фоновый эфир
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={lifecycle.wakeEnabled}
-                disabled={!lifecycle.wakeSupported}
-                onChange={(e) => lifecycle.setWakeEnabled(e.target.checked)}
-              />
-              Оставлять экран включённым
-            </label>
-          </div>
-          <strong role="status">
-            {live
-              ? nativeUnavailable
-                ? "Эфир играет · фоновый поток недоступен"
-                : lifecycle.background
-                  ? "Фоновый звук активен"
-                  : "Эфир играет · фоновый режим выключен"
-              : lifecycle.frozen
-                ? "Система приостановила страницу. Восстанавливаем эфир…"
-                : (wanted || restoreNeeded) && audioPaused
-                  ? "Браузер приостановил звук — нажмите «Возобновить звук»"
-                  : wanted
-                    ? "Ожидаем аудиопоток"
-                    : "Запустите эфир"}
-          </strong>
-          <p>
-            При выключенном экране waterfall может не обновляться. Фоновый звук
-            работает, пока браузер разрешает воспроизведение. Если система
-            выгрузит страницу, эфир восстановится после возвращения; браузер
-            может запросить нажатие для включения звука.
-          </p>
-          {nativeUnavailable && (
-            <p>
-              Не удалось запустить фоновый аудиопоток. Обычный эфир сохранён;
-              для повтора выключите и включите «Фоновый эфир». Приёмнику нужен
-              свободный канал.
-            </p>
-          )}
-          {lifecycle.nativeEnabled && (
-            <p>
-              {nativeTransport === "hls"
-                ? "Фоновый эфир воспроизводит системный HLS-плеер браузера. Запуск и смена частоты слышны с задержкой около 12 секунд. "
-                : "На телефоне используется прямой аудиопоток для фонового воспроизведения. "}
-              Если браузер отключает эфир во сне, разрешите ему работу без
-              ограничений в настройках батареи телефона.
-            </p>
-          )}
-          {lifecycle.wakeHeld && (
-            <p>Экран остаётся включённым во время просмотра.</p>
-          )}
-          {lifecycle.wakeError && lifecycle.wakeEnabled && (
-            <p>{lifecycle.wakeError}</p>
-          )}
-          <details className="audio-diagnostics">
-            <summary>Диагностика фонового звука</summary>
-            <p>
-              После блокировки и разблокировки экрана скопируйте журнал. Он
-              покажет выбранный аудиовывод и события остановки. Журнал хранится
-              только в этой вкладке.
-            </p>
-            <a
-              href={
-                "/audio-check.html" +
-                new URL(
-                  nativeAudioURL(
-                    gateway.http,
-                    {
-                      receiver,
-                      ...settings.current,
-                    },
-                    undefined,
-                    nativeTransport,
-                  ),
-                ).search
-              }
-              onClick={stopRadio}
-            >
-              Проверить звук отдельно от SDR
-            </a>
-            <button
-              onClick={async () => {
-                lifecycle.recordDiagnostic("user:report");
-                const report = audioDiagnosticReport();
-                setAudioReport(report);
-                try {
-                  await navigator.clipboard.writeText(report);
-                  setDiagnosticCopied(true);
-                } catch {
-                  setDiagnosticCopied(false);
-                }
-              }}
-            >
-              {diagnosticCopied
-                ? "Журнал скопирован"
-                : "Скопировать диагностику звука"}
-            </button>
-            {audioReport && (
-              <textarea
-                readOnly
-                aria-label="Журнал фонового звука"
-                value={audioReport}
-              />
-            )}
-          </details>
-        </section>
         {error && (
           <div role="alert" className="error">
             {error}
@@ -1439,7 +1014,7 @@ function App() {
                   const value = e.target.value as typeof agc;
                   setAgc(value);
                   settings.current = { ...settings.current, agc: value };
-                  manager.current?.tune();
+                  manager.current?.flushTune();
                 }}
               >
                 <option value="slow">Медленная</option>
@@ -1463,7 +1038,7 @@ function App() {
         >
           <div className="visual-head">
             <div>
-              <span className={"dot " + (live ? "live" : "")} /> PANORAMA{" "}
+              <span className={"dot " + (connected ? "live" : "")} /> PANORAMA{" "}
               <span className="subtle">/ LIVE DSP</span>
             </div>
             <div className="zoom">
@@ -1697,7 +1272,7 @@ function App() {
             frequency={frequency}
             mode={mode}
             width={filterWidth}
-            connected={live}
+            connected={connected}
             onTune={(f, m, width) => tune(f, m, zoom, width ?? widths[m])}
           />
         </section>
