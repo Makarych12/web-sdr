@@ -604,11 +604,25 @@ export class CallsignLookup {
 export function registerCallsignRoute(
   app,
   lookup = new CallsignLookup({
-    onDiagnostic: ({ source, phase, httpStatus, type, code }) => {
+    onDiagnostic: ({
+      source,
+      phase,
+      httpStatus,
+      type,
+      code,
+      credentialFormat,
+    }) => {
       if (source === "HamQTH")
         console.warn(
           "Callsign diagnostic",
-          JSON.stringify({ source, phase, httpStatus, type, code }),
+          JSON.stringify({
+            source,
+            phase,
+            httpStatus,
+            type,
+            code,
+            credentialFormat,
+          }),
         );
     },
   }),

@@ -445,3 +445,55 @@ test("credential formatting diagnostics contain booleans only and never reveal m
   assert.ok(Object.values(format).every((v) => typeof v === "boolean"));
   assert.equal(JSON.stringify(diagnostics).includes("private-value"), false);
 });
+
+test("production route logger preserves only safe credential-format flags", async () => {
+  const keys = [
+    "QRZ_USERNAME",
+    "QRZ_PASSWORD",
+    "HAMQTH_USERNAME",
+    "HAMQTH_PASSWORD",
+    "CALLOOK_ENABLED",
+    "HAMDB_ENABLED",
+  ];
+  const original = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  const nativeFetch = globalThis.fetch,
+    nativeWarn = console.warn,
+    logs = [];
+  let server;
+  try {
+    delete process.env.QRZ_USERNAME;
+    delete process.env.QRZ_PASSWORD;
+    process.env.HAMQTH_USERNAME = " ur4mtn ";
+    process.env.HAMQTH_PASSWORD = "private-test-secret\n";
+    process.env.CALLOOK_ENABLED = "0";
+    process.env.HAMDB_ENABLED = "0";
+    globalThis.fetch = async () =>
+      new Response("private upstream body", { status: 401 });
+    console.warn = (...args) => logs.push(args.join(" "));
+    const app = express();
+    registerCallsignRoute(app);
+    server = createServer(app);
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const response = await nativeFetch(
+      `http://127.0.0.1:${server.address().port}/api/callsign/UR4MAD`,
+    );
+    assert.equal(response.status, 503);
+    const diagnostic = JSON.parse(
+      logs
+        .find((x) => x.startsWith("Callsign diagnostic "))
+        .slice("Callsign diagnostic ".length),
+    );
+    assert.equal(diagnostic.credentialFormat.passwordHasLineBreak, true);
+    assert.equal(diagnostic.credentialFormat.usernameMatchesExpected, true);
+    assert.equal(logs.join("").includes("private-test-secret"), false);
+    assert.equal(logs.join("").includes("private upstream body"), false);
+  } finally {
+    globalThis.fetch = nativeFetch;
+    console.warn = nativeWarn;
+    for (const k of keys) {
+      if (original[k] === undefined) delete process.env[k];
+      else process.env[k] = original[k];
+    }
+    if (server) await new Promise((resolve) => server.close(resolve));
+  }
+});
