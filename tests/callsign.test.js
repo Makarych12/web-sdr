@@ -399,3 +399,49 @@ test("HamQTH diagnostics classify failures without exposing credentials or paylo
       assert.equal(JSON.stringify(diagnostics).includes(privateText), false);
   }
 });
+
+test("HamQTH login follows JSON schema, normalizes only username and preserves password exactly", async () => {
+  const password = " +&= special password ";
+  const service = new CallsignLookup({
+    env: {
+      HAMQTH_USERNAME: " ur4mtn ",
+      HAMQTH_PASSWORD: password,
+      CALLOOK_ENABLED: "0",
+      HAMDB_ENABLED: "0",
+    },
+    fetcher: async (url, options) => {
+      if (url.endsWith("/login")) {
+        assert.equal(options.headers["Content-Type"], "application/json");
+        assert.deepEqual(JSON.parse(options.body), {
+          callsign: "UR4MTN",
+          password,
+        });
+        return new Response(JSON.stringify({ token: "test", expiresIn: 3600 }));
+      }
+      return json("UR4MAD");
+    },
+  });
+  assert.equal((await service.lookup("UR4MAD", "one")).source, "HamQTH");
+});
+test("credential formatting diagnostics contain booleans only and never reveal malformed values", async () => {
+  const diagnostics = [];
+  const service = new CallsignLookup({
+    env: {
+      HAMQTH_USERNAME: " ur4mtn ",
+      HAMQTH_PASSWORD: '"private-value"\n',
+      CALLOOK_ENABLED: "0",
+      HAMDB_ENABLED: "0",
+    },
+    onDiagnostic: (d) => diagnostics.push(d),
+    fetcher: async () => new Response("private failure body", { status: 401 }),
+  });
+  await assert.rejects(service.lookup("UR4MAD", "one"), { status: 503 });
+  const format = diagnostics.find(
+    (d) => d.source === "HamQTH",
+  ).credentialFormat;
+  assert.equal(format.usernameMatchesExpected, true);
+  assert.equal(format.usernameNeedsTrim, true);
+  assert.equal(format.passwordHasLineBreak, true);
+  assert.ok(Object.values(format).every((v) => typeof v === "boolean"));
+  assert.equal(JSON.stringify(diagnostics).includes("private-value"), false);
+});

@@ -126,8 +126,14 @@ export class CallsignLookup {
       ...(body
         ? {
             method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams(body).toString(),
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              ...headers,
+            },
+            body:
+              headers["Content-Type"] === "application/json"
+                ? JSON.stringify(body)
+                : new URLSearchParams(body).toString(),
           }
         : {}),
     });
@@ -327,10 +333,11 @@ export class CallsignLookup {
             await this.request(
               "https://www.hamqth.com/api/v2/login",
               {
-                callsign: this.env.HAMQTH_USERNAME,
+                callsign: this.env.HAMQTH_USERNAME.trim().toUpperCase(),
                 password: this.env.HAMQTH_PASSWORD,
               },
               signal,
+              { "Content-Type": "application/json" },
             ),
           );
           if (
@@ -363,6 +370,22 @@ export class CallsignLookup {
     this.onDiagnostic({
       source: "HamQTH",
       phase,
+      ...(phase === "login"
+        ? {
+            credentialFormat: {
+              usernameNeedsTrim:
+                this.env.HAMQTH_USERNAME !== this.env.HAMQTH_USERNAME?.trim(),
+              usernameMatchesExpected:
+                this.env.HAMQTH_USERNAME?.trim().toUpperCase() === "UR4MTN",
+              passwordHasLineBreak: /[\r\n]/.test(
+                this.env.HAMQTH_PASSWORD || "",
+              ),
+              passwordHasOuterQuotes: /^(["']).*\1$/s.test(
+                this.env.HAMQTH_PASSWORD || "",
+              ),
+            },
+          }
+        : {}),
       httpStatus: status,
       type:
         error.diagnosticType ||
