@@ -309,23 +309,31 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background:
-    repeating-conic-gradient(
-      from 0deg,
-      #456487 0deg 1deg,
-      transparent 1deg 9deg
-    ),
-    #0b213c;
+  background: #0b213c;
   border: 1px solid #3b5a80;
   cursor: grab;
   touch-action: none;
   outline-offset: 4px;
   user-select: none;
 }
+.vfo-dial::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-conic-gradient(
+    from 0deg,
+    #456487 0deg 1deg,
+    transparent 1deg 9deg
+  );
+  transform: rotate(var(--vfo-angle, 0deg));
+  pointer-events: none;
+}
 .vfo-dial:active {
   cursor: grabbing;
 }
 .vfo-face {
+  transform: rotate(var(--vfo-angle, 0deg));
   position: absolute;
   inset: 13px;
   border-radius: 50%;

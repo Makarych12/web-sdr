@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { PointerEvent } from "react";
 export function VfoDial({
   frequency,
@@ -13,7 +13,69 @@ export function VfoDial({
   onEnd: () => void;
   label?: string;
 }) {
-  const [rotation, setRotation] = useState(0);
+  const previousFrequency = useRef(frequency);
+  const motion = useRef({
+    angle: 0,
+    target: 0,
+    velocity: 0,
+    frame: 0,
+    time: 0,
+    reduced: false,
+  });
+  function animate(time: number) {
+    const m = motion.current;
+    m.frame = 0;
+    if (m.reduced) {
+      m.angle = m.target;
+      m.velocity = 0;
+    } else {
+      // A damped mechanical response; only the painted angle follows this spring.
+      // Substeps keep it stable even after a slow/background frame.
+      let remaining = Math.min((time - (m.time || time - 16)) / 1000, 0.05);
+      while (remaining > 0) {
+        const dt = Math.min(remaining, 0.008);
+        m.velocity += (900 * (m.target - m.angle) - 54 * m.velocity) * dt;
+        m.angle += m.velocity * dt;
+        remaining -= dt;
+      }
+      if (Math.abs(m.target - m.angle) < 0.005 && Math.abs(m.velocity) < 0.05) {
+        m.angle = m.target;
+        m.velocity = 0;
+      }
+    }
+    m.time = time;
+    dial.current?.style.setProperty("--vfo-angle", `${m.angle}deg`);
+    if (m.angle !== m.target || m.velocity !== 0)
+      m.frame = requestAnimationFrame(animate);
+  }
+  function scheduleRotation() {
+    const m = motion.current;
+    if (!m.frame) {
+      m.time = 0;
+      m.frame = requestAnimationFrame(animate);
+    }
+  }
+  useLayoutEffect(() => {
+    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => {
+      motion.current.reduced = media.matches;
+      scheduleRotation();
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => {
+      media.removeEventListener("change", update);
+      cancelAnimationFrame(motion.current.frame);
+      motion.current.frame = 0;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    // Both values use kHz. Keep the angle unwrapped across whole revolutions.
+    motion.current.target +=
+      ((frequency - previousFrequency.current) / step) * 6;
+    previousFrequency.current = frequency;
+    scheduleRotation();
+  }, [frequency, step]);
   const dial = useRef<HTMLDivElement>(null);
   const latest = useRef({ frequency, step, onTune, onEnd });
   latest.current = { frequency, step, onTune, onEnd };
@@ -32,7 +94,6 @@ export function VfoDial({
       if (document.activeElement !== element || event.deltaY === 0) return;
       event.preventDefault();
       const sign = event.deltaY < 0 ? 1 : -1;
-      setRotation((r) => r + sign * 6);
       nudge(sign);
     };
     element.addEventListener("wheel", wheel, { passive: false });
@@ -53,7 +114,6 @@ export function VfoDial({
     );
   }
   function rotate(degrees: number) {
-    setRotation((r) => r + degrees);
     const d = drag.current;
     if (!d) return;
     d.carry += degrees;
@@ -124,15 +184,11 @@ export function VfoDial({
             ? 1
             : -1;
           const mult = e.key.startsWith("Page") ? 10 : 1;
-          setRotation((r) => r + sign * 6 * mult);
           nudge(sign * mult);
           latest.current.onEnd();
         }}
       >
-        <div
-          className="vfo-face"
-          style={{ transform: `rotate(${rotation}deg)` }}
-        >
+        <div className="vfo-face">
           <i />
         </div>
         <span>VFO</span>
