@@ -1,8 +1,8 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { gateway } from "./gateway";
 type Result = {
-  status: "found" | "not_found" | "unavailable";
-  source?: "HamQTH" | "QRZ";
+  status: "found" | "not_found" | "unavailable" | "conflict";
+  source?: "HamQTH" | "QRZ" | "Callook";
   callsign?: string;
   name?: string;
   country?: string;
@@ -15,6 +15,13 @@ type Result = {
   azimuth?: number;
   message?: string;
   notice?: string;
+  retrievedAt?: string;
+  records?: {
+    source: string;
+    callsign?: string;
+    name?: string;
+    country?: string;
+  }[];
 };
 export const CallsignSearch = memo(function CallsignSearch() {
   const [query, setQuery] = useState(""),
@@ -72,7 +79,9 @@ export const CallsignSearch = memo(function CallsignSearch() {
         { signal: controller.signal },
       );
       const data: Result = await response.json();
-      if (!["found", "not_found", "unavailable"].includes(data.status))
+      if (
+        !["found", "not_found", "unavailable", "conflict"].includes(data.status)
+      )
         throw Error("Invalid response");
       if (request.current === controller) setResult(data);
     } catch {
@@ -141,9 +150,13 @@ export const CallsignSearch = memo(function CallsignSearch() {
         </div>
         {result && (
           <div
-            className={`callsign-result ${result.status === "unavailable" ? "callsign-error" : ""}`}
+            className={`callsign-result ${["unavailable", "conflict"].includes(result.status) ? "callsign-error" : ""}`}
             key={`${result.status}-${result.callsign || query}`}
-            role={result.status === "unavailable" ? "alert" : "status"}
+            role={
+              ["unavailable", "conflict"].includes(result.status)
+                ? "alert"
+                : "status"
+            }
           >
             <div>
               <article>
@@ -198,12 +211,28 @@ export const CallsignSearch = memo(function CallsignSearch() {
                       : result.message || "Сервис поиска временно недоступен."}
                   </p>
                 )}
+                {result.records?.map((record, index) => (
+                  <small key={index}>
+                    {record.source}:{" "}
+                    {[record.callsign, record.name, record.country]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </small>
+                ))}
                 {result.notice && <small>{result.notice}</small>}
                 {result.source && (
                   <small className="callsign-source">
                     Источник:{" "}
                     {result.source === "QRZ" ? (
                       "QRZ.com XML API"
+                    ) : result.source === "Callook" ? (
+                      <a
+                        href="https://callook.info/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Callook.info
+                      </a>
                     ) : (
                       <>
                         <a
@@ -224,6 +253,14 @@ export const CallsignSearch = memo(function CallsignSearch() {
                         и поддерживайте профиль актуальным.
                       </>
                     )}
+                    {result.retrievedAt &&
+                      Number.isFinite(Date.parse(result.retrievedAt)) && (
+                        <>
+                          {" "}
+                          · Получено{" "}
+                          {new Date(result.retrievedAt).toLocaleString("ru-RU")}
+                        </>
+                      )}
                   </small>
                 )}
               </article>

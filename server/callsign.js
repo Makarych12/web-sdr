@@ -1,4 +1,5 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { lookupInSources } from "./callsign-sources.js";
 
 const unavailable = () =>
   Object.assign(new Error("Сервис поиска временно недоступен."), {
@@ -95,7 +96,7 @@ export class CallsignLookup {
     this.retryAt = 0;
   }
   get provider() {
-    return `${Boolean(this.env.QRZ_USERNAME && this.env.QRZ_PASSWORD)}:${Boolean(this.env.HAMQTH_USERNAME && this.env.HAMQTH_PASSWORD)}`;
+    return `${Boolean(this.env.QRZ_USERNAME && this.env.QRZ_PASSWORD)}:${Boolean(this.env.HAMQTH_USERNAME && this.env.HAMQTH_PASSWORD)}:${this.env.CALLOOK_ENABLED !== "0"}`;
   }
   limit(client) {
     const now = this.now();
@@ -426,19 +427,76 @@ export class CallsignLookup {
     }
     throw unavailable();
   }
+  async callook(call, signal) {
+    const data = JSON.parse(
+      await this.request(
+        `https://callook.info/${encodeURIComponent(call)}/json`,
+        undefined,
+        signal,
+      ),
+    );
+    if (data.status === "INVALID")
+      return { status: "not_found", source: "Callook" };
+    if (data.status !== "VALID" || !text(data.current?.callsign))
+      throw unavailable();
+    if (text(data.current.callsign).toUpperCase() !== call)
+      return {
+        status: "conflict",
+        source: "Callook",
+        message:
+          "Источник вернул другой текущий позывной. Владелец автоматически не выбран.",
+        records: [
+          {
+            source: "Callook",
+            callsign: text(data.current.callsign),
+            name: text(data.name),
+            country: "United States",
+          },
+        ],
+      };
+    return {
+      ...this.record(
+        {
+          call: data.current.callsign,
+          name_fmt: data.name,
+          country: "United States",
+          addr2: data.address?.line2,
+          addr1: data.address?.line1,
+          grid: data.location?.gridsquare,
+        },
+        "Callook",
+      ),
+      // Callook geocodes mailing addresses. They are not verified station positions.
+      notice: text(data.location?.gridsquare)
+        ? "Locator рассчитан источником по почтовому адресу; место работы в эфире может отличаться."
+        : undefined,
+      sourceUpdatedAt: text(data.otherInfo?.lastActionDate),
+    };
+  }
   async sources(call) {
-    for (const provider of ["qrz", "hamqth"]) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      try {
-        return await this[provider](call, controller.signal);
-      } catch {
-        /* Only technical/auth/access failures reach the fallback. */
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-    throw unavailable();
+    return lookupInSources(
+      call,
+      [
+        {
+          id: "QRZ",
+          scope: "global",
+          lookup: (call, signal) => this.qrz(call, signal),
+        },
+        {
+          id: "Callook",
+          timeoutMs: Math.min(3000, this.timeoutMs),
+          scope: "US",
+          enabled: this.env.CALLOOK_ENABLED !== "0",
+          lookup: (call, signal) => this.callook(call, signal),
+        },
+        {
+          id: "HamQTH",
+          scope: "global",
+          lookup: (call, signal) => this.hamqth(call, signal),
+        },
+      ],
+      { timeoutMs: this.timeoutMs, now: this.now },
+    );
   }
   async cached(call) {
     const id = `${this.provider}:${call}`,
@@ -452,7 +510,7 @@ export class CallsignLookup {
           this.cache.delete(this.cache.keys().next().value);
         this.cache.set(id, {
           value,
-          until: this.now() + (value.status === "found" ? 300000 : 60000),
+          until: this.now() + (value.status === "not_found" ? 60000 : 300000),
         });
         return value;
       })
@@ -515,7 +573,15 @@ export function registerCallsignRoute(
       : req.socket.remoteAddress || "unknown";
     try {
       const result = await lookup.lookup(req.params.callsign, client);
-      res.status(result.status === "not_found" ? 404 : 200).json(result);
+      res
+        .status(
+          result.status === "conflict"
+            ? 409
+            : result.status === "not_found"
+              ? 404
+              : 200,
+        )
+        .json(result);
     } catch (error) {
       if (error.retryAfter) res.setHeader("Retry-After", error.retryAfter);
       res.status(error.status || 503).json({

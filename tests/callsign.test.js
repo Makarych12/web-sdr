@@ -9,6 +9,7 @@ import {
   registerCallsignRoute,
 } from "../server/callsign.js";
 const hamEnv = {
+  CALLOOK_ENABLED: "0",
   HAMQTH_USERNAME: "test-account",
   HAMQTH_PASSWORD: "test-password",
 };
@@ -33,7 +34,11 @@ const hamFetcher = (fn) => async (url, options) =>
 const xml = (content) => new Response(`<QRZDatabase>${content}</QRZDatabase>`);
 const session = (key = "secret-session") =>
   `<Session><Key>${key}</Key></Session>`;
-const env = { QRZ_USERNAME: "test-account", QRZ_PASSWORD: "test-password" };
+const env = {
+  CALLOOK_ENABLED: "0",
+  QRZ_USERNAME: "test-account",
+  QRZ_PASSWORD: "test-password",
+};
 test("callsigns normalize trim/case and reject URLs, markup and invalid names", () => {
   assert.equal(normalizeCallsign("  ur4mtn/p "), "UR4MTN/P");
   for (const value of [
@@ -288,7 +293,7 @@ test("QRZ restrictions and technical failures fall back to HamQTH; genuine misse
 test("no credentials is unavailable and never emits a false negative", async () => {
   const diagnostics = [];
   const service = new CallsignLookup({
-    env: {},
+    env: { CALLOOK_ENABLED: "0" },
     onDiagnostic: (d) => diagnostics.push(d),
     fetcher: async () => {
       throw Error("unexpected request");
