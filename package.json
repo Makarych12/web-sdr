@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
+    "fast-xml-parser": "^5.11.2",
     "json5": "^2.2.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

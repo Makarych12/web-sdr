@@ -4,6 +4,9 @@ import { flushSync } from "react-dom";
 import "./style.css";
 import "./brand.css";
 import "./console.css";
+import "./features.css";
+import { CallsignSearch } from "./CallsignSearch";
+import { StepControl } from "./StepControl";
 import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
 import { VfoDial } from "./VfoDial";
@@ -930,20 +933,7 @@ function App() {
             onEnd={() => manager.current?.flushTune()}
           />
           <div className="steps">
-            <label className="step-select">
-              Шаг{" "}
-              <select
-                aria-label="Шаг настройки"
-                value={step}
-                onChange={(e) => setStep(Number(e.target.value))}
-              >
-                {[0.001, 0.01, 0.1, 1, 5, 10].map((s) => (
-                  <option key={s} value={s}>
-                    {`${s * 1000} Hz`}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <StepControl step={step} onChange={setStep} />
             <button
               aria-label="Избранная частота"
               aria-pressed={favoriteFrequencies.some(
@@ -1353,6 +1343,7 @@ function App() {
             </p>
           </div>
         </section>
+        <CallsignSearch />
         <footer>
           <span>UR4MTN WEB SDR / KiwiSDR</span>
           <span>

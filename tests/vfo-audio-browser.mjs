@@ -1,3 +1,4 @@
+import { selectStep } from "./step-control.mjs";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -193,9 +194,7 @@ async function phase(mode, input) {
       const step = ["0.001", "0.01", "0.1", "1", "5", "10"][
         Math.floor(i / 80) % 6
       ];
-      await page
-        .getByLabel("Шаг настройки", { exact: true })
-        .selectOption(step);
+      await selectStep(page, step);
       await dial.focus();
     }
     angle += (sign * Math.PI) / 12;
@@ -338,7 +337,7 @@ async function checkTerminationEvents() {
   assert.ok(visual.waterfallRows > 5);
   assert.ok(visual.snapshot.nonzero);
   checks.push(visual);
-  await page.getByLabel("Шаг настройки", { exact: true }).selectOption("0.001");
+  await selectStep(page, "0.001");
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
     await dial.scrollIntoViewIfNeeded();
     const box = await dial.boundingBox();
@@ -422,7 +421,7 @@ try {
     );
     throw e;
   }
-  await page.getByLabel("Шаг настройки", { exact: true }).selectOption("0.001");
+  await selectStep(page, "0.001");
   if (terminationOnly) {
     await checkTerminationEvents();
   } else if (repro) {
@@ -433,9 +432,7 @@ try {
       await healthy();
       for (const input of ["mouse", "wheel", "touch"]) await phase(mode, input);
       for (const step of ["0.001", "0.01", "0.1", "1", "5", "10"]) {
-        await page
-          .getByLabel("Шаг настройки", { exact: true })
-          .selectOption(step);
+        await selectStep(page, step);
         const before = await snapshot();
         for (const name of ["Шаг частоты вверх", "Шаг частоты вниз"]) {
           await page.getByRole("button", { name, exact: true }).click();

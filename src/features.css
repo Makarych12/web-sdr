@@ -1,0 +1,281 @@
+/* Local styles for the two added controls; existing radio panels keep their rules. */
+.steps .step-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.steps .step-control button {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 20px;
+  transition:
+    transform 110ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+.step-control button:hover,
+.step-control button:focus-visible {
+  border-color: #70caff;
+  box-shadow:
+    0 0 12px #39aaff45,
+    inset 0 0 8px #39aaff15;
+}
+.step-control button:active {
+  transform: scale(0.95);
+  box-shadow:
+    0 0 18px #39aaff70,
+    inset 0 0 12px #70caff30;
+}
+.step-control button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    #a5ddff38 50%,
+    transparent 75%
+  );
+  transform: translateX(-120%);
+  transition: transform 240ms ease;
+}
+.step-control button:active::after {
+  transform: translateX(120%);
+}
+.step-control button[aria-disabled="true"] {
+  color: #7f9ebb;
+}
+.step-control output {
+  min-width: 91px;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #b9dfff;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.step-control output .step-value {
+  display: inline-block;
+  animation: step-text 160ms ease-out;
+}
+@keyframes step-text {
+  from {
+    opacity: 0.35;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.callsign-search {
+  margin-top: 18px;
+  padding: 20px;
+}
+.callsign-search h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+.callsign-search form {
+  display: flex;
+  gap: 8px;
+  max-width: 640px;
+}
+.callsign-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 12px;
+}
+.callsign-search form button {
+  min-width: 72px;
+  min-height: 44px;
+}
+.callsign-progress {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8daece;
+  font-size: 11px;
+}
+.callsign-progress i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #70caff;
+  animation: callsign-pulse 1s ease-in-out infinite alternate;
+}
+.callsign-result {
+  display: grid;
+  grid-template-rows: 1fr;
+  max-width: 640px;
+  animation: callsign-open 220ms ease-out;
+}
+.callsign-result > div {
+  min-height: 0;
+  overflow: hidden;
+  padding: 2px;
+}
+.callsign-result article {
+  padding: 16px;
+  border: 1px solid #456487;
+  border-radius: 10px;
+  background: #0b213c;
+  box-shadow:
+    inset 0 0 12px #39aaff0d,
+    0 0 5px #39aaff35;
+  overflow-wrap: anywhere;
+}
+.callsign-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: #b9dfff;
+}
+.callsign-flag {
+  font-size: 26px;
+}
+.callsign-title,
+.callsign-name,
+.callsign-result dl {
+  animation: callsign-data 240ms ease-out;
+}
+.callsign-result p {
+  margin: 8px 0;
+}
+.callsign-result dl {
+  margin: 12px 0;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.callsign-result dl > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 10px;
+}
+.callsign-result dt {
+  color: #8daece;
+}
+.callsign-result dd {
+  margin: 0;
+}
+.callsign-result small,
+.callsign-coverage {
+  display: block;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #8daece;
+}
+.callsign-source {
+  margin-top: 10px;
+}
+.callsign-coverage {
+  max-width: 640px;
+  margin-top: 8px;
+}
+.callsign-error article {
+  border-color: #bb7857;
+  animation: callsign-error 400ms ease-out;
+}
+@keyframes callsign-pulse {
+  from {
+    opacity: 0.35;
+    box-shadow: 0 0 2px #39aaff20;
+  }
+  to {
+    opacity: 0.85;
+    box-shadow: 0 0 8px #39aaff50;
+  }
+}
+@keyframes callsign-open {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+@keyframes callsign-data {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes callsign-error {
+  from {
+    box-shadow: 0 0 10px #d36b4150;
+  }
+  to {
+    box-shadow: 0 0 5px #bb785735;
+  }
+}
+@media (max-width: 480px) {
+  .step-control output {
+    min-width: 42px;
+    font-size: 11px;
+  }
+  .step-control .step-caption {
+    display: block;
+    font-size: 9px;
+    line-height: 12px;
+  }
+  .steps > button[aria-label="Шаг частоты вниз"],
+  .steps > button[aria-label="Шаг частоты вверх"] {
+    min-width: 44px;
+  }
+
+  .callsign-search {
+    padding: 14px;
+  }
+  .callsign-search input {
+    font-size: 10px;
+    padding-inline: 8px;
+  }
+  .callsign-result dl > div {
+    grid-template-columns: 90px minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-control output .step-value,
+  .callsign-result,
+  .callsign-title,
+  .callsign-name,
+  .callsign-result dl,
+  .callsign-progress i,
+  .callsign-error article {
+    animation: none;
+  }
+  .steps .step-control button,
+  .step-control button::after {
+    transition: none;
+  }
+  .step-control button:active {
+    transform: none;
+  }
+  .step-control button::after {
+    display: none;
+  }
+}
+/* Preserve the existing two-row frequency controls on narrow phones. */
+@media (max-width: 371px) {
+  .steps > button[aria-label="Шаг частоты вверх"] {
+    flex-basis: 100%;
+  }
+}

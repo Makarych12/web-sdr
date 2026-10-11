@@ -1,3 +1,4 @@
+import { selectStep } from "./step-control.mjs";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -52,9 +53,7 @@ try {
       return (await frequency()) - f;
     };
     for (const step of [0.001, 0.01, 0.1, 1, 5, 10]) {
-      await page
-        .getByLabel("Шаг настройки", { exact: true })
-        .selectOption(String(step));
+      await selectStep(page, String(step));
       await settled();
       assert.equal(
         await check(
@@ -95,7 +94,7 @@ try {
       await check(() => dial.press("PageDown"), -60);
     }
     // External changes arrive through the same props as receiver/preset updates.
-    await page.getByLabel("Шаг настройки", { exact: true }).selectOption("10");
+    await selectStep(page, "10");
     const previous = await frequency();
     await check(
       async () => {
@@ -120,9 +119,7 @@ try {
       ),
     );
     // Long accumulated rotation never normalizes to 0 at a whole revolution.
-    await page
-      .getByLabel("Шаг настройки", { exact: true })
-      .selectOption("0.001");
+    await selectStep(page, "0.001");
     await dial.scrollIntoViewIfNeeded();
     await dial.focus();
     const origin = await angles();

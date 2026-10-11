@@ -1,3 +1,4 @@
+import { selectStep } from "./step-control.mjs";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -365,16 +366,14 @@ try {
       ) < 0.01,
   );
   await healthy("frequency and USB");
-  const steps = page.getByLabel("Шаг настройки", { exact: true });
-  assert.deepEqual(await steps.locator("option").allTextContents(), [
-    "1 Hz",
-    "10 Hz",
-    "100 Hz",
-    "1000 Hz",
-    "5000 Hz",
-    "10000 Hz",
-  ]);
-  await steps.selectOption("0.001");
+  assert.equal(
+    await page
+      .getByRole("group", { name: "Шаг настройки", exact: true })
+      .getByRole("button")
+      .count(),
+    2,
+  );
+  await selectStep(page, "0.001");
   await page
     .getByRole("button", { name: "Шаг частоты вверх", exact: true })
     .click();
@@ -410,7 +409,7 @@ try {
   await healthy("real rotary VFO drag");
   await page.locator("#frequency").fill("7074");
   await page.getByRole("button", { name: "Настроить", exact: true }).click();
-  await steps.selectOption("1");
+  await selectStep(page, "1");
   for (const mode of ["AM", "USB", "LSB", "CW", "FM", "USB"]) {
     await page.getByRole("button", { name: mode, exact: true }).click();
     await page.waitForFunction(

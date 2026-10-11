@@ -36,6 +36,10 @@
     {
       "source": "/api/health",
       "destination": "/api/gateway"
+    },
+    {
+      "source": "/api/callsign/:callsign",
+      "destination": "/api/gateway"
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { selectStep } from "./step-control.mjs";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
@@ -95,7 +96,7 @@ try {
   const initial = await state();
   assert.equal(initial.frequency, 14200);
   assert.equal(initial.zoom, 6);
-  await page.getByLabel("Шаг настройки", { exact: true }).selectOption("0.001");
+  await selectStep(page, "0.001");
   const dial = page.getByRole("slider", {
     name: "VFO — точная подстройка",
     exact: true,

@@ -1,3 +1,4 @@
+import { selectStep } from "./step-control.mjs";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -213,9 +214,7 @@ try {
     exact: true,
   });
   for (const step of [0.001, 0.01, 0.1, 1, 5, 10]) {
-    await page
-      .getByLabel("Шаг настройки", { exact: true })
-      .selectOption(String(step));
+    await selectStep(page, String(step));
     await dial.focus();
     for (const direction of [-1, 1]) {
       const result = await dial.evaluate(
