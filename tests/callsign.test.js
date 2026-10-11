@@ -10,6 +10,7 @@ import {
 } from "../server/callsign.js";
 const hamEnv = {
   CALLOOK_ENABLED: "0",
+  HAMDB_ENABLED: "0",
   HAMQTH_USERNAME: "test-account",
   HAMQTH_PASSWORD: "test-password",
 };
@@ -36,6 +37,7 @@ const session = (key = "secret-session") =>
   `<Session><Key>${key}</Key></Session>`;
 const env = {
   CALLOOK_ENABLED: "0",
+  HAMDB_ENABLED: "0",
   QRZ_USERNAME: "test-account",
   QRZ_PASSWORD: "test-password",
 };
@@ -293,7 +295,7 @@ test("QRZ restrictions and technical failures fall back to HamQTH; genuine misse
 test("no credentials is unavailable and never emits a false negative", async () => {
   const diagnostics = [];
   const service = new CallsignLookup({
-    env: { CALLOOK_ENABLED: "0" },
+    env: { CALLOOK_ENABLED: "0", HAMDB_ENABLED: "0" },
     onDiagnostic: (d) => diagnostics.push(d),
     fetcher: async () => {
       throw Error("unexpected request");

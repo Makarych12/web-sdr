@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { gateway } from "./gateway";
 type Result = {
   status: "found" | "not_found" | "unavailable" | "conflict";
-  source?: "HamQTH" | "QRZ" | "Callook";
+  source?: "HamQTH" | "QRZ" | "Callook" | "HamDB";
   callsign?: string;
   name?: string;
   country?: string;
@@ -232,6 +232,14 @@ export const CallsignSearch = memo(function CallsignSearch() {
                         rel="noopener noreferrer"
                       >
                         Callook.info
+                      </a>
+                    ) : result.source === "HamDB" ? (
+                      <a
+                        href="https://hamdb.org/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        HamDB.org
                       </a>
                     ) : (
                       <>

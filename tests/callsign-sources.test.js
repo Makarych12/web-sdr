@@ -151,7 +151,11 @@ test("historical Callook aliases do not silently select another callsign owner",
 });
 test("Callook UPDATING is unavailable and allows HamQTH; no regional false negative", async () => {
   const service = new CallsignLookup({
-    env: { HAMQTH_USERNAME: "test", HAMQTH_PASSWORD: "test" },
+    env: {
+      HAMDB_ENABLED: "0",
+      HAMQTH_USERNAME: "test",
+      HAMQTH_PASSWORD: "test",
+    },
     fetcher: async (url) =>
       new Response(
         JSON.stringify(
@@ -170,4 +174,64 @@ test("Callook UPDATING is unavailable and allows HamQTH; no regional false negat
   const result = await service.lookup("H1TEST", "one");
   assert.equal(result.source, "HamQTH");
   assert.equal(result.country, "Japan");
+});
+
+test("restored HamDB finds regional records without credentials and preserves actual attribution", async () => {
+  const service = new CallsignLookup({
+    env: { CALLOOK_ENABLED: "0" },
+    fetcher: async (url) => {
+      assert.match(url, /api\.hamdb\.org\/v1\/DL1ABC\/json\/ur4mtn-websdr/);
+      return new Response(
+        JSON.stringify({
+          hamdb: {
+            messages: { status: "OK" },
+            callsign: {
+              call: "DL1ABC",
+              fname: "Test",
+              name: "Owner",
+              country: "Germany",
+              lat: "1",
+              lon: "1",
+            },
+          },
+        }),
+      );
+    },
+  });
+  const result = await service.lookup(" dl1abc ", "test");
+  assert.equal(result.source, "HamDB");
+  assert.equal(result.name, "Test Owner");
+  assert.equal(result.country, "Germany");
+  assert.equal(result.coordinates, undefined);
+  assert.ok(result.retrievedAt);
+});
+test("HamDB regional miss is never a worldwide negative and does not block international fallback", async () => {
+  for (const hasHam of [false, true]) {
+    const service = new CallsignLookup({
+      env: {
+        CALLOOK_ENABLED: "0",
+        ...(hasHam ? { HAMQTH_USERNAME: "test", HAMQTH_PASSWORD: "test" } : {}),
+      },
+      fetcher: async (url) =>
+        new Response(
+          JSON.stringify(
+            url.includes("hamdb.org")
+              ? { hamdb: { messages: { status: "NOT_FOUND" } } }
+              : url.endsWith("/login")
+                ? { token: "test", expiresIn: 3600 }
+                : {
+                    callsign: "UR4MAD",
+                    name: "Global Owner",
+                    country: "Ukraine",
+                  },
+          ),
+        ),
+    });
+    if (hasHam) {
+      const r = await service.lookup("UR4MAD", "test");
+      assert.equal(r.source, "HamQTH");
+      assert.equal(r.name, "Global Owner");
+    } else
+      await assert.rejects(service.lookup("UR4MAD", "test"), { status: 503 });
+  }
 });

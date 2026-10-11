@@ -96,7 +96,7 @@ export class CallsignLookup {
     this.retryAt = 0;
   }
   get provider() {
-    return `${Boolean(this.env.QRZ_USERNAME && this.env.QRZ_PASSWORD)}:${Boolean(this.env.HAMQTH_USERNAME && this.env.HAMQTH_PASSWORD)}:${this.env.CALLOOK_ENABLED !== "0"}`;
+    return `${Boolean(this.env.QRZ_USERNAME && this.env.QRZ_PASSWORD)}:${Boolean(this.env.HAMQTH_USERNAME && this.env.HAMQTH_PASSWORD)}:${this.env.CALLOOK_ENABLED !== "0"}:${this.env.HAMDB_ENABLED !== "0"}`;
   }
   limit(client) {
     const now = this.now();
@@ -473,6 +473,29 @@ export class CallsignLookup {
       sourceUpdatedAt: text(data.otherInfo?.lastActionDate),
     };
   }
+  async hamdb(call, signal) {
+    const data = JSON.parse(
+      await this.request(
+        `https://api.hamdb.org/v1/${encodeURIComponent(call)}/json/ur4mtn-websdr`,
+        undefined,
+        signal,
+      ),
+    )?.hamdb;
+    if (data?.messages?.status === "NOT_FOUND")
+      return { status: "not_found", source: "HamDB" };
+    if (data?.messages?.status !== "OK" || !text(data.callsign?.call))
+      throw unavailable();
+    if (text(data.callsign.call).toUpperCase() !== call)
+      return {
+        status: "conflict",
+        source: "HamDB",
+        message:
+          "Источник вернул другой позывной. Владелец автоматически не выбран.",
+      };
+    // This database does not establish that its coordinates are the station QTH.
+    const { lat, lon, ...record } = data.callsign;
+    return this.record(record, "HamDB");
+  }
   async sources(call) {
     return lookupInSources(
       call,
@@ -488,6 +511,13 @@ export class CallsignLookup {
           scope: "US",
           enabled: this.env.CALLOOK_ENABLED !== "0",
           lookup: (call, signal) => this.callook(call, signal),
+        },
+        {
+          id: "HamDB",
+          scope: "AU/CA/CZ/DE/US",
+          timeoutMs: Math.min(3000, this.timeoutMs),
+          enabled: this.env.HAMDB_ENABLED !== "0",
+          lookup: (call, signal) => this.hamdb(call, signal),
         },
         {
           id: "HamQTH",
