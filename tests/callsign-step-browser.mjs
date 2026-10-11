@@ -26,6 +26,10 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(process.env.TEST_APP_URL || "http://localhost:8788");
     await page.locator(".digital-frequency").waitFor();
+    await page.waitForFunction(
+      () => +document.querySelector(".receiver-choice")?.dataset.count > 20,
+    );
+    await page.evaluate(() => document.fonts.ready);
     const dial = page.locator(".vfo-dial").first(),
       freq = () => dial.getAttribute("aria-valuenow").then(Number);
     const up = page.getByRole("button", {
@@ -71,15 +75,27 @@ try {
       await page.mouse.wheel(0, 100);
       await page.waitForTimeout(50);
       assert.equal(await freq(), base);
-      const x = b.x + b.width / 2,
-        y = b.y + b.height / 2,
-        r = b.width * 0.35;
+      await dial.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(250);
+      const dragBox = await dial.boundingBox();
+      const x = dragBox.x + dragBox.width / 2,
+        y = dragBox.y + dragBox.height / 2,
+        r = dragBox.width * 0.35;
       await page.mouse.move(x + r, y);
       await page.mouse.down();
-      await page.mouse.move(x, y + r);
+      await page.mouse.move(
+        x + r * Math.cos((93 * Math.PI) / 180),
+        y + r * Math.sin((93 * Math.PI) / 180),
+      );
       await page.mouse.up();
-      assert.ok(Math.abs((await freq()) - base - 15 * step * 1000) < 0.001);
-      await page.mouse.move(x, y + r);
+      assert.ok(
+        Math.abs((await freq()) - base - 15 * step * 1000) < 0.001,
+        `${name}: ${step * 1000} Hz step, drag delta ${(await freq()) - base} Hz, box ${JSON.stringify(dragBox)}`,
+      );
+      await page.mouse.move(
+        x + r * Math.cos((93 * Math.PI) / 180),
+        y + r * Math.sin((93 * Math.PI) / 180),
+      );
       await page.mouse.down();
       await page.mouse.move(x + r, y);
       await page.mouse.up();
