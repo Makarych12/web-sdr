@@ -1,7 +1,7 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 
 const unavailable = () =>
-  Object.assign(new Error("Поиск временно недоступен. Попробуйте позже."), {
+  Object.assign(new Error("Сервис поиска временно недоступен."), {
     status: 503,
   });
 const text = (v) =>
@@ -75,8 +75,14 @@ export class CallsignLookup {
     env = process.env,
     fetcher = fetch,
     now = Date.now,
-    timeoutMs = 10000,
+    timeoutMs = 8000,
+    onDiagnostic = () => {},
   } = {}) {
+    this.onDiagnostic = onDiagnostic;
+    this.token = undefined;
+    this.tokenUntil = 0;
+    this.hamLogin = undefined;
+    this.hamRetryAt = 0;
     this.env = env;
     this.fetcher = fetcher;
     this.now = now;
@@ -89,7 +95,7 @@ export class CallsignLookup {
     this.retryAt = 0;
   }
   get provider() {
-    return this.env.QRZ_USERNAME && this.env.QRZ_PASSWORD ? "QRZ" : "HamDB";
+    return `${Boolean(this.env.QRZ_USERNAME && this.env.QRZ_PASSWORD)}:${Boolean(this.env.HAMQTH_USERNAME && this.env.HAMQTH_PASSWORD)}`;
   }
   limit(client) {
     const now = this.now();
@@ -111,10 +117,11 @@ export class CallsignLookup {
         { status: 429, retryAfter: Math.ceil((entry.until - now) / 1000) },
       );
   }
-  async request(url, body, signal) {
+  async request(url, body, signal, headers = {}) {
     const response = await this.fetcher(url, {
       signal,
       redirect: "error",
+      headers,
       ...(body
         ? {
             method: "POST",
@@ -123,7 +130,8 @@ export class CallsignLookup {
           }
         : {}),
     });
-    if (!response.ok) throw unavailable();
+    if (!response.ok)
+      throw Object.assign(unavailable(), { upstreamStatus: response.status });
     // Bound parsing work and memory, including streamed/chunked responses.
     const reader = response.body.getReader(),
       chunks = [];
@@ -155,6 +163,7 @@ export class CallsignLookup {
     const data = new XMLParser({
       parseTagValue: false,
       ignoreAttributes: true,
+      removeNSPrefix: true,
     }).parse(raw)?.QRZDatabase;
     if (!data || typeof data !== "object") throw unavailable();
     return data;
@@ -191,7 +200,12 @@ export class CallsignLookup {
               ? 86400000
               : 30000);
           throw Object.assign(unavailable(), {
-            notice: this.notice(data.Session?.Error || data.Session?.Message),
+            upstreamStatus: 200,
+            lookupType: /subscription|subscriber|XML access/i.test(
+              String(data.Session?.Error || ""),
+            )
+              ? "subscription_restricted"
+              : "authorization_error",
           });
         }
         return (this.key = key);
@@ -202,31 +216,83 @@ export class CallsignLookup {
     return this.login;
   }
   async qrz(call, signal) {
+    if (!this.env.QRZ_USERNAME || !this.env.QRZ_PASSWORD) {
+      this.onDiagnostic({
+        callsign: call,
+        source: "QRZ",
+        httpStatus: null,
+        type: "credentials_missing",
+        refreshed: false,
+        fields: [],
+      });
+      throw unavailable();
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
-      const key = await this.session(signal);
-      const data = await this.xml({ s: key, callsign: call }, signal),
-        session = data.Session || {};
-      const nextKey = text(session.Key);
-      if (nextKey) this.key = nextKey;
-      else if (this.key === key) this.key = undefined;
-      if (/not found/i.test(session.Error || ""))
-        return {
-          status: "not_found",
+      let key;
+      try {
+        key = await this.session(signal);
+      } catch (error) {
+        this.onDiagnostic({
+          callsign: call,
           source: "QRZ",
-          notice: this.notice(session.Message),
-        };
-      if (!nextKey || /session|timeout/i.test(session.Error || "")) {
+          httpStatus: error.upstreamStatus || null,
+          type: error.lookupType || "unavailable",
+          refreshed: Boolean(attempt),
+          fields: [],
+        });
+        throw error;
+      }
+      let data;
+      try {
+        data = await this.xml({ s: key, callsign: call }, signal);
+      } catch (error) {
+        this.onDiagnostic({
+          callsign: call,
+          source: "QRZ",
+          httpStatus: error.upstreamStatus || null,
+          type: "unavailable",
+          refreshed: Boolean(attempt),
+          fields: [],
+        });
+        throw error;
+      }
+      const session = data.Session || {},
+        nextKey = text(session.Key);
+      const error = String(session.Error || ""),
+        message = String(session.Message || "");
+      const restricted =
+        /subscription|subscriber|subscribe|XML access|not authorized|password|login|denied/i.test(
+          error + " " + message,
+        );
+      const expired =
+        /session|timeout/i.test(error) || (!nextKey && !restricted);
+      const missing = !restricted && !expired && /not found/i.test(error);
+      const type = restricted
+        ? "access_restricted"
+        : expired
+          ? "session_expired"
+          : missing
+            ? "not_found"
+            : error || !text(data.Callsign?.call)
+              ? "unavailable"
+              : "found";
+      this.onDiagnostic({
+        callsign: call,
+        source: "QRZ",
+        httpStatus: 200,
+        type,
+        refreshed: Boolean(attempt),
+        fields: Object.keys(data.Callsign || {}),
+      });
+      if (expired) {
         if (this.key === key) this.key = undefined;
         if (!attempt) continue;
+        throw unavailable();
       }
-      if (session.Error || !nextKey || !text(data.Callsign?.call))
-        throw Object.assign(unavailable(), {
-          notice: this.notice(session.Error || session.Message),
-        });
-      return {
-        ...this.record(data.Callsign, "QRZ"),
-        notice: this.notice(session.Message),
-      };
+      if (nextKey) this.key = nextKey;
+      if (missing) return { status: "not_found", source: "QRZ" };
+      if (type !== "found") throw unavailable();
+      return this.record(data.Callsign, "QRZ");
     }
     throw unavailable();
   }
@@ -250,18 +316,103 @@ export class CallsignLookup {
       coordinates: coordinates(r),
     };
   }
-  async hamdb(call, signal) {
-    const raw = await this.request(
-      `https://api.hamdb.org/v1/${encodeURIComponent(call)}/json/ur4mtn-websdr`,
-      undefined,
-      signal,
-    );
-    const data = JSON.parse(raw)?.hamdb;
-    if (data?.messages?.status === "NOT_FOUND")
-      return { status: "not_found", source: "HamDB" };
-    if (data?.messages?.status !== "OK" || !text(data?.callsign?.call))
+  async hamSession(signal) {
+    if (this.token && this.tokenUntil > this.now()) return this.token;
+    if (this.now() < this.hamRetryAt) throw unavailable();
+    if (!this.hamLogin) {
+      this.hamLogin = (async () => {
+        try {
+          const data = JSON.parse(
+            await this.request(
+              "https://www.hamqth.com/api/v2/login",
+              {
+                callsign: this.env.HAMQTH_USERNAME,
+                password: this.env.HAMQTH_PASSWORD,
+              },
+              signal,
+            ),
+          );
+          if (
+            !text(data.token) ||
+            !Number.isFinite(data.expiresIn) ||
+            data.expiresIn <= 0
+          )
+            throw unavailable();
+          this.token = data.token;
+          this.tokenUntil =
+            this.now() + Math.max(0, data.expiresIn - 30) * 1000;
+          return this.token;
+        } catch (error) {
+          this.hamRetryAt = this.now() + 30000;
+          throw error;
+        }
+      })().finally(() => {
+        this.hamLogin = undefined;
+      });
+    }
+    return this.hamLogin;
+  }
+  async hamqth(call, signal) {
+    if (!this.env.HAMQTH_USERNAME || !this.env.HAMQTH_PASSWORD)
       throw unavailable();
-    return this.record(data.callsign, "HamDB");
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const token = await this.hamSession(signal);
+      let r;
+      try {
+        r = JSON.parse(
+          await this.request(
+            `https://www.hamqth.com/api/v2/callbook/${encodeURIComponent(call)}?app=UR4MTN-WebSDR`,
+            undefined,
+            signal,
+            { Authorization: `Bearer ${token}` },
+          ),
+        );
+      } catch (error) {
+        if (error.upstreamStatus === 401) {
+          if (this.token === token) this.token = undefined;
+          if (!attempt) continue;
+        }
+        if (error.upstreamStatus === 404)
+          return { status: "not_found", source: "HamQTH" };
+        throw error;
+      }
+      if (!text(r.callsign)) throw unavailable();
+      return this.record(
+        {
+          call: r.callsign,
+          name_fmt: r.name || r.address?.name || r.nick,
+          country: r.country,
+          addr2: r.address?.city,
+          addr1: r.qth,
+          state: r.region?.usState || r.region?.oblast || r.region?.district,
+          grid: r.location?.grid,
+          lat:
+            typeof r.location?.lat === "number"
+              ? String(r.location.lat)
+              : undefined,
+          lon:
+            typeof r.location?.lon === "number"
+              ? String(r.location.lon)
+              : undefined,
+        },
+        "HamQTH",
+      );
+    }
+    throw unavailable();
+  }
+  async sources(call) {
+    for (const provider of ["qrz", "hamqth"]) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        return await this[provider](call, controller.signal);
+      } catch {
+        /* Only technical/auth/access failures reach the fallback. */
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw unavailable();
   }
   async cached(call) {
     const id = `${this.provider}:${call}`,
@@ -269,13 +420,7 @@ export class CallsignLookup {
     if (cached && cached.until > this.now()) return cached.value;
     if (this.pending.has(id)) return this.pending.get(id);
     if (this.pending.size >= 16) throw unavailable();
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    const operation = (
-      this.provider === "QRZ"
-        ? this.qrz(call, controller.signal)
-        : this.hamdb(call, controller.signal)
-    )
+    const operation = this.sources(call)
       .then((value) => {
         if (this.cache.size >= 200)
           this.cache.delete(this.cache.keys().next().value);
@@ -289,7 +434,6 @@ export class CallsignLookup {
         throw error.status ? error : unavailable();
       })
       .finally(() => {
-        clearTimeout(timer);
         this.pending.delete(id);
       });
     this.pending.set(id, operation);

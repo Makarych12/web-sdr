@@ -75,36 +75,69 @@
     transform: translateY(0);
   }
 }
+.frequency:has(.callsign-search) {
+  position: relative;
+}
 .callsign-search {
-  margin-top: 18px;
-  padding: 20px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin-top: 3px;
+  min-width: 0;
 }
-.callsign-search h2 {
-  margin: 0 0 14px;
-  font-size: 18px;
-}
-.callsign-search form {
+.frequency .callsign-search form {
+  height: 28px;
+  min-height: 28px;
   display: flex;
-  gap: 8px;
-  max-width: 640px;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  width: 100%;
 }
-.callsign-search input {
+.frequency .callsign-search input {
   flex: 1;
   min-width: 0;
-  min-height: 44px;
-  font-size: 12px;
+  width: 0;
+  min-height: 28px;
+  font-size: 11px;
+  padding: 4px 6px;
 }
-.callsign-search form button {
-  min-width: 72px;
-  min-height: 44px;
+.frequency .callsign-search form button {
+  min-width: 42px;
+  min-height: 28px;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+.callsign-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  border: 0;
+  background: #0b213c;
+  color: #b9dfff;
+  border-radius: 10px;
+  box-shadow: 0 0 12px #39aaff35;
+}
+.callsign-popover::backdrop {
+  background: transparent;
+}
+.callsign-popover a {
+  color: #8fceee;
 }
 .callsign-progress {
-  min-height: 28px;
+  min-height: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   color: #8daece;
   font-size: 11px;
+}
+.callsign-progress:has(i) {
+  padding: 12px;
 }
 .callsign-progress i {
   width: 10px;
@@ -241,9 +274,6 @@
     min-width: 44px;
   }
 
-  .callsign-search {
-    padding: 14px;
-  }
   .callsign-search input {
     font-size: 10px;
     padding-inline: 8px;

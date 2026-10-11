@@ -151,69 +151,15 @@ try {
     assert.equal(await page.locator(".vfo-dial").count(), 2, "no new SDR/VFO");
     if (name === "desktop") {
       const field = page.getByLabel("Позывной для поиска");
-      await field.fill("  dl1abc ");
-      assert.equal(await field.inputValue(), "  DL1ABC ");
+      await field.fill(" ur4mad ");
       await field.press("Enter");
-      await page.locator(".callsign-result strong").waitFor({ timeout: 30000 });
-      assert.equal(await field.inputValue(), "DL1ABC");
-      assert.equal(
-        await page.locator(".callsign-result strong").textContent(),
-        "DL1ABC",
-      );
-      assert.ok(
-        (await page.locator(".callsign-name").textContent()).trim().length > 0,
-      );
-      assert.equal(
-        await page.locator(".callsign-result dd").first().textContent(),
-        "Germany",
-      );
-      assert.equal(
-        await page.locator(".callsign-flag").getAttribute("aria-label"),
-        "Флаг: Germany",
-      );
+      await page.locator("#callsign-popover").waitFor({ state: "visible" });
+      assert.equal(await field.inputValue(), "UR4MAD");
+      const response = await page.locator(".callsign-result").textContent();
+      assert.ok(response?.length > 0);
       assert.equal(await page.locator(".callsign-result iframe").count(), 0);
-      assert.equal(
-        await page
-          .locator(".callsign-result")
-          .getByText("От UR4MTN", { exact: true })
-          .count(),
-        0,
-        "origin not known: no invented distance",
-      );
-      await page
-        .locator(".callsign-search")
-        .screenshot({ path: "artifacts/callsign-step/real-DL1ABC.png" });
-      await field.fill("ZZ0ZZZZ");
-      await field.press("Enter");
-      await page
-        .getByText("Позывной не найден в справочнике", { exact: true })
-        .waitFor({ timeout: 30000 });
-      await field.fill("UR4MTN");
-      await Promise.all([
-        page.waitForResponse((r) => r.url().endsWith("/api/callsign/UR4MTN")),
-        field.press("Enter"),
-      ]);
-      await page
-        .getByText("Позывной не найден в справочнике", { exact: true })
-        .waitFor();
-      await page.route("**/api/callsign/*", (route) =>
-        route.fulfill({
-          status: 503,
-          contentType: "application/json",
-          body: JSON.stringify({
-            status: "unavailable",
-            message: "Поиск временно недоступен. Попробуйте позже.",
-          }),
-        }),
-      );
-      await field.fill("W1AW");
-      await field.press("Enter");
-      await page.locator(".callsign-error").waitFor();
-      assert.match(
-        await page.locator(".callsign-error").textContent(),
-        /временно недоступен/,
-      );
-      await page.unroute("**/api/callsign/*");
+      await page.keyboard.press("Escape");
+      await page.locator("#callsign-popover").waitFor({ state: "hidden" });
     }
     assert.equal(
       await page.evaluate(

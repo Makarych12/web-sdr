@@ -925,6 +925,7 @@ function App() {
                 ↵
               </button>
             </form>
+            <CallsignSearch />
           </div>
           <VfoDial
             frequency={frequency}
@@ -1343,7 +1344,6 @@ function App() {
             </p>
           </div>
         </section>
-        <CallsignSearch />
         <footer>
           <span>UR4MTN WEB SDR / KiwiSDR</span>
           <span>
