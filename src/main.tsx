@@ -378,11 +378,6 @@ function App() {
     const currentView = viewRef.current;
     const previous = settings.current;
     const cuts = passband(m, width);
-    const audioChanged =
-      f !== previous.frequency ||
-      m !== previous.mode ||
-      cuts.lowCut !== previous.lowCut ||
-      cuts.highCut !== previous.highCut;
     const immediate =
       center !== undefined ||
       m !== previous.mode ||
@@ -423,7 +418,8 @@ function App() {
       agc,
       ...passband(m, width),
     };
-    if (audioChanged) player.current?.port.postMessage({ reset: true });
+    // Keep live PCM and its jitter buffer running through ordinary tuning.
+    // Only connection lifecycle resets may discard audio from an old session.
     if (immediate) manager.current?.flushTune();
     else manager.current?.tune();
   }
