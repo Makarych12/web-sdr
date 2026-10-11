@@ -337,12 +337,16 @@ export class CallsignLookup {
             !Number.isFinite(data.expiresIn) ||
             data.expiresIn <= 0
           )
-            throw unavailable();
+            throw Object.assign(unavailable(), {
+              upstreamStatus: 200,
+              diagnosticType: "invalid_session_response",
+            });
           this.token = data.token;
           this.tokenUntil =
             this.now() + Math.max(0, data.expiresIn - 30) * 1000;
           return this.token;
         } catch (error) {
+          this.hamDiagnostic("login", error);
           this.hamRetryAt = this.now() + 30000;
           throw error;
         }
@@ -351,6 +355,27 @@ export class CallsignLookup {
       });
     }
     return this.hamLogin;
+  }
+  hamDiagnostic(phase, error) {
+    const status = error.upstreamStatus || null;
+    const code = String(error.cause?.code || "");
+    this.onDiagnostic({
+      source: "HamQTH",
+      phase,
+      httpStatus: status,
+      type:
+        error.diagnosticType ||
+        (status === 401
+          ? "authorization_error"
+          : status === 429
+            ? "rate_limited"
+            : status
+              ? "http_error"
+              : error.cause?.message === "unexpected redirect"
+                ? "redirect_response"
+                : "transport_error"),
+      ...(/^[A-Z_]{2,40}$/.test(code) ? { code } : {}),
+    });
   }
   async hamqth(call, signal) {
     if (!this.env.HAMQTH_USERNAME || !this.env.HAMQTH_PASSWORD)
@@ -368,6 +393,7 @@ export class CallsignLookup {
           ),
         );
       } catch (error) {
+        this.hamDiagnostic("lookup", error);
         if (error.upstreamStatus === 401) {
           if (this.token === token) this.token = undefined;
           if (!attempt) continue;
@@ -464,7 +490,18 @@ export class CallsignLookup {
       : result;
   }
 }
-export function registerCallsignRoute(app, lookup = new CallsignLookup()) {
+export function registerCallsignRoute(
+  app,
+  lookup = new CallsignLookup({
+    onDiagnostic: ({ source, phase, httpStatus, type, code }) => {
+      if (source === "HamQTH")
+        console.warn(
+          "Callsign diagnostic",
+          JSON.stringify({ source, phase, httpStatus, type, code }),
+        );
+    },
+  }),
+) {
   app.get("/api/callsign/:callsign", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const client = process.env.VERCEL

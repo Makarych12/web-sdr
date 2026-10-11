@@ -363,3 +363,32 @@ test("international callsigns are passed in full; QRZ namespace is parsed", asyn
     );
   assert.deepEqual(seen, calls);
 });
+test("HamQTH diagnostics classify failures without exposing credentials or payloads", async () => {
+  for (const status of [401, 429, 500]) {
+    const diagnostics = [];
+    const service = new CallsignLookup({
+      env: hamEnv,
+      onDiagnostic: (d) => diagnostics.push(d),
+      fetcher: async () =>
+        new Response("private password and token payload", { status }),
+    });
+    await assert.rejects(service.lookup("H1TEST", "one"), { status: 503 });
+    const d = diagnostics.find((d) => d.source === "HamQTH");
+    assert.equal(d.phase, "login");
+    assert.equal(d.httpStatus, status);
+    assert.equal(
+      d.type,
+      status === 401
+        ? "authorization_error"
+        : status === 429
+          ? "rate_limited"
+          : "http_error",
+    );
+    for (const privateText of [
+      "private password",
+      hamEnv.HAMQTH_PASSWORD,
+      hamEnv.HAMQTH_USERNAME,
+    ])
+      assert.equal(JSON.stringify(diagnostics).includes(privateText), false);
+  }
+});
