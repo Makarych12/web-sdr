@@ -13,5 +13,32 @@
   "audioContexts": 1,
   "liveSamples": 91,
   "errors": [],
-  "note": "Long-run audio measurements precede final canvas/gesture/layout refinements; AudioWorklet unchanged."
+  "note": "Long-run audio measurements precede final canvas/gesture/layout refinements; AudioWorklet unchanged.",
+  "finalDeployment": {
+    "commit": "894520f0d9025466fed1ee8a27040227a2513a57",
+    "started": "2026-10-15T08:32:26.581Z",
+    "finished": "2026-10-15T08:34:09.784Z",
+    "reconnect": {
+      "status": "ONLINE · В эфире",
+      "contexts": 1,
+      "openSockets": 2,
+      "commands": [
+        "SET ident_user=UR4MTN-WebSDR",
+        "SET squelch=0 max=0",
+        "SET gen=0 mix=-1",
+        "SET mod=usb low_cut=300 high_cut=2700 freq=7074.250",
+        "SET agc=1 hang=0 thresh=-100 slope=6 decay=1000 manGain=50",
+        "SET auth t=kiwi p=",
+        "SET wf_comp=0",
+        "SET maxdb=-10 mindb=-110",
+        "SET wf_speed=3",
+        "SET interp=13",
+        "SET zoom=6 cf=7074.250",
+        "SET AR OK in=12000 out=44100"
+      ]
+    },
+    "errors": [],
+    "rafFps": 60.16510423953994,
+    "rafMaxIntervalMs": 16.800000000000182
+  }
 }

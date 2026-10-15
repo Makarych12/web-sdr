@@ -38,3 +38,11 @@ Production `https://web-sdr.vercel.app` доступен публично; `/api
 
 Артефакты запусков сохраняются в ignored `artifacts/`; воспроизведение: `npm run verify:controls`, `verify:gestures`, `verify:pwa`, `verify:session` (по умолчанию 900 секунд), `verify:performance`. Для production установить `TEST_APP_URL=https://web-sdr.vercel.app`, для session также `TEST_REPORT=artifacts/receiver-production-15min.json`.
 
+
+## Проверка окончательного деплоя
+
+Проверен production commit `894520f0d9025466fed1ee8a27040227a2513a57` (15 октября 2026, 11:32–11:34 Europe/Sofia). После 70 секунд приёма и принудительного закрытия SND восстановились **два прямых Kiwi WSS-сокета и один AudioContext**, без перехода на gateway. Повторно отправлены `freq=7074.250`, USB `300…2700`, zoom 6, AGC slow / gain 50. Ошибок JavaScript нет. 360×800, 390×844 и 844×390 снова без горизонтального переполнения.
+
+На финальном production повторно прошли control/gesture-тесты, включая проверку взаимного расположения поиска позывного, кнопок и S-meter. Замер обычного Chromium: **60.2 rAF FPS**, максимальный интервал **16.8 мс** на пятисекундной выборке. `/api/health` подтверждает commit, `/api/receivers/niendorf/check` возвращает реальный HTTP-статус. Последний `npm test`: **73/73**. Сборка production успешна.
+
+Оставшиеся неподтверждённые критерии: отсутствие любых underrun, стабильные 30–60 FPS при сильном CPU-ограничении, физический Chrome Android и системная установка PWA. Эти ограничения не объявлены пройденными.
