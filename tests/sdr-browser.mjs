@@ -726,6 +726,8 @@ try {
         Array.from(tuner.children)
           .map((e) => e.classList[0])
           .join(",") === "frequency,vfo-control,smeter,signal-settings" &&
+        document.querySelector(".visual").nextElementSibling.matches(".precision-controls") &&
+        document.querySelector(".control-panel .fine-tune") === null &&
         document.querySelector(".precision-controls .fine-tune") !== null
       );
     }),

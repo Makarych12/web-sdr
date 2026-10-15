@@ -1199,57 +1199,31 @@ function App() {
               </div>
             </div>
           </div>
-          <div
-            className="precision-controls"
-            role="group"
-            aria-label="Точная настройка"
-          >
-            <FineTune
-              frequencyHz={frequencyHz}
-              stepHz={Math.round(step * 1000)}
-              onTune={(hz) => tune(hz / 1000)}
-              onEnd={() => manager.current?.flushTune()}
-              viewCenterHz={Math.round((view.start + view.span / 2) * 1000)}
-              zoom={zoom}
-              maxZoom={maxZoom}
-              onRecenter={() => changeView(frequency, zoom)}
-              onZoom={changeZoom}
+          <div className="steps">
+            <StepControl step={step} onChange={setStep} />
+            <button
+              aria-label="Избранная частота"
+              aria-pressed={favoriteFrequencies.some(
+                (v) => v.id === `${frequency}-${mode}`,
+              )}
+              onClick={favoriteFrequency}
             >
-              <FrequencyNudges
-                onNudge={(deltaHz) => {
-                  tune(
-                    Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000,
-                  );
-                  manager.current?.flushTune();
-                }}
-              />
-            </FineTune>
-            <div className="steps">
-              <StepControl step={step} onChange={setStep} />
-              <button
-                aria-label="Избранная частота"
-                aria-pressed={favoriteFrequencies.some(
-                  (v) => v.id === `${frequency}-${mode}`,
-                )}
-                onClick={favoriteFrequency}
-              >
-                {favoriteFrequencies.some((v) => v.id === `${frequency}-${mode}`)
-                  ? "★ Сохранено"
-                  : "☆ Сохранить"}
-              </button>
-              <button
-                aria-label="Шаг частоты вниз"
-                onClick={() => tune(frequency - step)}
-              >
-                − {step * 1000} Hz
-              </button>
-              <button
-                aria-label="Шаг частоты вверх"
-                onClick={() => tune(frequency + step)}
-              >
-                + {step * 1000} Hz
-              </button>
-            </div>
+              {favoriteFrequencies.some((v) => v.id === `${frequency}-${mode}`)
+                ? "★ Сохранено"
+                : "☆ Сохранить"}
+            </button>
+            <button
+              aria-label="Шаг частоты вниз"
+              onClick={() => tune(frequency - step)}
+            >
+              − {step * 1000} Hz
+            </button>
+            <button
+              aria-label="Шаг частоты вверх"
+              onClick={() => tune(frequency + step)}
+            >
+              + {step * 1000} Hz
+            </button>
           </div>
           <div className="mode" role="group" aria-label="Режим и полоса">
             <label>РЕЖИМ И ПОЛОСА</label>
@@ -1504,6 +1478,30 @@ function App() {
             </span>
           </div>
         </section>
+        <div
+          className="precision-controls panel"
+          role="group"
+          aria-label="Точная настройка"
+        >
+          <FineTune
+            frequencyHz={frequencyHz}
+            stepHz={Math.round(step * 1000)}
+            onTune={(hz) => tune(hz / 1000)}
+            onEnd={() => manager.current?.flushTune()}
+            viewCenterHz={Math.round((view.start + view.span / 2) * 1000)}
+            zoom={zoom}
+            maxZoom={maxZoom}
+            onRecenter={() => changeView(frequency, zoom)}
+            onZoom={changeZoom}
+          >
+            <FrequencyNudges
+              onNudge={(deltaHz) => {
+                tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
+                manager.current?.flushTune();
+              }}
+            />
+          </FineTune>
+        </div>
         <BandSelector
           tune={(f, m) => tune(f, m, Math.min(6, maxZoom), widths[m], f)}
         />

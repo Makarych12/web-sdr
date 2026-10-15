@@ -282,6 +282,7 @@ try {
     );
     const layout = await page.evaluate(() => {
       const selectors = [
+        ".control-panel",
         ".frequency",
         ".tuner > .vfo-control",
         ".smeter",
@@ -290,6 +291,8 @@ try {
         ".fine-nudges",
         ".mode",
         ".visual",
+        ".scope",
+        ".fall",
       ];
       const boxes = Object.fromEntries(
         selectors.map((s) => {
@@ -340,10 +343,30 @@ try {
       coreBottom - coreTop + layout.headerHeight + 24 < layout.height,
       "frequency, full-size dial and whole meter fit simultaneously below the sticky header",
     );
+    assert.ok(boxes[".mode"].y + boxes[".mode"].height <= boxes[".visual"].y);
+    const displayGap =
+      boxes[".visual"].y -
+      boxes[".control-panel"].y -
+      boxes[".control-panel"].height;
     assert.ok(
-      boxes[".precision-controls"].y < boxes[".mode"].y &&
-        boxes[".mode"].y < boxes[".visual"].y,
+      displayGap >= 0 && displayGap <= 16,
+      "spectrum immediately follows upper controls",
     );
+    assert.ok(boxes[".scope"].y < boxes[".fall"].y);
+    const lowerGap =
+      boxes[".precision-controls"].y -
+      boxes[".visual"].y -
+      boxes[".visual"].height;
+    assert.ok(
+      lowerGap >= 0 && lowerGap <= 16,
+      "fine dial and six buttons stay directly below waterfall on desktop and mobile",
+    );
+    assert.equal(await page.locator(".control-panel .fine-tune").count(), 0);
+    assert.equal(
+      await page.locator(".control-panel .frequency-nudges").count(),
+      0,
+    );
+    assert.equal(await page.locator(".control-panel > .steps").count(), 1);
     assert.equal(await page.locator(".signal-settings #volume").count(), 1);
     assert.equal(await page.locator(".signal-settings #agc").count(), 1);
     assert.equal(
