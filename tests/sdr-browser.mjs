@@ -240,7 +240,7 @@ try {
   );
   await page.locator(".hero-cta").click();
   await healthy("initial real audio and waterfall");
-  // The under-waterfall controls must tune the same running audio/session.
+  // The grouped fine controls must tune the same running audio/session.
   await page.evaluate(() => {
     window.__originalAudio = window.__audio;
     window.__originalAnalyser = window.__analyser;
@@ -249,7 +249,7 @@ try {
     window.__originalWaterfall = document.querySelector(".fall canvas");
   });
   const fine = page.getByRole("region", {
-    name: "Точная подстройка под waterfall",
+    name: "Точная настройка VFO",
   });
   for (const [name, delta] of [
     ["Точная подстройка: частота минус шаг", -1],
@@ -722,11 +722,11 @@ try {
     await page.evaluate(() => {
       const tuner = document.querySelector(".tuner");
       return (
-        tuner.nextElementSibling.matches(".visual") &&
+        tuner.closest(".control-panel").nextElementSibling.matches(".visual") &&
         Array.from(tuner.children)
           .map((e) => e.classList[0])
-          .join(",") === "frequency,vfo-control,steps,mode,smeter" &&
-        document.querySelector(".fall").nextElementSibling.matches(".fine-tune")
+          .join(",") === "frequency,vfo-control,smeter,signal-settings" &&
+        document.querySelector(".precision-controls .fine-tune") !== null
       );
     }),
   );

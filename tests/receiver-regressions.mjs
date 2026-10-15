@@ -248,7 +248,10 @@ try {
       await page.locator(".tuner > .vfo-control .vfo-dial").count(),
       1,
     );
-    assert.equal(await page.locator(".fall + .fine-tune .vfo-dial").count(), 1);
+    assert.equal(
+      await page.locator(".precision-controls .fine-tune .vfo-dial").count(),
+      1,
+    );
     const sizes = await page
       .locator(".vfo-dial")
       .evaluateAll((es) =>
@@ -277,6 +280,90 @@ try {
     await page.waitForFunction(() =>
       document.querySelector(".header-right").textContent.includes("В эфире"),
     );
+    const layout = await page.evaluate(() => {
+      const selectors = [
+        ".frequency",
+        ".tuner > .vfo-control",
+        ".smeter",
+        ".signal-settings",
+        ".precision-controls",
+        ".fine-nudges",
+        ".mode",
+        ".visual",
+      ];
+      const boxes = Object.fromEntries(
+        selectors.map((s) => {
+          const r = document.querySelector(s).getBoundingClientRect();
+          return [
+            s,
+            { x: r.x, y: r.y + scrollY, width: r.width, height: r.height },
+          ];
+        }),
+      );
+      return {
+        boxes,
+        headerHeight: document
+          .querySelector(".site-header")
+          .getBoundingClientRect().height,
+        height: innerHeight,
+      };
+    });
+    const boxes = layout.boxes;
+    if (width > 900) {
+      assert.ok(boxes[".tuner > .vfo-control"].x < boxes[".frequency"].x);
+      assert.ok(boxes[".frequency"].x < boxes[".smeter"].x);
+    } else {
+      assert.ok(
+        boxes[".frequency"].y + boxes[".frequency"].height <=
+          boxes[".tuner > .vfo-control"].y,
+      );
+      const gap =
+        boxes[".smeter"].y -
+        boxes[".tuner > .vfo-control"].y -
+        boxes[".tuner > .vfo-control"].height;
+      assert.ok(
+        gap >= 0 && gap <= 12,
+        "S-meter immediately follows the large dial",
+      );
+    }
+    const coreTop = Math.min(
+      boxes[".frequency"].y,
+      boxes[".tuner > .vfo-control"].y,
+      boxes[".smeter"].y,
+    );
+    const coreBottom = Math.max(
+      boxes[".frequency"].y + boxes[".frequency"].height,
+      boxes[".tuner > .vfo-control"].y + boxes[".tuner > .vfo-control"].height,
+      boxes[".smeter"].y + boxes[".smeter"].height,
+    );
+    assert.ok(
+      coreBottom - coreTop + layout.headerHeight + 24 < layout.height,
+      "frequency, full-size dial and whole meter fit simultaneously below the sticky header",
+    );
+    assert.ok(
+      boxes[".precision-controls"].y < boxes[".mode"].y &&
+        boxes[".mode"].y < boxes[".visual"].y,
+    );
+    assert.equal(await page.locator(".signal-settings #volume").count(), 1);
+    assert.equal(await page.locator(".signal-settings #agc").count(), 1);
+    assert.equal(
+      await page
+        .getByRole("group", { name: "Режим и полоса", exact: true })
+        .locator(".modes button")
+        .count(),
+      5,
+    );
+    assert.equal(
+      await page
+        .locator(".precision-controls .frequency-nudges button")
+        .count(),
+      6,
+    );
+    await page.evaluate(({ top, header }) => scrollTo(0, top - header - 12), {
+      top: coreTop,
+      header: layout.headerHeight,
+    });
+    await page.screenshot({ path: `${dir}/main-vfo-${width}.png` });
     const checks = [];
     for (const step of [1, 10, 100, 1000]) {
       await selectStep(page, String(step / 1000));
@@ -415,6 +502,7 @@ try {
       checks,
       levels,
       stableMeterGeometry: true,
+      layout,
     });
     await context.close();
     console.log(

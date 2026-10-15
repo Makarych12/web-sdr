@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import { stepFrequency } from "./tuning";
 import { VfoDial } from "./VfoDial";
 
 export function FineTune({
+  children,
   frequencyHz,
   stepHz,
   onTune,
@@ -12,6 +14,7 @@ export function FineTune({
   onRecenter,
   onZoom,
 }: {
+  children?: ReactNode;
   frequencyHz: number;
   stepHz: number;
   onTune: (frequencyHz: number) => void;
@@ -27,7 +30,7 @@ export function FineTune({
     onEnd();
   }
   return (
-    <section className="fine-tune" aria-label="Точная подстройка под waterfall">
+    <section className="fine-tune" aria-label="Точная настройка VFO">
       <div className="fine-readout">
         <label>ТОЧНАЯ ПОДСТРОЙКА · VFO A</label>
         <output aria-label="Частота точной подстройки">
@@ -35,6 +38,7 @@ export function FineTune({
         </output>
         <small>Шаг {stepHz} Hz · ← / → · PageDown / PageUp</small>
       </div>
+      <div className="fine-nudges">{children}</div>
       <div className="fine-buttons">
         <div className="fine-primary">
           <button

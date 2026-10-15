@@ -5,6 +5,7 @@ import "./style.css";
 import "./brand.css";
 import "./console.css";
 import "./features.css";
+import "./control-panel.css";
 import { CallsignSearch } from "./CallsignSearch";
 import {
   parseFrequency,
@@ -1060,16 +1061,14 @@ function App() {
           </div>
         )}
         <section
-          className={"tuner panel" + (connected ? " receiving" : "")}
+          className={"control-panel panel" + (connected ? " receiving" : "")}
           onKeyDown={(e) => {
             if (
               e.defaultPrevented ||
               (e.target as HTMLElement).matches("input, select, textarea")
             )
               return;
-            if (
-              ["ArrowLeft", "ArrowRight", "PageUp", "PageDown"].includes(e.key)
-            ) {
+            if (["ArrowLeft", "ArrowRight", "PageUp", "PageDown"].includes(e.key)) {
               e.preventDefault();
               tune(
                 frequency +
@@ -1081,93 +1080,179 @@ function App() {
             }
           }}
         >
-          <div className="frequency">
-            <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
-            <FrequencyDigits
-              hz={frequencyHz}
-              stepHz={Math.round(step * 1000)}
-              onTune={(hz) => {
-                tune(hz / 1000);
-                manager.current?.flushTune();
-              }}
-            />
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const hz = parseFrequency(draft);
-                if (hz !== null) {
+          <div className="tuner">
+            <div className="frequency">
+              <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
+              <FrequencyDigits
+                hz={frequencyHz}
+                stepHz={Math.round(step * 1000)}
+                onTune={(hz) => {
                   tune(hz / 1000);
                   manager.current?.flushTune();
-                } else setError("Введите частоту от 0 до 30000 кГц");
-              }}
-            >
-              <input
-                id="frequency"
-                aria-label="Частота кГц"
-                onKeyDown={(e) => {
-                  if (
-                    ["ArrowLeft", "ArrowRight", "PageUp", "PageDown"].includes(
-                      e.key,
-                    )
-                  ) {
-                    e.preventDefault();
-                    tune(
-                      frequency +
-                        (["ArrowRight", "PageUp"].includes(e.key) ? 1 : -1) *
-                          step *
-                          (e.key.startsWith("Page") ? 10 : 1),
-                    );
-                    manager.current?.flushTune();
-                  }
                 }}
-                inputMode="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value.replace(",", "."))}
               />
-              <span>kHz</span>
-            </form>
-            <FrequencyNudges
-              onNudge={(deltaHz) => {
-                tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
-                manager.current?.flushTune();
-              }}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const hz = parseFrequency(draft);
+                  if (hz !== null) {
+                    tune(hz / 1000);
+                    manager.current?.flushTune();
+                  } else setError("Введите частоту от 0 до 30000 кГц");
+                }}
+              >
+                <input
+                  id="frequency"
+                  aria-label="Частота кГц"
+                  onKeyDown={(e) => {
+                    if (
+                      ["ArrowLeft", "ArrowRight", "PageUp", "PageDown"].includes(
+                        e.key,
+                      )
+                    ) {
+                      e.preventDefault();
+                      tune(
+                        frequency +
+                          (["ArrowRight", "PageUp"].includes(e.key) ? 1 : -1) *
+                            step *
+                            (e.key.startsWith("Page") ? 10 : 1),
+                      );
+                      manager.current?.flushTune();
+                    }
+                  }}
+                  inputMode="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value.replace(",", "."))}
+                />
+                <span>kHz</span>
+              </form>
+              <CallsignSearch />
+            </div>
+            <VfoDial
+              frequencyHz={frequencyHz}
+              stepHz={Math.round(step * 1000)}
+              onTune={(hz) => tune(hz / 1000)}
+              onEnd={() => manager.current?.flushTune()}
             />
-            <CallsignSearch />
-          </div>
-          <VfoDial
-            frequencyHz={frequencyHz}
-            stepHz={Math.round(step * 1000)}
-            onTune={(hz) => tune(hz / 1000)}
-            onEnd={() => manager.current?.flushTune()}
-          />
-          <div className="steps">
-            <StepControl step={step} onChange={setStep} />
-            <button
-              aria-label="Избранная частота"
-              aria-pressed={favoriteFrequencies.some(
-                (v) => v.id === `${frequency}-${mode}`,
+            <SMeter rssi={rssi} />
+            <div
+              className="signal-settings"
+              role="group"
+              aria-label="Настройки сигнала"
+            >
+              <div className="agc-control">
+                <label htmlFor="agc">AGC</label>
+                <select
+                  id="agc"
+                  value={agc}
+                  onChange={(e) => {
+                    const value = e.target.value as typeof agc;
+                    setAgc(value);
+                    settings.current = { ...settings.current, agc: value };
+                    manager.current?.flushTune();
+                  }}
+                >
+                  <option value="slow">Медленная</option>
+                  <option value="fast">Быстрая</option>
+                  <option value="off">Выкл.</option>
+                </select>
+              </div>
+              {agc === "off" && (
+                <label>
+                  Gain {manualGain}
+                  <input
+                    aria-label="Ручной Gain"
+                    type="range"
+                    min="0"
+                    max="120"
+                    value={manualGain}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setManualGain(value);
+                      settings.current = {
+                        ...settings.current,
+                        manualGain: value,
+                      };
+                      manager.current?.flushTune();
+                    }}
+                  />
+                </label>
               )}
-              onClick={favoriteFrequency}
-            >
-              {favoriteFrequencies.some((v) => v.id === `${frequency}-${mode}`)
-                ? "★ Сохранено"
-                : "☆ Сохранить"}
-            </button>
-            <button
-              aria-label="Шаг частоты вниз"
-              onClick={() => tune(frequency - step)}
-            >
-              − {step * 1000} Hz
-            </button>
-            <button
-              aria-label="Шаг частоты вверх"
-              onClick={() => tune(frequency + step)}
-            >
-              + {step * 1000} Hz
-            </button>
+              <div className="volume panel">
+                <button
+                  aria-label={muted ? "Включить звук" : "Выключить звук"}
+                  onClick={() => setMuted(!muted)}
+                >
+                  {muted ? "◌" : "◖))"}
+                </button>
+                <label htmlFor="volume">Громкость</label>
+                <input
+                  id="volume"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step=".01"
+                  value={volume}
+                  onChange={(e) => setVolume(Number(e.target.value))}
+                />
+                <span>{muted ? "MUTE" : Math.round(volume * 100) + "%"}</span>
+              </div>
+            </div>
           </div>
-          <div className="mode">
-            <label>ДЕМОДУЛЯЦИЯ</label>
+          <div
+            className="precision-controls"
+            role="group"
+            aria-label="Точная настройка"
+          >
+            <FineTune
+              frequencyHz={frequencyHz}
+              stepHz={Math.round(step * 1000)}
+              onTune={(hz) => tune(hz / 1000)}
+              onEnd={() => manager.current?.flushTune()}
+              viewCenterHz={Math.round((view.start + view.span / 2) * 1000)}
+              zoom={zoom}
+              maxZoom={maxZoom}
+              onRecenter={() => changeView(frequency, zoom)}
+              onZoom={changeZoom}
+            >
+              <FrequencyNudges
+                onNudge={(deltaHz) => {
+                  tune(
+                    Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000,
+                  );
+                  manager.current?.flushTune();
+                }}
+              />
+            </FineTune>
+            <div className="steps">
+              <StepControl step={step} onChange={setStep} />
+              <button
+                aria-label="Избранная частота"
+                aria-pressed={favoriteFrequencies.some(
+                  (v) => v.id === `${frequency}-${mode}`,
+                )}
+                onClick={favoriteFrequency}
+              >
+                {favoriteFrequencies.some((v) => v.id === `${frequency}-${mode}`)
+                  ? "★ Сохранено"
+                  : "☆ Сохранить"}
+              </button>
+              <button
+                aria-label="Шаг частоты вниз"
+                onClick={() => tune(frequency - step)}
+              >
+                − {step * 1000} Hz
+              </button>
+              <button
+                aria-label="Шаг частоты вверх"
+                onClick={() => tune(frequency + step)}
+              >
+                + {step * 1000} Hz
+              </button>
+            </div>
+          </div>
+          <div className="mode" role="group" aria-label="Режим и полоса">
+            <label>РЕЖИМ И ПОЛОСА</label>
             <div className="modes">
               {(["AM", "USB", "LSB", "CW", "FM"] as Mode[]).map((m) => (
                 <button
@@ -1214,14 +1299,7 @@ function App() {
                   onChange={(e) => {
                     const next = { ...cuts, lowCut: Number(e.target.value) };
                     if (validCuts(next))
-                      tune(
-                        frequency,
-                        mode,
-                        zoom,
-                        filterWidth,
-                        viewCenter,
-                        next,
-                      );
+                      tune(frequency, mode, zoom, filterWidth, viewCenter, next);
                   }}
                 />
               </label>
@@ -1236,14 +1314,7 @@ function App() {
                   onChange={(e) => {
                     const next = { ...cuts, highCut: Number(e.target.value) };
                     if (validCuts(next))
-                      tune(
-                        frequency,
-                        mode,
-                        zoom,
-                        filterWidth,
-                        viewCenter,
-                        next,
-                      );
+                      tune(frequency, mode, zoom, filterWidth, viewCenter, next);
                   }}
                 />
               </label>
@@ -1251,51 +1322,12 @@ function App() {
                 {cuts.lowCut}…{cuts.highCut} Hz
               </small>
             </div>
-            <div className="agc-control">
-              <label htmlFor="agc">AGC</label>
-              <select
-                id="agc"
-                value={agc}
-                onChange={(e) => {
-                  const value = e.target.value as typeof agc;
-                  setAgc(value);
-                  settings.current = { ...settings.current, agc: value };
-                  manager.current?.flushTune();
-                }}
-              >
-                <option value="slow">Медленная</option>
-                <option value="fast">Быстрая</option>
-                <option value="off">Выкл.</option>
-              </select>
-            </div>
-            {agc === "off" && (
-              <label>
-                Gain {manualGain}
-                <input
-                  aria-label="Ручной Gain"
-                  type="range"
-                  min="0"
-                  max="120"
-                  value={manualGain}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    setManualGain(value);
-                    settings.current = {
-                      ...settings.current,
-                      manualGain: value,
-                    };
-                    manager.current?.flushTune();
-                  }}
-                />
-              </label>
-            )}
             <small>
               {mode === "FM"
                 ? "Узкополосная FM в диапазоне HF"
                 : "Демодуляция выполняется на KiwiSDR"}
             </small>
           </div>
-          <SMeter rssi={rssi} />
         </section>
         <section
           className={"visual panel malachite" + (connected ? " receiving" : "")}
@@ -1465,17 +1497,6 @@ function App() {
               </div>
             )}
           </div>
-          <FineTune
-            frequencyHz={frequencyHz}
-            stepHz={Math.round(step * 1000)}
-            onTune={(hz) => tune(hz / 1000)}
-            onEnd={() => manager.current?.flushTune()}
-            viewCenterHz={Math.round((view.start + view.span / 2) * 1000)}
-            zoom={zoom}
-            maxZoom={maxZoom}
-            onRecenter={() => changeView(frequency, zoom)}
-            onZoom={changeZoom}
-          />
           <div className="visual-foot">
             <span>Касание — частота · два пальца — масштаб</span>
             <span>
@@ -1486,26 +1507,7 @@ function App() {
         <BandSelector
           tune={(f, m) => tune(f, m, Math.min(6, maxZoom), widths[m], f)}
         />
-        <section className="bottom">
-          <div className="volume panel">
-            <button
-              aria-label={muted ? "Включить звук" : "Выключить звук"}
-              onClick={() => setMuted(!muted)}
-            >
-              {muted ? "◌" : "◖))"}
-            </button>
-            <label htmlFor="volume">Громкость</label>
-            <input
-              id="volume"
-              type="range"
-              min="0"
-              max="1"
-              step=".01"
-              value={volume}
-              onChange={(e) => setVolume(Number(e.target.value))}
-            />
-            <span>{muted ? "MUTE" : Math.round(volume * 100) + "%"}</span>
-          </div>
+        <section className="bottom quick-only">
           <QuickTune
             frequency={frequency}
             mode={mode}
