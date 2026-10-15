@@ -32,6 +32,47 @@ app.get("/api/receivers", async (_, res) => {
   await catalogReady;
   res.json(catalog.list());
 });
+// Bounded, cached status checks. Latency is HTTP response time from this gateway,
+// not browser-to-Kiwi RTT or an audio latency estimate.
+const receiverChecks = new Map();
+let activeChecks = 0;
+app.get("/api/receivers/:id/check", async (req, res) => {
+  await catalogReady;
+  const receiver = catalog.find(req.params.id);
+  if (!receiver) return res.sendStatus(404);
+  const cached = receiverChecks.get(receiver.id);
+  if (cached && Date.now() - cached.at < 60000) return res.json(cached);
+  if (activeChecks >= 4)
+    return res.status(429).json({ error: "Проверка занята" });
+  activeChecks++;
+  const start = performance.now();
+  let result;
+  try {
+    const response = await fetch(new URL("/status", receiver.url), {
+      signal: AbortSignal.timeout(5000),
+      redirect: "error",
+    });
+    const body = await response.text();
+    const field = (key) =>
+      body.match(new RegExp(`^${key}=(.*)$`, "m"))?.[1]?.trim();
+    result = {
+      at: Date.now(),
+      reachable: response.ok && field("status") === "active",
+      responseMs: Math.round(performance.now() - start),
+      users: Number(field("users")) || 0,
+      maxUsers: Number(field("users_max")) || receiver.maxUsers,
+      status: field("status") || "unknown",
+    };
+  } catch {
+    result = { at: Date.now(), reachable: false, status: "timeout" };
+  } finally {
+    activeChecks--;
+  }
+  if (receiverChecks.size >= 1000)
+    receiverChecks.delete(receiverChecks.keys().next().value);
+  receiverChecks.set(receiver.id, result);
+  res.json(result);
+});
 app.get("/api/catalog", (_, res) =>
   res.json({
     updatedAt: catalog.updatedAt,

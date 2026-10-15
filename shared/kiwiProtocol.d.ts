@@ -2,6 +2,7 @@ export type Tune = {
   frequency: number;
   mode: string;
   zoom: number;
+  manualGain?: number;
   lowCut?: number;
   highCut?: number;
   viewCenter?: number;

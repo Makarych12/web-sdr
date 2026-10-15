@@ -123,6 +123,7 @@ export class SpectrumRenderer {
   private pending: { bins: Uint8Array; view: SpectrumView }[] = [];
   private sequence?: number;
   private rowCount = 0;
+  private rowViews: SpectrumView[] = [];
   private rowHeight = 2;
   private visible = document.visibilityState !== "hidden";
   setVisible(visible: boolean) {
@@ -131,7 +132,7 @@ export class SpectrumRenderer {
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     this.pending = [];
-    if (visible) this.clear(false);
+    if (visible) this.schedule();
   }
   frames = 0;
   constructor(
@@ -157,7 +158,8 @@ export class SpectrumRenderer {
     if (!validView(view)) return;
     if (!sameView(view, this.view)) {
       this.view = { ...view };
-      this.clear(false);
+      this.pending = [];
+      this.schedule();
     }
   }
   private resize() {
@@ -218,6 +220,7 @@ export class SpectrumRenderer {
     this.pending = [];
     this.last = undefined;
     this.rowCount = 0;
+    this.rowViews = [];
     this.levels.reset();
     if (resetSequence) this.sequence = undefined;
     for (const canvas of [this.history, this.waterfall]) {
@@ -246,6 +249,13 @@ export class SpectrumRenderer {
       const width = this.history.width,
         height = this.history.height;
       const shift = Math.min(height, queue.length * this.rowHeight);
+      this.rowViews.unshift(
+        ...queue
+          .slice()
+          .reverse()
+          .flatMap((row) => Array(this.rowHeight).fill(row.view)),
+      );
+      this.rowViews.length = Math.min(height, this.rowViews.length);
       ctx.imageSmoothingEnabled = false;
       if (shift < height)
         ctx.drawImage(
@@ -284,12 +294,27 @@ export class SpectrumRenderer {
         this.last = row;
       }
       this.rowCount = Math.min(height, this.rowCount + shift);
-      const wc = this.waterfall.getContext("2d")!;
-      wc.imageSmoothingEnabled = false;
-      wc.drawImage(this.history, 0, 0);
       this.waterfall.dataset.rows = String(this.rowCount);
       this.waterfall.dataset.sequence = String(this.sequence ?? "");
     }
+    const wc = this.waterfall.getContext("2d")!;
+    wc.fillStyle = "#03060b";
+    wc.fillRect(0, 0, this.waterfall.width, this.waterfall.height);
+    wc.imageSmoothingEnabled = false;
+    this.rowViews.forEach((view, y) => {
+      const p = projectView(view, this.view, this.waterfall.width);
+      wc.drawImage(
+        this.history,
+        0,
+        y,
+        this.history.width,
+        1,
+        p.x,
+        y,
+        p.width,
+        1,
+      );
+    });
     this.waterfall.dataset.frames = String(this.frames);
     const sc = this.spectrum.getContext("2d")!;
     sc.clearRect(0, 0, this.spectrum.width, this.spectrum.height);

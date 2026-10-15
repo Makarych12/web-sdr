@@ -2,7 +2,7 @@ export const modes = {
   AM: ["am", -5000, 5000],
   USB: ["usb", 300, 2700],
   LSB: ["lsb", -2700, -300],
-  CW: ["cw", 400, 800],
+  CW: ["cw", -250, 250],
   FM: ["nbfm", -6000, 6000],
 };
 export function validateTune(v) {
@@ -42,6 +42,15 @@ export function validateTune(v) {
     if (!["fast", "slow", "off"].includes(v.agc))
       throw Error("Некорректный режим AGC");
     value.agc = v.agc;
+  }
+  if (v.manualGain !== undefined) {
+    if (
+      !Number.isFinite(v.manualGain) ||
+      v.manualGain < 0 ||
+      v.manualGain > 120
+    )
+      throw Error("Некорректное усиление");
+    value.manualGain = v.manualGain;
   }
   return value;
 }
@@ -209,7 +218,14 @@ export class KiwiProtocol {
     const [mod, defaultLo, defaultHi] = modes[tune.mode];
     const lo = tune.lowCut ?? defaultLo,
       hi = tune.highCut ?? defaultHi;
-    const audioCommand = `SET mod=${mod} low_cut=${lo} high_cut=${hi} freq=${tune.frequency.toFixed(3)}`;
+    // Kiwi CW uses an audio-frequency passband and a shifted oscillator.
+    // Preserve the selected RF carrier and RF edges while producing a 600 Hz tone.
+    const hz = Math.round(tune.frequency * 1000);
+    const bfo =
+      tune.mode === "CW" ? Math.max(0, Math.min(600, 6000 - hi, hz)) : 0;
+    const oscillatorHz = hz - bfo;
+    const frequencyText = `${Math.floor(oscillatorHz / 1000)}.${String(oscillatorHz % 1000).padStart(3, "0")}`;
+    const audioCommand = `SET mod=${mod} low_cut=${lo + bfo} high_cut=${hi + bfo} freq=${frequencyText}`;
     if (
       this.audioReady &&
       this.sockets[0]?.readyState === 1 &&
@@ -219,7 +235,7 @@ export class KiwiProtocol {
       this.lastAudioCommand = audioCommand;
     }
     const agc = tune.agc ?? "slow";
-    const agcCommand = `SET agc=${agc === "off" ? 0 : 1} hang=0 thresh=-100 slope=6 decay=${agc === "fast" ? 100 : 1000} manGain=50`;
+    const agcCommand = `SET agc=${agc === "off" ? 0 : 1} hang=0 thresh=-100 slope=6 decay=${agc === "fast" ? 100 : 1000} manGain=${tune.manualGain ?? 50}`;
     if (
       this.audioReady &&
       this.sockets[0]?.readyState === 1 &&

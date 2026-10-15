@@ -309,3 +309,84 @@
     flex-basis: 100%;
   }
 }
+/* One VFO console; the panorama is the primary tuning surface. */
+.tuner.panel {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(160px, 0.6fr) minmax(
+      240px,
+      1.2fr
+    );
+}
+.digital-frequency span {
+  cursor: ns-resize;
+}
+.filter-presets {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+.passband {
+  border-left: 2px solid #79ffac;
+  border-right: 2px solid #79ffac;
+}
+.view-sliders,
+.gesture-toolbar [role="group"] {
+  display: none;
+}
+.visual .fall canvas {
+  height: clamp(260px, 46vh, 540px);
+  touch-action: none;
+}
+.visual .scope canvas,
+.frequency-scale {
+  touch-action: none;
+}
+@media (max-width: 700px) {
+  .tuner.panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .tuner .frequency,
+  .tuner .mode {
+    width: 100%;
+    min-width: 0;
+  }
+  .tuner .steps {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .digital-frequency {
+    font-size: clamp(26px, 8vw, 44px);
+  }
+  .axis span:nth-child(2),
+  .axis span:nth-child(4) {
+    visibility: hidden;
+  }
+  .visual .fall canvas {
+    height: 42vh;
+    min-height: 240px;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .visual .fall canvas {
+    height: 55vh;
+    min-height: 180px;
+  }
+}
+.filter-control {
+  flex-wrap: wrap;
+}
+.filter-control label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-control input {
+  width: 85px;
+  min-width: 0;
+  color: #d7e8ee;
+  background: #07131e;
+  border: 1px solid #315064;
+  border-radius: 5px;
+  padding: 6px;
+}

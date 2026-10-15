@@ -9,6 +9,7 @@ export type StreamConfig = {
   frequency: number;
   mode: string;
   zoom: number;
+  manualGain?: number;
   lowCut?: number;
   highCut?: number;
   viewCenter?: number;

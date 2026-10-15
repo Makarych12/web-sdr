@@ -200,3 +200,14 @@ test("closed Kiwi session ignores late PCM, waterfall, handshake and tune", () =
   assert.deepEqual(output, []);
   assert.deepEqual(sent, []);
 });
+
+test('one-Hz tuning and CW BFO preserve absolute RF passband edges', () => {
+ const sent=[]; const s=new KiwiSession('http://example.org',()=>{});
+ s.audioReady=true;s.sockets=[{readyState:1,send:v=>sent.push(v),close(){}}];
+ s.apply({frequency:7074.251,mode:'USB',zoom:7,lowCut:300,highCut:2700});
+ assert.ok(sent.includes('SET mod=usb low_cut=300 high_cut=2700 freq=7074.251'));
+ s.apply({frequency:7074.251,mode:'CW',zoom:7,lowCut:-250,highCut:250});
+ assert.ok(sent.includes('SET mod=cw low_cut=350 high_cut=850 freq=7073.651'));
+ assert.equal(7073651+350,7074251-250);assert.equal(7073651+850,7074251+250);
+ s.close();
+});

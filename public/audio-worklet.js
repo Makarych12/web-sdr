@@ -10,7 +10,10 @@ class PCMPlayer extends AudioWorkletProcessor {
     this.underflowFrames = 0;
     this.everStarted = false;
     this.telemetryFrames = 0;
-    this.targetSeconds = 0.2;
+    this.targetSeconds = 0.12;
+    this.lastSample = 0;
+    this.fade = 0;
+    this.stableFrames = 0;
     this.port.onmessage = ({ data }) => {
       if (data.reset) {
         this.queue = [];
@@ -18,23 +21,32 @@ class PCMPlayer extends AudioWorkletProcessor {
         this.buffered = 0;
         this.started = false;
         this.everStarted = false;
-        this.targetSeconds = 0.2;
+        this.targetSeconds = 0.12;
+        this.lastSample = 0;
+        this.fade = 0;
+        this.stableFrames = 0;
         return;
       }
       if (data.rate) this.rate = data.rate;
       if (data.samples) {
         this.queue.push(data.samples);
         this.buffered += data.samples.length;
-        if (this.buffered > this.rate * 0.75) {
+        if (this.buffered > this.rate * 0.45) {
+          this.fade = 128;
           // Catch up to live audio without discarding the entire queue.
-          while (this.buffered > this.rate * 0.3 && this.queue.length > 1) {
+          while (
+            this.buffered > this.rate * Math.max(0.18, this.targetSeconds) &&
+            this.queue.length > 1
+          ) {
             this.buffered -= this.queue.shift().length - this.pos;
             this.pos = 0;
           }
         }
         // Bound even a single oversized delivery to the latest live samples.
-        if (this.buffered > this.rate * 0.75) {
-          const tail = this.queue[0].subarray(-Math.floor(this.rate * 0.3));
+        if (this.buffered > this.rate * 0.45) {
+          const tail = this.queue[0].subarray(
+            -Math.floor(this.rate * Math.max(0.18, this.targetSeconds)),
+          );
           this.queue = [tail];
           this.pos = 0;
           this.buffered = tail.length;
@@ -52,6 +64,8 @@ class PCMPlayer extends AudioWorkletProcessor {
         playedFrames: this.playedFrames,
         underflowFrames: this.underflowFrames,
         buffered: this.buffered,
+        queueMs: (this.buffered / this.rate) * 1000,
+        targetMs: this.targetSeconds * 1000,
       });
     }
     if (!this.started && this.buffered > this.rate * this.targetSeconds) {
@@ -66,14 +80,32 @@ class PCMPlayer extends AudioWorkletProcessor {
     for (let i = 0; i < out.length; i++) {
       const q = this.queue[0];
       if (!q) {
+        // Fade the final sample into silence instead of a hard discontinuity.
+        const fadeFrames = Math.min(64, out.length - i);
+        for (let j = 0; j < fadeFrames; j++)
+          out[i + j] = this.lastSample * (1 - (j + 1) / fadeFrames);
+        this.lastSample = 0;
         this.started = false;
         this.underflowFrames += out.length - i;
-        this.targetSeconds = Math.min(0.35, this.targetSeconds + 0.05);
+        this.targetSeconds = Math.min(0.3, this.targetSeconds + 0.04);
+        this.stableFrames = 0;
+        this.fade = 128;
         break;
       }
       const p = Math.floor(this.pos),
         next = p + 1 < q.length ? q[p + 1] : (this.queue[1]?.[0] ?? q[p]);
       out[i] = q[p] + (next - q[p]) * (this.pos - p);
+      if (this.fade > 0) {
+        out[i] =
+          this.lastSample + (out[i] - this.lastSample) * (1 - this.fade / 128);
+        this.fade--;
+      }
+      this.lastSample = out[i];
+      this.stableFrames++;
+      if (this.stableFrames > sampleRate * 60) {
+        this.targetSeconds = Math.max(0.12, this.targetSeconds - 0.01);
+        this.stableFrames = 0;
+      }
       this.playedFrames++;
       this.pos += step;
       this.buffered -= step;

@@ -5,18 +5,20 @@ import {
   type PointerEvent,
   type KeyboardEvent,
 } from "react";
+import type { Cuts } from "./tuning";
 type View = { start: number; span: number };
 type Options = {
   canvas: RefObject<HTMLElement | null>;
   view: View;
   zoom: number;
   maxZoom: number;
-  mode: "tune" | "pan";
   step: number;
   frequency: number;
   onTune: (frequency: number, center: number) => void;
   onView: (center: number, zoom: number) => void;
   onEnd: () => void;
+  cuts: Cuts;
+  onFilter: (cuts: Cuts) => void;
 };
 type Gesture = {
   startX: number;
@@ -24,7 +26,8 @@ type Gesture = {
   zoom: number;
   width: number;
   left: number;
-  mode: "tune" | "pan";
+  mode: "tune" | "pan" | "low" | "high" | "band";
+  cuts?: Cuts;
   moved: boolean;
   pinched: boolean;
   pinch?: { distance: number; anchor: number; zoom: number; span: number };
@@ -48,11 +51,25 @@ export function useSpectrumGesture(options: Options) {
       const r = e.currentTarget.getBoundingClientRect();
       gesture.current = {
         startX: e.clientX,
+        cuts: { ...latest.current.cuts },
         view: { ...latest.current.view },
         zoom: latest.current.zoom,
         width: r.width,
         left: r.left,
-        mode: latest.current.mode,
+        mode: (() => {
+          const o = latest.current;
+          const px = (f: number) =>
+            r.left + ((f - o.view.start) / o.view.span) * r.width;
+          const low = px(o.frequency + o.cuts.lowCut / 1000),
+            high = px(o.frequency + o.cuts.highCut / 1000);
+          if (Math.abs(high - low) > 24) {
+            if (Math.abs(e.clientX - low) < 12) return "low";
+            if (Math.abs(e.clientX - high) < 12) return "high";
+          }
+          if (Math.abs(e.clientX - px(o.frequency)) < 14) return "tune";
+          if (e.clientX > low && e.clientX < high) return "band";
+          return "pan";
+        })(),
         moved: false,
         pinched: false,
       };
@@ -71,6 +88,7 @@ export function useSpectrumGesture(options: Options) {
     }
   }
   const pending = useRef<{
+    cuts?: Cuts;
     frequency?: number;
     center: number;
     zoom?: number;
@@ -82,10 +100,17 @@ export function useSpectrumGesture(options: Options) {
     const p = pending.current;
     pending.current = null;
     if (!p) return;
-    if (p.frequency !== undefined) latest.current.onTune(p.frequency, p.center);
+    if (p.cuts) latest.current.onFilter(p.cuts);
+    else if (p.frequency !== undefined)
+      latest.current.onTune(p.frequency, p.center);
     else latest.current.onView(p.center, p.zoom!);
   }
-  function queue(value: { frequency?: number; center: number; zoom?: number }) {
+  function queue(value: {
+    cuts?: Cuts;
+    frequency?: number;
+    center: number;
+    zoom?: number;
+  }) {
     pending.current = value;
     if (!frame.current) frame.current = requestAnimationFrame(flush);
   }
@@ -119,7 +144,36 @@ export function useSpectrumGesture(options: Options) {
     }
     if (Math.abs(e.clientX - g.startX) > 5) g.moved = true;
     if (!g.moved) return;
-    if (g.mode === "pan")
+    if (g.mode === "band") {
+      const cuts = g.cuts!;
+      const delta = Math.max(
+        -6000 - cuts.lowCut,
+        Math.min(
+          6000 - cuts.highCut,
+          Math.round(((e.clientX - g.startX) / g.width) * g.view.span * 1000),
+        ),
+      );
+      queue({
+        center: 0,
+        cuts: { lowCut: cuts.lowCut + delta, highCut: cuts.highCut + delta },
+      });
+    } else if (g.mode === "low" || g.mode === "high") {
+      const o = latest.current,
+        cut = Math.round((position(g, e.clientX) - o.frequency) * 1000);
+      queue({
+        center: 0,
+        cuts:
+          g.mode === "low"
+            ? {
+                ...o.cuts,
+                lowCut: Math.max(-6000, Math.min(o.cuts.highCut - 50, cut)),
+              }
+            : {
+                ...o.cuts,
+                highCut: Math.min(6000, Math.max(o.cuts.lowCut + 50, cut)),
+              },
+      });
+    } else if (g.mode === "pan")
       queue({
         center:
           g.view.start +
@@ -140,7 +194,13 @@ export function useSpectrumGesture(options: Options) {
     if (!points.current.size) {
       flush();
       if (!cancelled && !g.pinched) {
-        if (!g.moved || g.mode === "tune")
+        if (
+          (!g.moved &&
+            g.mode !== "low" &&
+            g.mode !== "high" &&
+            g.mode !== "band") ||
+          g.mode === "tune"
+        )
           latest.current.onTune(
             position(g, e.clientX),
             g.view.start + g.view.span / 2,
@@ -157,18 +217,17 @@ export function useSpectrumGesture(options: Options) {
     if (!canvas) return;
     const wheel = (e: WheelEvent) => {
       // Scrolling the page over the display must not silently magnify it.
-      if (document.activeElement !== canvas && !e.ctrlKey) return;
+
       e.preventDefault();
       const o = latest.current;
       if (!e.shiftKey && performance.now() - lastWheel.current < 80) return;
       lastWheel.current = performance.now();
       if (e.shiftKey) {
-        o.onView(
-          o.view.start +
-            o.view.span / 2 +
-            Math.sign(e.deltaY || e.deltaX) * o.view.span * 0.15,
-          o.zoom,
+        o.onTune(
+          o.frequency + Math.sign(-e.deltaY) * o.step,
+          o.view.start + o.view.span / 2,
         );
+        o.onEnd();
         return;
       }
       const zoom = Math.max(
@@ -186,11 +245,13 @@ export function useSpectrumGesture(options: Options) {
   }, [options.canvas]);
   function key(e: KeyboardEvent<HTMLElement>) {
     const o = latest.current;
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    if (["ArrowLeft", "ArrowRight", "PageUp", "PageDown"].includes(e.key)) {
       e.preventDefault();
       o.onTune(
         o.frequency +
-          (e.key === "ArrowRight" ? 1 : -1) * o.step * (e.shiftKey ? 10 : 1),
+          (["ArrowRight", "PageUp"].includes(e.key) ? 1 : -1) *
+            o.step *
+            (e.shiftKey || e.key.startsWith("Page") ? 10 : 1),
         o.view.start + o.view.span / 2,
       );
     }
@@ -203,6 +264,13 @@ export function useSpectrumGesture(options: Options) {
     }
   }
   return {
+    onDoubleClick: (e: React.MouseEvent<HTMLElement>) => {
+      const r = e.currentTarget.getBoundingClientRect(),
+        o = latest.current;
+      const f = o.view.start + ((e.clientX - r.left) / r.width) * o.view.span;
+      o.onTune(f, f);
+      o.onEnd();
+    },
     onPointerDown: down,
     onPointerMove: move,
     onPointerUp: (e: PointerEvent<HTMLElement>) => end(e),

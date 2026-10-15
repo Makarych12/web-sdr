@@ -6,14 +6,27 @@ import "./brand.css";
 import "./console.css";
 import "./features.css";
 import { CallsignSearch } from "./CallsignSearch";
+import {
+  parseFrequency,
+  MODE_STEP,
+  filterPreset,
+  validCuts,
+  type Cuts,
+  type Preset,
+} from "./tuning";
+import { FrequencyDigits } from "./FrequencyDigits";
 import { StepControl } from "./StepControl";
 import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
-import { VfoDial } from "./VfoDial";
-import { FineTune } from "./FineTune";
+
 import { QuickTune } from "./QuickTune";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
-import { useStoredState, stringList, finiteNumber } from "./storage";
+import {
+  useStoredState,
+  readStored,
+  stringList,
+  finiteNumber,
+} from "./storage";
 import {
   StreamConnection,
   type ConnectionState,
@@ -28,6 +41,7 @@ import {
   frequencyLabel,
   filterPosition,
 } from "./spectrumView";
+import { directEndpoint } from "./transport";
 import { DirectKiwiSocket } from "./directKiwi";
 import { SMeter } from "./SMeter";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
@@ -36,6 +50,7 @@ type SavedFrequency = {
   frequency: number;
   mode: Mode;
   width?: number;
+  cuts?: Cuts;
 };
 const savedFrequencies = (v: unknown): v is SavedFrequency[] =>
   Array.isArray(v) &&
@@ -48,6 +63,7 @@ const savedFrequencies = (v: unknown): v is SavedFrequency[] =>
       x.frequency >= 0 &&
       x.frequency <= 30000 &&
       ["AM", "USB", "LSB", "CW", "FM"].includes(x.mode) &&
+      (x.cuts === undefined || validCuts(x.cuts)) &&
       (x.width === undefined ||
         FILTER_WIDTHS[x.mode as Mode].includes(x.width)),
   );
@@ -65,6 +81,12 @@ function App() {
     (v): v is "fast" | "slow" | "off" =>
       ["fast", "slow", "off"].includes(String(v)),
   );
+  const debug = new URLSearchParams(location.search).has("debug");
+  const [audioDebug, setAudioDebug] = useState<{
+    queueMs: number;
+    targetMs: number;
+    underflowFrames: number;
+  } | null>(null);
   const [activeSection, setActiveSection] = useState("home");
   useEffect(() => {
     const update = () => {
@@ -122,18 +144,34 @@ function App() {
     (v): v is string => typeof v === "string",
   );
   const [receivers, setReceivers] = useState<Receiver[]>([]),
-    [frequency, setFrequency] = useState(10000),
+    [frequencyHz, setFrequencyHz] = useStoredState(
+      "wave.frequencyHz",
+      10000000,
+      (v): v is number =>
+        Number.isInteger(v) && Number(v) >= 0 && Number(v) <= 30000000,
+    ),
     [draft, setDraft] = useState("10000"),
-    [mode, setMode] = useState<Mode>("AM"),
-    [zoom, setZoom] = useState(6),
-    [viewCenter, setViewCenter] = useState(10000),
+    [mode, setMode] = useStoredState<Mode>("wave.mode", "AM", (v): v is Mode =>
+      ["AM", "USB", "LSB", "CW", "FM"].includes(String(v)),
+    ),
+    [zoom, setZoom] = useStoredState(
+      "wave.zoom",
+      6,
+      (v): v is number =>
+        Number.isInteger(v) && Number(v) >= 0 && Number(v) <= 14,
+    ),
+    [viewCenter, setViewCenter] = useStoredState(
+      "wave.center",
+      10000,
+      (v): v is number => finiteNumber(v) && v >= 0 && v <= 30000,
+    ),
     [maxZoom, setMaxZoom] = useState(14),
-    [gestureMode, setGestureMode] = useState<"tune" | "pan">("tune"),
     [step, setStep] = useStoredState(
       "wave.step",
-      1,
+      0.1,
       (v): v is number =>
-        finiteNumber(v) && [0.001, 0.01, 0.1, 1, 5, 10].includes(v),
+        finiteNumber(v) &&
+        [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10].includes(v),
     ),
     [status, setStatus] = useState("Готов к эфиру"),
     [connected, setConnected] = useState(false),
@@ -146,8 +184,33 @@ function App() {
     [error, setError] = useState(""),
     [rssi, setRssi] = useState<number | null>(null),
     [counts, setCounts] = useState({ audio: 0, wf: 0 }),
-    [view, setView] = useState<View>({ start: 9765.625, span: 468.75 }),
+    [view, setView] = useState<View>(() =>
+      viewFor(
+        readStored("wave.center", 10000, finiteNumber),
+        readStored(
+          "wave.zoom",
+          6,
+          (v): v is number =>
+            Number.isInteger(v) && Number(v) >= 0 && Number(v) <= 14,
+        ),
+        30000,
+      ),
+    ),
     [offline, setOffline] = useState(!navigator.onLine);
+  const frequency = frequencyHz / 1000; // kHz adapters for the existing view/protocol only.
+  const [cuts, setCuts] = useStoredState<Cuts>(
+    "wave.cuts",
+    filterPreset(mode, "Normal"),
+    validCuts,
+  );
+  const [manualGain, setManualGain] = useStoredState(
+    "wave.gain",
+    50,
+    (v): v is number => finiteNumber(v) && v >= 0 && v <= 120,
+  );
+  useEffect(() => {
+    setDraft(String(frequencyHz / 1000));
+  }, [frequencyHz]);
   const [volume, setVolume] = useStoredState(
     "wave.volume",
     0.7,
@@ -184,7 +247,7 @@ function App() {
     setFavoriteFrequencies((list) =>
       list.some((v) => v.id === id)
         ? list.filter((v) => v.id !== id)
-        : [...list, { id, frequency, mode, width: filterWidth }],
+        : [...list, { id, frequency, mode, width: filterWidth, cuts }],
     );
   }
   const manager = useRef<StreamConnection | null>(null);
@@ -193,6 +256,8 @@ function App() {
   const availableReceivers = useRef(receivers);
   availableReceivers.current = receivers;
   const failedReceivers = useRef(new Set<string>());
+  const [gatewayFallback, setGatewayFallback] = useState<string[]>([]);
+  const gatewayFallbackRef = useRef(new Set<string>());
   const [receiverChange, setReceiverChange] = useState("");
   const [viewPending, setViewPending] = useState(false);
   const renderer = useRef<SpectrumRenderer | null>(null);
@@ -217,7 +282,8 @@ function App() {
       zoom,
       viewCenter,
       agc,
-      ...passband(mode, filterWidth),
+      ...cuts,
+      manualGain,
     }),
     stats = useRef({ audio: 0, wf: 0 }),
     initializing = useRef(false),
@@ -231,7 +297,8 @@ function App() {
     zoom,
     viewCenter,
     agc,
-    ...passband(mode, filterWidth),
+    ...cuts,
+    manualGain,
   };
   useEffect(() => {
     renderer.current = new SpectrumRenderer(
@@ -374,18 +441,24 @@ function App() {
     z = zoom,
     width = widths[m],
     center?: number,
+    customCuts?: Cuts,
   ) {
     f = Math.round(Math.max(0, Math.min(30000, f)) * 1000) / 1000;
     // Fine tuning moves the VFO inside the existing overview. Recenter only
     // when it leaves the usable area, or when an explicit view was requested.
     const currentView = viewRef.current;
     const previous = settings.current;
-    const cuts = passband(m, width);
+    const nextCuts =
+      customCuts ??
+      (m !== previous.mode
+        ? filterPreset(m, "Normal")
+        : width !== filterWidth
+          ? passband(m, width)
+          : cuts);
     const immediate =
-      center !== undefined ||
       m !== previous.mode ||
-      cuts.lowCut !== previous.lowCut ||
-      cuts.highCut !== previous.highCut;
+      nextCuts.lowCut !== previous.lowCut ||
+      nextCuts.highCut !== previous.highCut;
     center ??=
       f >= currentView.start + currentView.span * 0.1 &&
       f <= currentView.start + currentView.span * 0.9
@@ -393,9 +466,6 @@ function App() {
         : f;
     const nextView = viewFor(center, z, viewRef.current.bandwidth ?? 30000);
     const viewChanged = !matchesRequest(currentView, nextView);
-    if (viewChanged || m !== settings.current.mode) {
-      renderer.current?.clear(false);
-    }
     if (viewChanged) awaitingTune.current = wanted;
     center = nextView.start + nextView.span / 2;
     // Native wheel/pointer handlers can run just before paint. Commit the
@@ -407,7 +477,9 @@ function App() {
         displayView(nextView);
       }
       setViewCenter(center);
-      setFrequency(f);
+      setFrequencyHz(Math.round(f * 1000));
+      setCuts(nextCuts);
+      if (m !== previous.mode) setStep(MODE_STEP[m] / 1000);
       setDraft(String(Number(f.toFixed(3))));
       setMode(m);
       setZoom(z);
@@ -419,7 +491,8 @@ function App() {
       zoom: z,
       viewCenter: center,
       agc,
-      ...passband(m, width),
+      ...nextCuts,
+      manualGain,
     };
     // Keep live PCM and its jitter buffer running through ordinary tuning.
     // Only connection lifecycle resets may discard audio from an old session.
@@ -567,11 +640,28 @@ function App() {
         const receiver = availableReceivers.current.find(
           (r) => r.id === receiverRef.current,
         );
-        return receiver?.directUrl
-          ? (new DirectKiwiSocket(receiver.directUrl) as unknown as WebSocket)
+        const direct = directEndpoint(
+          receiver?.directUrl,
+          gatewayFallbackRef.current.has(receiverRef.current),
+        );
+        return direct
+          ? (new DirectKiwiSocket(direct) as unknown as WebSocket)
           : new WebSocket(url);
       },
       onDiagnostic: (event) => {
+        if (event.type === "upstream_error" && event.code === "connection") {
+          const id = receiverRef.current;
+          if (
+            availableReceivers.current.find((r) => r.id === id)?.directUrl &&
+            !gatewayFallbackRef.current.has(id)
+          ) {
+            gatewayFallbackRef.current.add(id);
+            setGatewayFallback([...gatewayFallbackRef.current]);
+            setReceiverChange(
+              "Прямой WSS недоступен. Повторяем этот сервер через шлюз.",
+            );
+          }
+        }
         console.info("WebSDR lifecycle", {
           ...event,
           at: new Date().toISOString(),
@@ -655,7 +745,7 @@ function App() {
         if (context.current && context.current.state !== "closed")
           await context.current.close();
         if (generation !== startGeneration.current) return;
-        context.current = new AudioContext();
+        context.current = new AudioContext({ latencyHint: "interactive" });
         void context.current.resume();
         await context.current.audioWorklet.addModule("/audio-worklet.js");
         if (generation !== startGeneration.current) {
@@ -664,6 +754,9 @@ function App() {
           return;
         }
         player.current = new AudioWorkletNode(context.current, "pcm-player");
+        player.current.port.onmessage = ({ data }) => {
+          if (debug && data.type === "playback") setAudioDebug(data);
+        };
         gain.current = context.current.createGain();
         gain.current.gain.value = muted ? 0 : volume;
         player.current
@@ -703,7 +796,7 @@ function App() {
     setZoom(z);
     settings.current = { ...settings.current, zoom: z, viewCenter: center };
     if (!sameView(next, viewRef.current)) {
-      renderer.current?.clear(false);
+      // Keep history in its original frequency coordinates.
       awaitingTune.current = wanted;
     }
     requestedView.current = next;
@@ -726,9 +819,11 @@ function App() {
     view,
     zoom: view.zoom ?? zoom,
     maxZoom,
-    mode: gestureMode,
     step,
     frequency,
+    cuts,
+    onFilter: (next: Cuts) =>
+      tune(frequency, mode, zoom, filterWidth, viewCenter, next),
     onTune: (f: number, center: number) =>
       tune(f, mode, zoom, filterWidth, center),
     onView: changeView,
@@ -741,7 +836,6 @@ function App() {
   const scaleGesture = useSpectrumGesture({
     canvas: scale,
     ...gestureOptions,
-    mode: "tune",
   });
   const waterfallGesture = useSpectrumGesture({
     canvas: waterfall,
@@ -751,12 +845,7 @@ function App() {
     0,
     Math.min(100, ((frequency - view.start) / view.span) * 100),
   );
-  const filterBand = filterPosition(
-    view,
-    frequency,
-    passband(mode, filterWidth).lowCut,
-    passband(mode, filterWidth).highCut,
-  );
+  const filterBand = filterPosition(view, frequency, cuts.lowCut, cuts.highCut);
   return (
     <div className={"app" + (wanted ? " playing" : "")}>
       <header className="site-header">
@@ -863,7 +952,8 @@ function App() {
           </strong>
           <span>
             {connected ? "Играет" : wanted ? "Подключение" : "Выбран"} ·{" "}
-            {receivers.find((r) => r.id === receiver)?.directUrl
+            {receivers.find((r) => r.id === receiver)?.directUrl &&
+            !gatewayFallback.includes(receiver)
               ? "Прямой WSS Kiwi"
               : "Через шлюз · восстановление каждые 5 минут"}
           </span>
@@ -897,42 +987,51 @@ function App() {
         <section className={"tuner panel" + (connected ? " receiving" : "")}>
           <div className="frequency">
             <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
-            <output
-              className="digital-frequency"
-              aria-label="Текущая частота Hz"
-            >
-              {Math.round(frequency * 1000).toLocaleString("de-DE")}
-              <small>Hz</small>
-            </output>
+            <FrequencyDigits
+              hz={frequencyHz}
+              stepHz={Math.round(step * 1000)}
+              onTune={(hz) => {
+                tune(hz / 1000);
+                manager.current?.flushTune();
+              }}
+            />
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                const f = Number(draft);
-                if (draft.trim() && Number.isFinite(f) && f >= 0 && f <= 30000)
-                  tune(f);
-                else setError("Введите частоту от 0 до 30000 кГц");
+                const hz = parseFrequency(draft);
+                if (hz !== null) {
+                  tune(hz / 1000);
+                  manager.current?.flushTune();
+                } else setError("Введите частоту от 0 до 30000 кГц");
               }}
             >
               <input
                 id="frequency"
                 aria-label="Частота кГц"
-                inputMode="decimal"
+                onKeyDown={(e) => {
+                  if (
+                    ["ArrowLeft", "ArrowRight", "PageUp", "PageDown"].includes(
+                      e.key,
+                    )
+                  ) {
+                    e.preventDefault();
+                    tune(
+                      frequency +
+                        (["ArrowRight", "PageUp"].includes(e.key) ? 1 : -1) *
+                          step *
+                          (e.key.startsWith("Page") ? 10 : 1),
+                    );
+                    manager.current?.flushTune();
+                  }
+                }}
+                inputMode="text"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value.replace(",", "."))}
               />
               <span>kHz</span>
-              <button title="Настроить" aria-label="Настроить">
-                ↵
-              </button>
             </form>
             <CallsignSearch />
           </div>
-          <VfoDial
-            frequency={frequency}
-            step={step}
-            onTune={(f) => tune(f)}
-            onEnd={() => manager.current?.flushTune()}
-          />
           <div className="steps">
             <StepControl step={step} onChange={setStep} />
             <button
@@ -972,24 +1071,72 @@ function App() {
                 </button>
               ))}
             </div>
+            <div className="filter-presets">
+              {(["Narrow", "Normal", "Wide"] as Preset[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() =>
+                    tune(
+                      frequency,
+                      mode,
+                      zoom,
+                      filterWidth,
+                      viewCenter,
+                      filterPreset(mode, p),
+                    )
+                  }
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
             <div className="filter-control">
-              <label htmlFor="filter-width">Полоса фильтра</label>
-              <select
-                id="filter-width"
-                value={filterWidth}
-                onChange={(e) =>
-                  tune(frequency, mode, zoom, Number(e.target.value))
-                }
-              >
-                {FILTER_WIDTHS[mode].map((w) => (
-                  <option value={w} key={w}>
-                    {w >= 1000 ? `${w / 1000} kHz` : `${w} Hz`}
-                  </option>
-                ))}
-              </select>
+              <label>
+                Левая граница{" "}
+                <input
+                  aria-label="Левая граница фильтра"
+                  type="number"
+                  min="-6000"
+                  max={cuts.highCut - 50}
+                  value={cuts.lowCut}
+                  onChange={(e) => {
+                    const next = { ...cuts, lowCut: Number(e.target.value) };
+                    if (validCuts(next))
+                      tune(
+                        frequency,
+                        mode,
+                        zoom,
+                        filterWidth,
+                        viewCenter,
+                        next,
+                      );
+                  }}
+                />
+              </label>
+              <label>
+                Правая граница{" "}
+                <input
+                  aria-label="Правая граница фильтра"
+                  type="number"
+                  min={cuts.lowCut + 50}
+                  max="6000"
+                  value={cuts.highCut}
+                  onChange={(e) => {
+                    const next = { ...cuts, highCut: Number(e.target.value) };
+                    if (validCuts(next))
+                      tune(
+                        frequency,
+                        mode,
+                        zoom,
+                        filterWidth,
+                        viewCenter,
+                        next,
+                      );
+                  }}
+                />
+              </label>
               <small>
-                {passband(mode, filterWidth).lowCut}…
-                {passband(mode, filterWidth).highCut} Hz
+                {cuts.lowCut}…{cuts.highCut} Hz
               </small>
             </div>
             <div className="agc-control">
@@ -1006,9 +1153,30 @@ function App() {
               >
                 <option value="slow">Медленная</option>
                 <option value="fast">Быстрая</option>
-                <option value="off">Выкл. · Gain 50</option>
+                <option value="off">Выкл.</option>
               </select>
             </div>
+            {agc === "off" && (
+              <label>
+                Gain {manualGain}
+                <input
+                  aria-label="Ручной Gain"
+                  type="range"
+                  min="0"
+                  max="120"
+                  value={manualGain}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setManualGain(value);
+                    settings.current = {
+                      ...settings.current,
+                      manualGain: value,
+                    };
+                    manager.current?.flushTune();
+                  }}
+                />
+              </label>
+            )}
             <small>
               {mode === "FM"
                 ? "Узкополосная FM в диапазоне HF"
@@ -1026,7 +1194,9 @@ function App() {
           <div className="visual-head">
             <div>
               <span className={"dot " + (connected ? "live" : "")} /> PANORAMA{" "}
-              <span className="subtle">/ LIVE DSP</span>
+              <span className="subtle">
+                / VFO A · {frequency.toFixed(3)} kHz · {mode}
+              </span>
             </div>
             <div className="zoom">
               <button
@@ -1062,47 +1232,15 @@ function App() {
               полоса {view.span.toFixed(3)} kHz
             </span>
           </div>
-          <div className="view-sliders">
-            <label>
-              Масштаб{" "}
-              <input
-                type="range"
-                aria-label="Масштаб waterfall"
-                min="0"
-                max={maxZoom}
-                step="1"
-                value={zoom}
-                onChange={(e) => changeZoom(Number(e.target.value))}
-              />
-            </label>
-            <label>
-              Центр · {viewCenter.toFixed(3)} kHz{" "}
-              <input
-                type="range"
-                aria-label="Центр waterfall"
-                min={view.span / 2}
-                max={(view.bandwidth ?? 30000) - view.span / 2}
-                step=".001"
-                value={viewCenter}
-                onChange={(e) => changeView(Number(e.target.value))}
-              />
-            </label>
-          </div>
           <div className="gesture-toolbar">
-            <div role="group" aria-label="Управление спектром">
-              <button
-                aria-pressed={gestureMode === "tune"}
-                onClick={() => setGestureMode("tune")}
-              >
-                ☝ Настройка
-              </button>
-              <button
-                aria-pressed={gestureMode === "pan"}
-                onClick={() => setGestureMode("pan")}
-              >
-                ↔ Панорама
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                changeView(frequency);
+                manager.current?.flushTune();
+              }}
+            >
+              К частоте
+            </button>
             <button
               aria-label="Панорама влево"
               onClick={() => changeView(viewCenter - view.span * 0.3)}
@@ -1134,7 +1272,7 @@ function App() {
             <div className="scope-vfo" aria-live="off">
               <b>VFO A</b> {frequencyLabel(frequency, view.span)}{" "}
               <small>
-                {mode} · {filterWidth} Hz
+                {mode} · {cuts.highCut - cuts.lowCut} Hz
               </small>
             </div>
             {filterBand && (
@@ -1214,17 +1352,6 @@ function App() {
               </div>
             )}
           </div>
-          <FineTune
-            frequency={frequency}
-            step={step}
-            onTune={(f) => tune(f)}
-            onEnd={() => manager.current?.flushTune()}
-            viewCenter={view.start + view.span / 2}
-            zoom={zoom}
-            maxZoom={maxZoom}
-            onRecenter={() => changeView(frequency, zoom)}
-            onZoom={changeZoom}
-          />
           <div className="visual-foot">
             <span>Касание — частота · два пальца — масштаб</span>
             <span>
@@ -1304,7 +1431,14 @@ function App() {
                 <span key={v.id}>
                   <button
                     onClick={() =>
-                      tune(v.frequency, v.mode, zoom, v.width ?? widths[v.mode])
+                      tune(
+                        v.frequency,
+                        v.mode,
+                        zoom,
+                        v.width ?? widths[v.mode],
+                        undefined,
+                        v.cuts,
+                      )
                     }
                   >
                     {v.frequency} kHz · {v.mode}
@@ -1346,7 +1480,9 @@ function App() {
         </section>
         <footer>
           <span>UR4MTN WEB SDR / KiwiSDR</span>
-          <span>
+          <span hidden={!new URLSearchParams(location.search).has("debug")}>
+            {audioDebug &&
+              `Очередь ${audioDebug.queueMs.toFixed(0)} мс · цель ${audioDebug.targetMs.toFixed(0)} мс · underrun ${audioDebug.underflowFrames} · `}
             {counts.audio} PCM · {counts.wf} WF · {Math.round(rate.current)} Hz
           </span>
         </footer>

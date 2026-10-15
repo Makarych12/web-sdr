@@ -1,4 +1,5 @@
-import { useState, useRef, useMemo, memo } from "react";
+import { useState, useRef, useMemo, useEffect, memo } from "react";
+import { gateway } from "./gateway";
 export type Receiver = {
   id: string;
   name: string;
@@ -32,6 +33,32 @@ export const ReceiverPicker = memo(function ReceiverPicker({
     [search, setSearch] = useState(""),
     [onlyFavorites, setOnlyFavorites] = useState(false);
   const [open, setOpen] = useState(false);
+  const [checks, setChecks] = useState<
+    Record<
+      string,
+      {
+        reachable: boolean;
+        responseMs?: number;
+        users?: number;
+        maxUsers?: number;
+      }
+    >
+  >({});
+  useEffect(() => {
+    const controller = new AbortController();
+    if (receivers.some((r) => r.id === selected))
+      fetch(
+        `${gateway.http}/api/receivers/${encodeURIComponent(selected)}/check`,
+        { signal: controller.signal },
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .then((value) => {
+          if (value && !controller.signal.aborted)
+            setChecks((old) => ({ ...old, [selected]: value }));
+        })
+        .catch(() => {});
+    return () => controller.abort();
+  }, [selected, receivers]);
   const [visibleCount, setVisibleCount] = useState(60);
   function showCatalog() {
     setOpen(true);
@@ -55,9 +82,15 @@ export const ReceiverPicker = memo(function ReceiverPicker({
         )
         .sort(
           (a, b) =>
-            Number(favorites.includes(b.id)) - Number(favorites.includes(a.id)),
+            Number(favorites.includes(b.id)) -
+              Number(favorites.includes(a.id)) ||
+            Number(!!b.directUrl) - Number(!!a.directUrl) ||
+            (checks[a.id]?.responseMs ?? Infinity) -
+              (checks[b.id]?.responseMs ?? Infinity) ||
+            Number((b.maxUsers ?? 0) > (b.users ?? 0)) -
+              Number((a.maxUsers ?? 0) > (a.users ?? 0)),
         ),
-    [receivers, favorites, search, onlyFavorites],
+    [receivers, favorites, search, onlyFavorites, checks],
   );
   return (
     <div className="receiver-choice" data-count={receivers.length}>
@@ -164,12 +197,27 @@ export const ReceiverPicker = memo(function ReceiverPicker({
                 >
                   <strong>{r.name}</strong>
                   <small>
-                    {r.directUrl ? "Прямой защищённый WSS · " : ""}
+                    {r.directUrl ? "Прямое WSS · " : "Через шлюз · "}
                     {r.location || "Публичный приёмник"}
                     {r.maxUsers !== undefined
                       ? ` · ${r.users}/${r.maxUsers} слушателей`
                       : ""}
-                    {r.snr ? ` · SNR ${r.snr} dB` : ""}
+                    {` · ${(r.minFrequency ?? 0) / 1000}–${(r.maxFrequency ?? 30000) / 1000} MHz`}
+                    {r.maxUsers !== undefined
+                      ? ` · свободно ${Math.max(0, r.maxUsers - (r.users ?? 0))}`
+                      : " · места неизвестны"}
+                    {checks[r.id] && (
+                      <span>
+                        {" "}
+                        ·{" "}
+                        {checks[r.id].reachable
+                          ? `HTTP ${checks[r.id].responseMs} мс от шлюза`
+                          : "HTTP недоступен"}
+                      </span>
+                    )}
+                    {r.apiAvailable
+                      ? " · доступен по каталогу"
+                      : " · требует проверки"}
                   </small>
                 </button>
                 <button
