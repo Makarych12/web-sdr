@@ -15,6 +15,7 @@ import {
   type Preset,
 } from "./tuning";
 import { FrequencyDigits } from "./FrequencyDigits";
+import { FrequencyNudges } from "./FrequencyNudges";
 import { VfoDial } from "./VfoDial";
 import { FineTune } from "./FineTune";
 import { StepControl } from "./StepControl";
@@ -1060,6 +1061,12 @@ function App() {
               />
               <span>kHz</span>
             </form>
+            <FrequencyNudges
+              onNudge={(deltaHz) => {
+                tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
+                manager.current?.flushTune();
+              }}
+            />
             <CallsignSearch />
           </div>
           <VfoDial

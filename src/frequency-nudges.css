@@ -1,0 +1,24 @@
+.frequency-nudges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.frequency-nudges-group {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+.frequency-nudges .frequency-nudges-group button {
+  flex: 0 0 36px;
+  min-width: 32px;
+  min-height: 30px;
+  padding: 3px 5px;
+  border-radius: 5px;
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  touch-action: none;
+  user-select: none;
+}

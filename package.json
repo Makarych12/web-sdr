@@ -23,7 +23,8 @@
     "verify:regressions": "node tests/receiver-regressions.mjs",
     "verify:dials-live": "node tests/dials-live.mjs",
     "verify:scroll": "node tests/page-scroll.mjs",
-    "verify:20m": "node tests/waterfall-20m.mjs"
+    "verify:20m": "node tests/waterfall-20m.mjs",
+    "verify:nudges": "node tests/frequency-nudges.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",
