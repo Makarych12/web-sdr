@@ -141,6 +141,8 @@ export class SpectrumRenderer {
     view: SpectrumView,
   ) {
     this.view = view;
+    this.waterfall.getContext("2d", { alpha: false });
+    this.history.getContext("2d", { alpha: false });
     this.resize();
     this.setCalibration(-13);
     this.clear();
@@ -159,6 +161,8 @@ export class SpectrumRenderer {
     if (!sameView(view, this.view)) {
       this.view = { ...view };
       this.pending = [];
+      // Restore 7f3a7f2 normalization for the newly received range, while keeping history.
+      this.levels.reset();
       this.schedule();
     }
   }
@@ -256,6 +260,8 @@ export class SpectrumRenderer {
           .flatMap((row) => Array(this.rowHeight).fill(row.view)),
       );
       this.rowViews.length = Math.min(height, this.rowViews.length);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
       ctx.imageSmoothingEnabled = false;
       if (shift < height)
         ctx.drawImage(
@@ -298,6 +304,8 @@ export class SpectrumRenderer {
       this.waterfall.dataset.sequence = String(this.sequence ?? "");
     }
     const wc = this.waterfall.getContext("2d")!;
+    wc.globalAlpha = 1;
+    wc.globalCompositeOperation = "source-over";
     wc.fillStyle = "#03060b";
     wc.fillRect(0, 0, this.waterfall.width, this.waterfall.height);
     wc.imageSmoothingEnabled = false;

@@ -21,7 +21,9 @@
     "verify:session": "node tests/receiver-session.mjs",
     "verify:performance": "node tests/receiver-performance.mjs",
     "verify:regressions": "node tests/receiver-regressions.mjs",
-    "verify:dials-live": "node tests/dials-live.mjs"
+    "verify:dials-live": "node tests/dials-live.mjs",
+    "verify:scroll": "node tests/page-scroll.mjs",
+    "verify:20m": "node tests/waterfall-20m.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

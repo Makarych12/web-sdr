@@ -134,13 +134,11 @@ async function assertSynchronized(page, hz) {
       .evaluate((e) => Number(e.textContent.replace(/\D/g, ""))),
     hz,
   );
-  const marker = await page
-    .locator(".visual")
-    .evaluate((e) => ({
-      start: +e.dataset.start,
-      span: +e.dataset.span,
-      left: parseFloat(e.querySelector(".scope .marker").style.left),
-    }));
+  const marker = await page.locator(".visual").evaluate((e) => ({
+    start: +e.dataset.start,
+    span: +e.dataset.span,
+    left: parseFloat(e.querySelector(".scope .marker").style.left),
+  }));
   assert.ok(
     Math.abs(marker.left - ((hz / 1000 - marker.start) / marker.span) * 100) <
       0.001,
@@ -227,7 +225,10 @@ function geometry(page) {
 try {
   for (const width of [360, 390, 768, 1440]) {
     const context = await browser.newContext({
-      viewport: { width, height: 1000 },
+      viewport: {
+        width,
+        height: width === 360 ? 800 : width === 390 ? 844 : 1000,
+      },
       hasTouch: true,
       reducedMotion: "reduce",
     });
@@ -253,7 +254,7 @@ try {
       .evaluateAll((es) =>
         es.map((e) => ({ width: e.offsetWidth, height: e.offsetHeight })),
       );
-    const expected = { 360: 84, 390: 98, 768: 140, 1440: 164 }[width];
+    const expected = 164;
     assert.deepEqual(sizes, [
       { width: expected, height: expected },
       { width: 86, height: 86 },
@@ -383,19 +384,15 @@ try {
           label,
         );
       else assert.match(text, /-84.4 dBm/);
-      const styles = await page
-        .locator(".smeter-top strong")
-        .evaluate((e) => ({
-          wrap: getComputedStyle(e).whiteSpace,
-          numeric: getComputedStyle(e).fontVariantNumeric,
-        }));
+      const styles = await page.locator(".smeter-top strong").evaluate((e) => ({
+        wrap: getComputedStyle(e).whiteSpace,
+        numeric: getComputedStyle(e).fontVariantNumeric,
+      }));
       assert.equal(styles.wrap, "nowrap");
       assert.equal(styles.numeric, "tabular-nums");
-      await page
-        .locator(".tuner")
-        .screenshot({
-          path: `${dir}/meter-${width}-${label.replace(/[^\w]/g, "_")}.png`,
-        });
+      await page.locator(".tuner").screenshot({
+        path: `${dir}/meter-${width}-${label.replace(/[^\w]/g, "_")}.png`,
+      });
       levels.push({ label, db, geometry: current });
     }
     // Cross the exact text-format boundaries in both directions.

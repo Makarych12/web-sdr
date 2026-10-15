@@ -17,11 +17,15 @@ type Options = {
   onTune: (frequency: number, center: number) => void;
   onView: (center: number, zoom: number) => void;
   onEnd: () => void;
+  allowPageScroll?: boolean;
   cuts: Cuts;
   onFilter: (cuts: Cuts) => void;
 };
 type Gesture = {
   startX: number;
+  startY: number;
+  scrolling: boolean;
+  intent: "pending" | "horizontal";
   frequency: number;
   view: View;
   zoom: number;
@@ -37,6 +41,7 @@ export function useSpectrumGesture(options: Options) {
   const latest = useRef(options);
   latest.current = options;
   const lastWheel = useRef(0);
+  const lastScroll = useRef(-Infinity);
   const lastTap = useRef({ at: 0, x: 0 });
   const points = useRef(new Map<number, { x: number; y: number }>()),
     gesture = useRef<Gesture | null>(null);
@@ -45,7 +50,8 @@ export function useSpectrumGesture(options: Options) {
     Math.max(0, Math.min(1, (x - g.left) / g.width)) * g.view.span;
   function down(e: PointerEvent<HTMLElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    e.preventDefault();
+    if (e.pointerType !== "touch" || !latest.current.allowPageScroll)
+      e.preventDefault();
     e.currentTarget.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
     points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -53,6 +59,9 @@ export function useSpectrumGesture(options: Options) {
       const r = e.currentTarget.getBoundingClientRect();
       gesture.current = {
         startX: e.clientX,
+        startY: e.clientY,
+        scrolling: false,
+        intent: "pending",
         frequency: latest.current.frequency,
         cuts: { ...latest.current.cuts },
         view: { ...latest.current.view },
@@ -83,6 +92,10 @@ export function useSpectrumGesture(options: Options) {
       g.view = { ...latest.current.view };
       const [a, b] = [...points.current.values()];
       g.pinched = true;
+      g.scrolling = false;
+      pending.current = null;
+      cancelAnimationFrame(frame.current);
+      frame.current = 0;
       g.pinch = {
         distance: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)),
         anchor: position(g, (a.x + b.x) / 2),
@@ -149,7 +162,25 @@ export function useSpectrumGesture(options: Options) {
       queue({ center: p.anchor - (fraction - 0.5) * span, zoom });
       return;
     }
-    if (Math.abs(e.clientX - g.startX) > 5) g.moved = true;
+    const dx = Math.abs(e.clientX - g.startX),
+      dy = Math.abs(e.clientY - g.startY);
+    if (latest.current.allowPageScroll && e.pointerType === "touch") {
+      if (g.scrolling) return;
+      if (g.intent === "pending") {
+        if (Math.max(dx, dy) < 8) return;
+        if (dy > dx) {
+          g.scrolling = true;
+          g.moved = true;
+          pending.current = null;
+          cancelAnimationFrame(frame.current);
+          frame.current = 0;
+          lastTap.current.at = 0;
+          return;
+        }
+        g.intent = "horizontal";
+      }
+    }
+    if (Math.max(dx, dy) > 5) g.moved = true;
     if (!g.moved) return;
     if (g.mode === "band") {
       const cuts = g.cuts!;
@@ -200,8 +231,17 @@ export function useSpectrumGesture(options: Options) {
     if (!points.current.has(e.pointerId) || !g) return;
     points.current.delete(e.pointerId);
     if (!points.current.size) {
-      flush();
-      if (!cancelled && !g.pinched) {
+      const scrolled =
+        g.scrolling ||
+        (latest.current.allowPageScroll &&
+          performance.now() - lastScroll.current < 350);
+      if (cancelled || scrolled) {
+        pending.current = null;
+        cancelAnimationFrame(frame.current);
+        frame.current = 0;
+        lastTap.current.at = 0;
+      } else flush();
+      if (!cancelled && !scrolled && !g.pinched) {
         if (
           (!g.moved && g.mode !== "low" && g.mode !== "high") ||
           g.mode === "tune"
@@ -213,7 +253,13 @@ export function useSpectrumGesture(options: Options) {
             g.view.start + g.view.span / 2,
           );
       }
-      if (!cancelled && !g.pinched && !g.moved && e.pointerType === "touch") {
+      if (
+        !cancelled &&
+        !scrolled &&
+        !g.pinched &&
+        !g.moved &&
+        e.pointerType === "touch"
+      ) {
         const now = performance.now();
         if (
           now - lastTap.current.at < 320 &&
@@ -225,7 +271,8 @@ export function useSpectrumGesture(options: Options) {
         } else lastTap.current = { at: now, x: e.clientX };
       }
       gesture.current = null;
-      latest.current.onEnd();
+      if (!scrolled && (!cancelled || g.moved || g.pinched))
+        latest.current.onEnd();
     }
     if (e.currentTarget.hasPointerCapture(e.pointerId))
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -234,20 +281,11 @@ export function useSpectrumGesture(options: Options) {
     const canvas = options.canvas.current;
     if (!canvas) return;
     const wheel = (e: WheelEvent) => {
-      // Scrolling the page over the display must not silently magnify it.
-
+      if (!e.ctrlKey) return;
       e.preventDefault();
       const o = latest.current;
-      if (!e.shiftKey && performance.now() - lastWheel.current < 80) return;
+      if (!e.deltaY || performance.now() - lastWheel.current < 80) return;
       lastWheel.current = performance.now();
-      if (e.shiftKey) {
-        o.onTune(
-          o.frequency + Math.sign(-e.deltaY) * o.step,
-          o.view.start + o.view.span / 2,
-        );
-        o.onEnd();
-        return;
-      }
       const zoom = Math.max(
         0,
         Math.min(o.maxZoom, o.zoom + (e.deltaY < 0 ? 1 : -1)),
@@ -258,8 +296,23 @@ export function useSpectrumGesture(options: Options) {
         span = o.view.span / 2 ** (zoom - o.zoom);
       o.onView(anchor - (fraction - 0.5) * span, zoom);
     };
+    const scroll = () => {
+      if (!latest.current.allowPageScroll) return;
+      lastScroll.current = performance.now();
+      lastTap.current.at = 0;
+      if (gesture.current) {
+        gesture.current.scrolling = true;
+        pending.current = null;
+        cancelAnimationFrame(frame.current);
+        frame.current = 0;
+      }
+    };
     canvas.addEventListener("wheel", wheel, { passive: false });
-    return () => canvas.removeEventListener("wheel", wheel);
+    window.addEventListener("scroll", scroll, { passive: true });
+    return () => {
+      canvas.removeEventListener("wheel", wheel);
+      window.removeEventListener("scroll", scroll);
+    };
   }, [options.canvas]);
   function key(e: KeyboardEvent<HTMLElement>) {
     const o = latest.current;
@@ -283,6 +336,11 @@ export function useSpectrumGesture(options: Options) {
   }
   return {
     onDoubleClick: (e: React.MouseEvent<HTMLElement>) => {
+      if (
+        latest.current.allowPageScroll &&
+        performance.now() - lastScroll.current < 350
+      )
+        return;
       const r = e.currentTarget.getBoundingClientRect(),
         o = latest.current;
       const f = o.view.start + ((e.clientX - r.left) / r.width) * o.view.span;

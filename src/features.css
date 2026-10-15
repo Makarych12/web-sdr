@@ -468,3 +468,81 @@
     font-size: 15px;
   }
 }
+/* The main encoder keeps its desktop geometry at every viewport width. */
+.tuner > .vfo-control > .vfo-dial {
+  width: 164px;
+  height: 164px;
+  min-width: 164px;
+  min-height: 164px;
+  max-width: 164px;
+  max-height: 164px;
+  flex: none;
+}
+.tuner > .vfo-control > .vfo-dial .vfo-face {
+  inset: 13px;
+  border-width: 3px;
+}
+.tuner > .vfo-control > .vfo-dial .vfo-face i {
+  width: 19px;
+  height: 19px;
+  left: calc(50% - 9px);
+  top: 13px;
+}
+.tuner > .vfo-control > .vfo-dial > span {
+  font-size: 12px;
+}
+.tuner > .vfo-control > small {
+  max-width: none;
+  font-size: 10px;
+  line-height: 1.5;
+  margin-top: 10px;
+  white-space: nowrap;
+}
+@media (max-width: 820px) {
+  .tuner {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "frequency" "dial" "steps" "mode" "meter";
+  }
+  .tuner > .vfo-control {
+    justify-self: center;
+    min-width: 184px;
+  }
+}
+/* Isolate intrinsic text sizing from the receiver grid. */
+.tuner > .smeter {
+  contain: layout size;
+  min-width: 0;
+  overflow: hidden;
+}
+.smeter .smeter-top strong {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+  flex: none;
+}
+.smeter-value {
+  min-width: 8ch;
+  max-width: 8ch;
+  height: 22px;
+}
+.smeter .smeter-top strong small {
+  min-width: 13ch;
+  max-width: 13ch;
+  height: 18px;
+}
+@media (max-width: 820px) {
+  .smeter .smeter-top strong {
+    width: 180px;
+    min-width: 180px;
+    max-width: 180px;
+  }
+}
+/* Single-finger vertical gestures belong to the page, pinch remains custom. */
+.visual .fall canvas {
+  touch-action: pan-y;
+  height: 100%;
+  image-rendering: pixelated;
+  opacity: 1;
+  filter: none;
+  mix-blend-mode: normal;
+}

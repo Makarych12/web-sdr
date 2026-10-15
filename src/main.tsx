@@ -848,6 +848,7 @@ function App() {
   const waterfallGesture = useSpectrumGesture({
     canvas: waterfall,
     ...gestureOptions,
+    allowPageScroll: true,
   });
   const marker = Math.max(
     0,
@@ -1377,7 +1378,8 @@ function App() {
               height={480}
               {...waterfallGesture}
               tabIndex={0}
-              aria-label="Waterfall: касание и перетаскивание для настройки"
+              aria-label="Waterfall: вертикальный свайп — прокрутка страницы; касание — частота; два пальца — масштаб"
+              title="Прокрутка — страница; Ctrl + колесо или два пальца — масштаб"
             />
             {!waterfallReady && (
               <div className="empty">

@@ -70,7 +70,9 @@ try {
   const before = await p.locator(".fall canvas").getAttribute("data-rows");
   const b = await canvas.boundingBox();
   await p.mouse.move(b.x + b.width * 0.7, b.y + b.height * 0.5);
+  await p.keyboard.down("Control");
   await p.mouse.wheel(0, -100);
+  await p.keyboard.up("Control");
   await p.waitForTimeout(500);
   assert.ok(
     +(await p.locator(".fall canvas").getAttribute("data-rows")) >= +before,

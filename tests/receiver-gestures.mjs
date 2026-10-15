@@ -104,11 +104,13 @@ try {
   await page.mouse.move(wb.x + wb.width * 0.7, wb.y + wb.height * 0.65);
   v = await view();
   const anchor = v.start + v.span * 0.7;
+  await page.keyboard.down("Control");
   await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
   await page.waitForTimeout(100);
   const z = await view();
   assert.ok(Math.abs(z.start + z.span * 0.7 - anchor) < v.span / wb.width);
-  checks.push("wheel preserves cursor RF anchor");
+  checks.push("Ctrl+wheel preserves cursor RF anchor");
 
   await canvas.scrollIntoViewIfNeeded();
   const vb = await canvas.boundingBox();
