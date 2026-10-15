@@ -91,7 +91,12 @@ try {
           parseFloat(m.style.left),
         ),
       }));
-      assert.ok(view.positions.length >= 2);
+      // The last real Kiwi FFT bin can fall a few Hz below the 30 MHz VFO
+      // limit. A carrier outside that reported view has no on-canvas marker.
+      const inView =
+        hz / 1000 >= view.start && hz / 1000 <= view.start + view.span;
+      assert.equal(view.positions.length, inView ? 2 : 0);
+      if (hz > 0 && hz < 30000000) assert.ok(inView);
       for (const left of view.positions)
         assert.ok(
           Math.abs(left - ((hz / 1000 - view.start) / view.span) * 100) < 0.001,
@@ -202,7 +207,7 @@ try {
       assert.equal(await frequency(), stopped, reason + " stops repetition");
     }
     await page
-      .locator(".frequency")
+      .locator(".precision-controls")
       .screenshot({ path: `${dir}/buttons-${width}.png` });
     const layout = await buttons.evaluateAll((es) =>
       es.map((e) => {
