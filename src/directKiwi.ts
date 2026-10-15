@@ -64,6 +64,12 @@ export class DirectKiwiSocket {
     else if (command.type === "tune") this.session.apply(command);
     else if (command.type === "disconnect") this.close();
   }
+  setBackground(hidden: boolean) {
+    this.session.setBackground(hidden);
+  }
+  resume() {
+    this.session.resume();
+  }
   close() {
     if (this.readyState === 3) return;
     this.readyState = 3;

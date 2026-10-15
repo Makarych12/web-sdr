@@ -46,6 +46,7 @@ import {
 } from "./spectrumView";
 import { directEndpoint } from "./transport";
 import { DirectKiwiSocket } from "./directKiwi";
+import { RadioMedia } from "./radioMedia";
 import { SMeter } from "./SMeter";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
 type SavedFrequency = {
@@ -274,6 +275,7 @@ function App() {
     state: (v: ConnectionState) => void;
   }>({ message: () => {}, state: () => {} });
   const context = useRef<AudioContext | null>(null),
+    media = useRef<RadioMedia | null>(null),
     player = useRef<AudioWorkletNode | null>(null),
     gain = useRef<GainNode | null>(null),
     spectrum = useRef<HTMLCanvasElement>(null),
@@ -344,7 +346,10 @@ function App() {
         if (disposed || controller.signal.aborted) return;
         attempt = 0;
         setReceivers(rows);
-        if (rows.length && !rows.some((r) => r.id === receiverRef.current)) {
+        if (
+          !manager.current?.desired && rows.length &&
+          !rows.some((r) => r.id === receiverRef.current)
+        ) {
           receiverRef.current = rows[0].id;
           setReceiver(rows[0].id);
         }
@@ -394,38 +399,73 @@ function App() {
   }, []);
   useEffect(() => {
     let recovering: Promise<void> | null = null;
+    const recover = () => {
+      if (!manager.current?.desired) return;
+      manager.current.recoverAfterSleep();
+      if (!recovering)
+        recovering = resumeAudio().finally(() => {
+          recovering = null;
+        });
+    };
     const visible = () => {
       const shown = !document.hidden;
       renderer.current?.setVisible(shown);
       manager.current?.setBackground(!shown);
-      if (!shown || !manager.current?.desired) return;
-      manager.current.recoverAfterSleep();
-      if (
-        context.current &&
-        context.current.state !== "running" &&
-        !recovering
-      ) {
-        player.current?.port.postMessage({ reset: true });
-        recovering = context.current
-          .resume()
-          .then(() => {
-            if (!manager.current?.desired) void context.current?.suspend();
-            else setAudioPaused(context.current?.state !== "running");
-          })
-          .catch(() => setAudioPaused(true))
-          .finally(() => {
-            recovering = null;
-          });
-      }
+      if (shown) recover();
+    };
+    const freeze = () => {
+      manager.current?.setBackground(true);
+      renderer.current?.setVisible(false);
+    };
+    const resume = () => {
+      visible();
+      // Android may unfreeze a page while it is still hidden.
+      recover();
     };
     document.addEventListener("visibilitychange", visible);
+    document.addEventListener("freeze", freeze);
+    document.addEventListener("resume", resume);
     window.addEventListener("pageshow", visible);
     visible();
     return () => {
       document.removeEventListener("visibilitychange", visible);
+      document.removeEventListener("freeze", freeze);
+      document.removeEventListener("resume", resume);
       window.removeEventListener("pageshow", visible);
     };
   }, []);
+  const mediaActions = useRef({ play: () => {}, pause: () => {} });
+  mediaActions.current = {
+    play: () => {
+      if (!manager.current?.desired) void connect();
+      else {
+        manager.current.recoverAfterSleep();
+        void resumeAudio();
+      }
+    },
+    pause: () => {
+      ++startGeneration.current;
+      manager.current?.stop();
+    },
+  };
+  useEffect(() => {
+    media.current = new RadioMedia();
+    media.current.actions(
+      () => mediaActions.current.play(),
+      () => mediaActions.current.pause(),
+    );
+    return () => {
+      media.current?.dispose();
+      media.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    media.current?.metadata(
+      receivers.find((r) => r.id === receiver)?.name || receiver,
+      frequencyHz,
+      mode,
+    );
+  }, [receiver, receivers, frequencyHz, mode]);
   useEffect(() => {
     if (gain.current)
       gain.current.gain.setTargetAtTime(
@@ -511,6 +551,7 @@ function App() {
   }
   callbacks.current.state = (v) => {
     setWanted(manager.current?.desired ?? false);
+    if (v.phase === "idle" || v.phase === "blocked") media.current?.pause();
     if (
       (v.phase === "idle" || v.phase === "blocked") &&
       context.current?.state === "running"
@@ -768,18 +809,21 @@ function App() {
         };
         gain.current = context.current.createGain();
         gain.current.gain.value = muted ? 0 : volume;
-        player.current
-          .connect(gain.current)
-          .connect(context.current.destination);
-        context.current.onstatechange = () =>
-          setAudioPaused(context.current?.state !== "running");
+        player.current.connect(gain.current);
+        media.current!.attach(context.current, gain.current);
+        context.current.onstatechange = () => {
+          setAudioPaused(
+            context.current?.state !== "running" || !!media.current?.audio.paused,
+          );
+          if (context.current?.state !== "running")
+            media.current?.setState("paused");
+        };
       }
-      await context.current.resume();
+      await resumeAudio();
       if (generation !== startGeneration.current || !manager.current?.desired) {
         void context.current.suspend();
         return;
       }
-      setAudioPaused(false);
     } catch (e) {
       if (generation !== startGeneration.current) return;
       setError(e instanceof Error ? e.message : String(e));
@@ -792,6 +836,27 @@ function App() {
     } finally {
       initializing.current = false;
       setPreparing(false);
+    }
+  }
+  async function resumeAudio() {
+    if (!manager.current?.desired || !context.current || !media.current) return;
+    try {
+      if (context.current.state !== "running") {
+        player.current?.port.postMessage({ reset: true });
+        await context.current.resume();
+      }
+      if (!manager.current?.desired) {
+        media.current.pause();
+        void context.current.suspend();
+        return;
+      }
+      await media.current.play();
+      if (!manager.current?.desired) media.current.pause();
+      setAudioPaused(
+        context.current.state !== "running" || media.current.audio.paused,
+      );
+    } catch {
+      setAudioPaused(true);
     }
   }
   function changeView(center: number, z = zoom) {
@@ -984,7 +1049,7 @@ function App() {
         {wanted && audioPaused && (
           <div className="reconnect-banner">
             <span>Браузер приостановил звук</span>
-            <button onClick={() => void context.current?.resume()}>
+            <button onClick={() => void resumeAudio()}>
               Возобновить звук
             </button>
           </div>

@@ -1,4 +1,5 @@
 import test from "node:test";
+import { KiwiProtocol } from "../shared/kiwiProtocol.js";
 import assert from "node:assert/strict";
 import { KiwiSession, validateTune } from "../server/kiwi.js";
 test("reject invalid tuning before commands reach receiver", () => {
@@ -201,13 +202,87 @@ test("closed Kiwi session ignores late PCM, waterfall, handshake and tune", () =
   assert.deepEqual(sent, []);
 });
 
-test('one-Hz tuning and CW BFO preserve absolute RF passband edges', () => {
- const sent=[]; const s=new KiwiSession('http://example.org',()=>{});
- s.audioReady=true;s.sockets=[{readyState:1,send:v=>sent.push(v),close(){}}];
- s.apply({frequency:7074.251,mode:'USB',zoom:7,lowCut:300,highCut:2700});
- assert.ok(sent.includes('SET mod=usb low_cut=300 high_cut=2700 freq=7074.251'));
- s.apply({frequency:7074.251,mode:'CW',zoom:7,lowCut:-250,highCut:250});
- assert.ok(sent.includes('SET mod=cw low_cut=350 high_cut=850 freq=7073.651'));
- assert.equal(7073651+350,7074251-250);assert.equal(7073651+850,7074251+250);
- s.close();
+test("one-Hz tuning and CW BFO preserve absolute RF passband edges", () => {
+  const sent = [];
+  const s = new KiwiSession("http://example.org", () => {});
+  s.audioReady = true;
+  s.sockets = [{ readyState: 1, send: (v) => sent.push(v), close() {} }];
+  s.apply({
+    frequency: 7074.251,
+    mode: "USB",
+    zoom: 7,
+    lowCut: 300,
+    highCut: 2700,
+  });
+  assert.ok(
+    sent.includes("SET mod=usb low_cut=300 high_cut=2700 freq=7074.251"),
+  );
+  s.apply({
+    frequency: 7074.251,
+    mode: "CW",
+    zoom: 7,
+    lowCut: -250,
+    highCut: 250,
+  });
+  assert.ok(sent.includes("SET mod=cw low_cut=350 high_cut=850 freq=7073.651"));
+  assert.equal(7073651 + 350, 7074251 - 250);
+  assert.equal(7073651 + 850, 7074251 + 250);
+  s.close();
+});
+
+test("direct Kiwi protocol has no five-minute session expiry; background PCM does not require WF", (t) => {
+  t.mock.timers.enable({
+    apis: ["setTimeout", "setInterval", "Date"],
+    now: 1000,
+  });
+  const output = [],
+    sockets = [];
+  const s = new KiwiProtocol(
+    "https://example.org",
+    (v) => output.push(v),
+    () => {
+      const socket = {
+        readyState: 1,
+        send() {},
+        close() {
+          this.readyState = 3;
+        },
+        on() {},
+      };
+      sockets.push(socket);
+      return socket;
+    },
+  );
+  s.start({
+    frequency: 14200.251,
+    mode: "USB",
+    zoom: 6,
+    lowCut: 300,
+    highCut: 2700,
+  });
+  const snd = Buffer.alloc(14);
+  snd.write("SND");
+  const wf = Buffer.alloc(1040);
+  wf.write("W/F");
+  s.parse(sockets[0], "SND", snd);
+  s.parse(sockets[1], "W/F", wf);
+  s.setBackground(true);
+  for (let i = 0; i < 601; i++) {
+    t.mock.timers.tick(1000);
+    s.parse(sockets[0], "SND", snd);
+  }
+  assert.equal(s.closed, false);
+  assert.equal(sockets.length, 2);
+  assert.equal(output.filter((v) => v.type === "error").length, 0);
+  assert.equal(s.tune.frequency, 14200.251);
+  assert.equal(s.tune.mode, "USB");
+  assert.equal(s.tune.highCut, 2700);
+  s.setBackground(false);
+  t.mock.timers.tick(4000);
+  assert.equal(s.closed, false, "resume allows queued waterfall events");
+  s.parse(sockets[0], "SND", snd);
+  s.parse(sockets[1], "W/F", wf);
+  t.mock.timers.tick(1000);
+  assert.equal(s.closed, false);
+  s.close();
 });

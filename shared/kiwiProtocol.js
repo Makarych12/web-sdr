@@ -69,6 +69,19 @@ export class KiwiProtocol {
     this.audioReady = false;
     this.waterfallReady = false;
     this.lastAudio = this.lastWaterfall = Date.now();
+    this.background = false;
+    this.resumeUntil = 0;
+  }
+  setBackground(hidden) {
+    if (this.background && !hidden) this.resume();
+    this.background = hidden;
+  }
+  resume() {
+    if (this.closed) return;
+    // Let queued network events run after Android unfreezes the page.
+    this.resumeUntil = Date.now() + 5000;
+    clearTimeout(this.timeout);
+    this.sockets.forEach((w) => this.send(w, "SET keepalive"));
   }
   send(ws, s) {
     if (ws?.readyState === 1) ws.send(s);
@@ -96,7 +109,14 @@ export class KiwiProtocol {
     }
     this.timer = setInterval(() => {
       this.sockets.forEach((w) => this.send(w, "SET keepalive"));
-      if (Date.now() - Math.min(this.lastAudio, this.lastWaterfall) > 20000)
+      if (
+        Date.now() >= this.resumeUntil &&
+        Date.now() -
+          (this.background
+            ? this.lastAudio
+            : Math.min(this.lastAudio, this.lastWaterfall)) >
+          20000
+      )
         this.fail("Поток звука или waterfall прерван");
     }, 1000);
     this.timeout = setTimeout(

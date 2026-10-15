@@ -278,3 +278,78 @@ test("receiver switch cancels pending tune and manual restart bypasses retry tim
   assert.equal(sockets[0].sent.length, 2);
   c.stop();
 });
+
+test("repeated gateway transport errors never fail over to a different receiver", (t) => {
+  t.mock.timers.enable({
+    apis: ["setTimeout", "setInterval", "Date"],
+    now: 1000,
+  });
+  let changes = 0;
+  const { c, sockets, setConfig } = setup(() => {
+    changes++;
+    return true;
+  });
+  setConfig({
+    receiver: "france",
+    frequency: 14200.251,
+    mode: "USB",
+    zoom: 7,
+    lowCut: 350,
+    highCut: 2600,
+  });
+  c.start();
+  for (let i = 0; i < 6; i++) {
+    sockets[i].open();
+    assert.deepEqual(JSON.parse(sockets[i].sent[0]), {
+      type: "connect",
+      receiver: "france",
+      frequency: 14200.251,
+      mode: "USB",
+      zoom: 7,
+      lowCut: 350,
+      highCut: 2600,
+    });
+    sockets[i].message({
+      type: "error",
+      code: "connection",
+      message: "Gateway interrupted",
+      retryable: true,
+    });
+    t.mock.timers.tick(Math.min(30000, 1000 * 2 ** i));
+  }
+  assert.equal(changes, 0);
+  c.stop();
+});
+
+test("resume waits for queued audio on an open socket, then retries only if still stale", (t) => {
+  t.mock.timers.enable({
+    apis: ["setTimeout", "setInterval", "Date"],
+    now: 1000,
+  });
+  const { c, sockets } = setup();
+  c.start();
+  sockets[0].open();
+  c.setBackground(true);
+  // Sleep advances wall time without running the frozen page timers.
+  t.mock.timers.setTime(301000);
+  c.recoverAfterSleep();
+  assert.equal(sockets.length, 1);
+  sockets[0].onmessage({ data: new Uint8Array([1, 0, 1]).buffer });
+  t.mock.timers.tick(5000);
+  assert.equal(sockets.length, 1);
+  t.mock.timers.setTime(601000);
+  c.recoverAfterSleep();
+  t.mock.timers.tick(4000);
+  assert.equal(sockets.length, 1);
+  t.mock.timers.tick(2000);
+  t.mock.timers.tick(1000);
+  assert.equal(
+    sockets.length,
+    2,
+    "an open but dead stream must eventually reconnect",
+  );
+  sockets[1].open();
+  assert.equal(JSON.parse(sockets[1].sent[0]).receiver, "france");
+  assert.equal(JSON.parse(sockets[1].sent[0]).highCut, 2100);
+  c.stop();
+});

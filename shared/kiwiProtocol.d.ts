@@ -16,5 +16,7 @@ export class KiwiProtocol {
   );
   start(tune: Tune): void;
   apply(tune: Tune): void;
+  setBackground(hidden: boolean): void;
+  resume(): void;
   close(): void;
 }

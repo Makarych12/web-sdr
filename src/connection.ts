@@ -29,7 +29,12 @@ type Options = {
 };
 export class StreamConnection {
   desired = false;
-  socket: WebSocket | null = null;
+  socket:
+    | (WebSocket & {
+        setBackground?: (hidden: boolean) => void;
+        resume?: () => void;
+      })
+    | null = null;
   private generation = 0;
   private attempts = 0;
   private failures = 0;
@@ -39,14 +44,20 @@ export class StreamConnection {
   private lastAudioAt = 0;
   private startedAt = 0;
   private background = false;
+  private resumeUntil = 0;
   setBackground(hidden: boolean) {
+    if (this.background && !hidden) this.resumeUntil = Date.now() + 5000;
     this.background = hidden;
+    this.socket?.setBackground?.(hidden);
   }
   recoverAfterSleep() {
     if (!this.desired) return;
     const age = Date.now() - (this.lastAudioAt || this.startedAt);
-    if (!this.socket || this.socket.readyState > 1 || age >= 22000)
-      this.reconnectNow();
+    if (!this.socket || this.socket.readyState > 1) this.reconnectNow();
+    else {
+      if (age >= 22000) this.resumeUntil = Date.now() + 5000;
+      this.socket.resume?.();
+    }
   }
   constructor(options: Options) {
     this.options = options;
@@ -124,6 +135,7 @@ export class StreamConnection {
     const generation = this.generation;
     this.startedAt = Date.now();
     this.lastAudioAt = 0;
+    this.resumeUntil = 0;
     this.options.onState({
       phase: "connecting",
       message: "Подключение…",
@@ -143,6 +155,7 @@ export class StreamConnection {
       return;
     }
     this.socket = socket;
+    this.socket.setBackground?.(this.background);
     socket.binaryType = "arraybuffer";
     let audio = 0,
       wf = 0,
@@ -183,8 +196,8 @@ export class StreamConnection {
               String(v.code),
             );
             const changedReceiver =
-              ((confirmedRefusal && this.failures >= 2) ||
-                (v.code === "connection" && this.failures >= 3)) &&
+              confirmedRefusal &&
+              this.failures >= 2 &&
               this.options.onUnavailable?.(String(v.code), reason);
             if (changedReceiver) {
               this.failures = 0;
@@ -253,6 +266,7 @@ export class StreamConnection {
     this.watchdog = setInterval(() => {
       if (
         current() &&
+        Date.now() >= this.resumeUntil &&
         Date.now() -
           (this.background ? lastAudio : Math.min(lastAudio, lastWaterfall)) >
           22000
