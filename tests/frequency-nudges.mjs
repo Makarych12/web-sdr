@@ -207,7 +207,7 @@ try {
       assert.equal(await frequency(), stopped, reason + " stops repetition");
     }
     await page
-      .locator(".precision-controls")
+      .locator(".frequency")
       .screenshot({ path: `${dir}/buttons-${width}.png` });
     const layout = await buttons.evaluateAll((es) =>
       es.map((e) => {

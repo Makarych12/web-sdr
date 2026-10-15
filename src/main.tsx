@@ -6,7 +6,6 @@ import "./brand.css";
 import "./console.css";
 import "./features.css";
 import "./control-panel.css";
-import { CallsignSearch } from "./CallsignSearch";
 import {
   parseFrequency,
   MODE_STEP,
@@ -1126,7 +1125,12 @@ function App() {
                 />
                 <span>kHz</span>
               </form>
-              <CallsignSearch />
+              <FrequencyNudges
+                onNudge={(deltaHz) => {
+                  tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
+                  manager.current?.flushTune();
+                }}
+              />
             </div>
             <VfoDial
               frequencyHz={frequencyHz}
@@ -1493,14 +1497,7 @@ function App() {
             maxZoom={maxZoom}
             onRecenter={() => changeView(frequency, zoom)}
             onZoom={changeZoom}
-          >
-            <FrequencyNudges
-              onNudge={(deltaHz) => {
-                tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
-                manager.current?.flushTune();
-              }}
-            />
-          </FineTune>
+          />
         </div>
         <BandSelector
           tune={(f, m) => tune(f, m, Math.min(6, maxZoom), widths[m], f)}

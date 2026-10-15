@@ -26,6 +26,9 @@
 .tuner > .frequency {
   text-align: center;
 }
+.tuner > .frequency .frequency-nudges {
+  justify-content: flex-start;
+}
 .tuner > .smeter {
   align-self: end;
   height: 88px;
@@ -271,6 +274,9 @@
 }
 
 @media (max-width: 900px) {
+  .tuner > .frequency .frequency-nudges {
+    justify-content: center;
+  }
   .control-panel.panel,
   .visual + .precision-controls {
     padding: 14px 12px;

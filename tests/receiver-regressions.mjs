@@ -288,7 +288,8 @@ try {
         ".smeter",
         ".signal-settings",
         ".precision-controls",
-        ".fine-nudges",
+        ".frequency-nudges",
+        ".frequency-nudges button:first-child",
         ".mode",
         ".visual",
         ".scope",
@@ -359,12 +360,12 @@ try {
       boxes[".visual"].height;
     assert.ok(
       lowerGap >= 0 && lowerGap <= 16,
-      "fine dial and six buttons stay directly below waterfall on desktop and mobile",
+      "fine dial stays directly below waterfall on desktop and mobile",
     );
     assert.equal(await page.locator(".control-panel .fine-tune").count(), 0);
     assert.equal(
       await page.locator(".control-panel .frequency-nudges").count(),
-      0,
+      1,
     );
     assert.equal(await page.locator(".control-panel > .steps").count(), 1);
     assert.equal(await page.locator(".signal-settings #volume").count(), 1);
@@ -378,10 +379,36 @@ try {
     );
     assert.equal(
       await page
-        .locator(".precision-controls .frequency-nudges button")
+        .locator(".tuner > .frequency .frequency-nudges button")
         .count(),
       6,
     );
+    assert.equal(await page.locator(".callsign-search").count(), 0);
+    assert.equal(await page.getByPlaceholder("Введите позывной").count(), 0);
+    assert.equal(
+      await page.locator(".precision-controls .frequency-nudges").count(),
+      0,
+    );
+    const nudgeBox = boxes[".frequency-nudges"],
+      mainDial = boxes[".tuner > .vfo-control"];
+    if (width <= 900) {
+      const gap = mainDial.y - nudgeBox.y - nudgeBox.height;
+      assert.ok(
+        gap >= 0 && gap <= 12,
+        "six buttons directly adjacent to the large mobile dial",
+      );
+    } else {
+      const firstButton = boxes[".frequency-nudges button:first-child"];
+      const gap = firstButton.x - mainDial.x - mainDial.width;
+      assert.ok(
+        gap >= 0 && gap <= 32,
+        "desktop buttons occupy the vacated search row beside the large dial",
+      );
+      assert.ok(
+        nudgeBox.y < mainDial.y + mainDial.height &&
+          mainDial.y < nudgeBox.y + nudgeBox.height,
+      );
+    }
     await page.evaluate(({ top, header }) => scrollTo(0, top - header - 12), {
       top: coreTop,
       header: layout.headerHeight,

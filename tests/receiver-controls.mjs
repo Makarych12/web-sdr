@@ -110,10 +110,9 @@ try {
         () => document.documentElement.scrollWidth <= innerWidth + 1,
       ),
     );
-    const call = await p.locator(".callsign-search").boundingBox(),
-      steps = await p.locator(".steps").boundingBox(),
-      meter = await p.locator(".smeter-track").boundingBox();
-    assert.ok(call.y + call.height <= steps.y + 1);
+    assert.equal(await p.locator(".callsign-search").count(), 0);
+    assert.equal(await p.locator(".frequency .frequency-nudges button").count(), 6);
+    const meter = await p.locator(".smeter-track").boundingBox();
     assert.ok(meter.width > 150);
   }
   results.push("360x800, 390x844, 844x390 no horizontal overflow");
