@@ -36,7 +36,7 @@ export function useSpectrumGesture(options: Options) {
   const latest = useRef(options);
   latest.current = options;
   const lastWheel = useRef(0);
-  const points = useRef(new Map<number, number>()),
+  const points = useRef(new Map<number, { x: number; y: number }>()),
     gesture = useRef<Gesture | null>(null);
   const position = (g: Gesture, x: number) =>
     g.view.start +
@@ -46,7 +46,7 @@ export function useSpectrumGesture(options: Options) {
     e.preventDefault();
     e.currentTarget.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
-    points.current.set(e.pointerId, e.clientX);
+    points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (points.current.size === 1) {
       const r = e.currentTarget.getBoundingClientRect();
       gesture.current = {
@@ -80,8 +80,8 @@ export function useSpectrumGesture(options: Options) {
       const [a, b] = [...points.current.values()];
       g.pinched = true;
       g.pinch = {
-        distance: Math.max(1, Math.abs(b - a)),
-        anchor: position(g, (a + b) / 2),
+        distance: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)),
+        anchor: position(g, (a.x + b.x) / 2),
         zoom: latest.current.zoom,
         span: latest.current.view.span,
       };
@@ -122,7 +122,7 @@ export function useSpectrumGesture(options: Options) {
   );
   function move(e: PointerEvent<HTMLElement>) {
     if (!points.current.has(e.pointerId) || !gesture.current) return;
-    points.current.set(e.pointerId, e.clientX);
+    points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const g = gesture.current;
     if (g.pinched) {
       if (points.current.size !== 2 || !g.pinch) return;
@@ -133,12 +133,15 @@ export function useSpectrumGesture(options: Options) {
         Math.min(
           latest.current.maxZoom,
           Math.round(
-            p.zoom + Math.log2(Math.max(1, Math.abs(b - a)) / p.distance),
+            p.zoom +
+              Math.log2(
+                Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)) / p.distance,
+              ),
           ),
         ),
       );
       const span = p.span / 2 ** (zoom - p.zoom),
-        fraction = ((a + b) / 2 - g.left) / g.width;
+        fraction = ((a.x + b.x) / 2 - g.left) / g.width;
       queue({ center: p.anchor - (fraction - 0.5) * span, zoom });
       return;
     }
