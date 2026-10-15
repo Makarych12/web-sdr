@@ -649,7 +649,11 @@ function App() {
           : new WebSocket(url);
       },
       onDiagnostic: (event) => {
-        if (event.type === "upstream_error" && event.code === "connection") {
+        if (
+          event.type === "upstream_error" &&
+          event.code === "connection" &&
+          event.failures === 2
+        ) {
           const id = receiverRef.current;
           if (
             availableReceivers.current.find((r) => r.id === id)?.directUrl &&
@@ -710,6 +714,8 @@ function App() {
   const chooseReceiver = useCallback(
     (id: string) => {
       failedReceivers.current.clear();
+      gatewayFallbackRef.current.delete(id);
+      setGatewayFallback([...gatewayFallbackRef.current]);
       setReceiverChange("Приёмник выбран вручную");
       renderer.current?.clear();
       requestedView.current = null;
@@ -984,7 +990,28 @@ function App() {
             {error}
           </div>
         )}
-        <section className={"tuner panel" + (connected ? " receiving" : "")}>
+        <section
+          className={"tuner panel" + (connected ? " receiving" : "")}
+          onKeyDown={(e) => {
+            if (
+              e.defaultPrevented ||
+              (e.target as HTMLElement).matches("input, select, textarea")
+            )
+              return;
+            if (
+              ["ArrowLeft", "ArrowRight", "PageUp", "PageDown"].includes(e.key)
+            ) {
+              e.preventDefault();
+              tune(
+                frequency +
+                  (["ArrowRight", "PageUp"].includes(e.key) ? 1 : -1) *
+                    step *
+                    (e.key.startsWith("Page") ? 10 : 1),
+              );
+              manager.current?.flushTune();
+            }
+          }}
+        >
           <div className="frequency">
             <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
             <FrequencyDigits
@@ -1075,6 +1102,10 @@ function App() {
               {(["Narrow", "Normal", "Wide"] as Preset[]).map((p) => (
                 <button
                   key={p}
+                  aria-pressed={
+                    cuts.lowCut === filterPreset(mode, p).lowCut &&
+                    cuts.highCut === filterPreset(mode, p).highCut
+                  }
                   onClick={() =>
                     tune(
                       frequency,

@@ -15,7 +15,11 @@
     "verify:ui": "node tests/ui-preview.mjs",
     "verify:production": "node tests/vercel-production.mjs",
     "verify:quality": "node tests/quality-production.mjs",
-    "verify:latency": "node tests/latency-browser.mjs"
+    "verify:latency": "node tests/latency-browser.mjs",
+    "verify:controls": "node tests/receiver-controls.mjs",
+    "verify:gestures": "node tests/receiver-gestures.mjs",
+    "verify:session": "node tests/receiver-session.mjs",
+    "verify:performance": "node tests/receiver-performance.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

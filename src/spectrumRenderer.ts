@@ -301,20 +301,27 @@ export class SpectrumRenderer {
     wc.fillStyle = "#03060b";
     wc.fillRect(0, 0, this.waterfall.width, this.waterfall.height);
     wc.imageSmoothingEnabled = false;
-    this.rowViews.forEach((view, y) => {
+    // Most rows share a range. Project contiguous runs with one draw call,
+    // keeping pan history without hundreds of canvas calls on every packet.
+    for (let y = 0; y < this.rowViews.length;) {
+      const view = this.rowViews[y];
+      let end = y + 1;
+      while (end < this.rowViews.length && sameView(this.rowViews[end], view))
+        end++;
       const p = projectView(view, this.view, this.waterfall.width);
       wc.drawImage(
         this.history,
         0,
         y,
         this.history.width,
-        1,
+        end - y,
         p.x,
         y,
         p.width,
-        1,
+        end - y,
       );
-    });
+      y = end;
+    }
     this.waterfall.dataset.frames = String(this.frames);
     const sc = this.spectrum.getContext("2d")!;
     sc.clearRect(0, 0, this.spectrum.width, this.spectrum.height);
@@ -370,8 +377,6 @@ export class SpectrumRenderer {
     line.addColorStop(1, "#5387ed");
     sc.strokeStyle = line;
     sc.lineWidth = 1.8;
-    sc.shadowColor = "#47d8e9";
-    sc.shadowBlur = 4;
     sc.stroke(trace);
     sc.shadowBlur = 0;
   }

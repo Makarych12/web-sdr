@@ -390,3 +390,35 @@
   border-radius: 5px;
   padding: 6px;
 }
+.filter-presets button[aria-pressed="true"] {
+  border-color: #68dbae;
+  color: #9efbd3;
+  background: #16352c;
+}
+.tuner.panel {
+  grid-template-columns: minmax(240px, 1fr) minmax(300px, 1fr);
+  grid-template-areas: "frequency mode" "steps mode" "meter meter";
+}
+.tuner .callsign-search {
+  position: static;
+  margin-top: 8px;
+}
+.tuner > .smeter {
+  width: 100%;
+  grid-template-columns: 110px minmax(0, 1fr);
+}
+.tuner .digital-frequency {
+  display: block;
+  white-space: nowrap;
+}
+.tuner .digital-frequency small {
+  margin-left: 8px;
+}
+@media (max-width: 700px) {
+  .tuner.panel {
+    display: flex;
+  }
+  .tuner > .smeter {
+    flex: 0 0 100%;
+  }
+}

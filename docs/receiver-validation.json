@@ -1,0 +1,17 @@
+{
+  "url": "https://web-sdr.vercel.app",
+  "started": "2026-10-15T08:13:47.582Z",
+  "finished": "2026-10-15T08:29:00.626Z",
+  "samples": 91,
+  "durationSeconds": 900.824,
+  "queueMs": {
+    "min": 121.8383955974782,
+    "mean": 283.36188820292847,
+    "max": 417.70560817315425
+  },
+  "underflowFrames": 53231,
+  "audioContexts": 1,
+  "liveSamples": 91,
+  "errors": [],
+  "note": "Long-run audio measurements precede final canvas/gesture/layout refinements; AudioWorklet unchanged."
+}

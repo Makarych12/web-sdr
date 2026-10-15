@@ -1,3 +1,4 @@
+import { stepFrequency } from "./tuning";
 import { useEffect, useRef } from "react";
 export function FrequencyDigits({
   hz,
@@ -18,14 +19,10 @@ export function FrequencyDigits({
       if (power === undefined || !e.deltaY) return;
       e.preventDefault();
       const v = latest.current;
-      v.hz = Math.max(
-        0,
-        Math.min(
-          30000000,
-          v.hz +
-            (e.deltaY < 0 ? 1 : -1) *
-              (e.shiftKey ? v.stepHz : 10 ** Number(power)),
-        ),
+      v.hz = stepFrequency(
+        v.hz,
+        e.shiftKey ? v.stepHz : 10 ** Number(power),
+        e.deltaY < 0 ? 1 : -1,
       );
       v.onTune(v.hz);
     };

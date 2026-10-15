@@ -22,6 +22,7 @@ type Options = {
 };
 type Gesture = {
   startX: number;
+  frequency: number;
   view: View;
   zoom: number;
   width: number;
@@ -36,6 +37,7 @@ export function useSpectrumGesture(options: Options) {
   const latest = useRef(options);
   latest.current = options;
   const lastWheel = useRef(0);
+  const lastTap = useRef({ at: 0, x: 0 });
   const points = useRef(new Map<number, { x: number; y: number }>()),
     gesture = useRef<Gesture | null>(null);
   const position = (g: Gesture, x: number) =>
@@ -51,6 +53,7 @@ export function useSpectrumGesture(options: Options) {
       const r = e.currentTarget.getBoundingClientRect();
       gesture.current = {
         startX: e.clientX,
+        frequency: latest.current.frequency,
         cuts: { ...latest.current.cuts },
         view: { ...latest.current.view },
         zoom: latest.current.zoom,
@@ -62,6 +65,7 @@ export function useSpectrumGesture(options: Options) {
             r.left + ((f - o.view.start) / o.view.span) * r.width;
           const low = px(o.frequency + o.cuts.lowCut / 1000),
             high = px(o.frequency + o.cuts.highCut / 1000);
+          if (Math.abs(e.clientX - px(o.frequency)) <= 4) return "tune";
           if (Math.abs(high - low) > 24) {
             if (Math.abs(e.clientX - low) < 12) return "low";
             if (Math.abs(e.clientX - high) < 12) return "high";
@@ -186,7 +190,8 @@ export function useSpectrumGesture(options: Options) {
       });
     else
       queue({
-        frequency: position(g, e.clientX),
+        frequency:
+          g.frequency + ((e.clientX - g.startX) / g.width) * g.view.span,
         center: g.view.start + g.view.span / 2,
       });
   }
@@ -198,16 +203,26 @@ export function useSpectrumGesture(options: Options) {
       flush();
       if (!cancelled && !g.pinched) {
         if (
-          (!g.moved &&
-            g.mode !== "low" &&
-            g.mode !== "high" &&
-            g.mode !== "band") ||
+          (!g.moved && g.mode !== "low" && g.mode !== "high") ||
           g.mode === "tune"
         )
           latest.current.onTune(
-            position(g, e.clientX),
+            g.moved && g.mode === "tune"
+              ? g.frequency + ((e.clientX - g.startX) / g.width) * g.view.span
+              : position(g, e.clientX),
             g.view.start + g.view.span / 2,
           );
+      }
+      if (!cancelled && !g.pinched && !g.moved && e.pointerType === "touch") {
+        const now = performance.now();
+        if (
+          now - lastTap.current.at < 320 &&
+          Math.abs(e.clientX - lastTap.current.x) < 20
+        ) {
+          const f = position(g, e.clientX);
+          latest.current.onTune(f, f);
+          lastTap.current = { at: 0, x: e.clientX };
+        } else lastTap.current = { at: now, x: e.clientX };
       }
       gesture.current = null;
       latest.current.onEnd();
