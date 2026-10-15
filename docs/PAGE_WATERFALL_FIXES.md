@@ -18,3 +18,5 @@ TEST_APP_URL=https://web-sdr.vercel.app TEST_ARTIFACT_DIR=artifacts/meter-produc
 ```
 
 Локальные и production-скриншоты и JSON-результаты сохраняются в ignored `artifacts/`.
+
+Дополнительная проверка DPR выявила оставшийся мобильный `min-height: 240px`, который перекрывал `height: 100%` при контейнере 220 px. Он явно отменён (`min-height: 0; max-height: 100%`). Теперь `verify:scroll` и `verify:20m` сравнивают фактическую высоту canvas с контейнером. Для `verify:20m` доступны `TEST_WIDTH`, `TEST_HEIGHT` и `TEST_DPR`; мобильные переходы диапазонов проверены при 390×844/DPR3.

@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 const base = process.env.TEST_APP_URL || "http://localhost:8787";
 const seconds = Number(process.env.TEST_SECONDS || 600);
+const width = Number(process.env.TEST_WIDTH || 1440),
+  height = Number(process.env.TEST_HEIGHT || 1000),
+  dpr = Number(process.env.TEST_DPR || 2);
 const dir = process.env.TEST_ARTIFACT_DIR || "artifacts/waterfall-20m";
 mkdirSync(dir, { recursive: true });
 const browser = await chromium.launch({
@@ -11,8 +14,8 @@ const browser = await chromium.launch({
   args: ["--no-sandbox"],
 });
 const page = await browser.newPage({
-  viewport: { width: 1440, height: 1000 },
-  deviceScaleFactor: 2,
+  viewport: { width, height },
+  deviceScaleFactor: dpr,
 });
 const report = {
   url: base,
@@ -103,6 +106,7 @@ async function sample(label) {
         height: c.height,
         cssWidth: rect.width,
         cssHeight: rect.height,
+        containerHeight: c.parentElement.clientHeight,
         dpr: devicePixelRatio,
       },
       closes: window.__wf.closes.length,
@@ -124,6 +128,7 @@ async function sample(label) {
   assert.equal(value.contextAlpha, false);
   assert.equal(value.smoothing, false);
   assert.equal(value.imageRendering, "pixelated");
+  assert.equal(value.canvas.cssHeight, value.canvas.containerHeight);
   assert.equal(value.opacity, "1");
   assert.equal(value.filter, "none");
   assert.equal(value.blend, "normal");
@@ -175,11 +180,9 @@ try {
     report.transitions.push(value);
     save();
     console.log("PASS", value.label, value.medianLuminance, value.noiseDb);
-    await page
-      .locator(".fall")
-      .screenshot({
-        path: `${dir}/transition-${report.transitions.length}-${band}m.png`,
-      });
+    await page.locator(".fall").screenshot({
+      path: `${dir}/transition-${report.transitions.length}-${band}m.png`,
+    });
   }
   report.holdStarted = new Date().toISOString();
   for (let elapsed = 0; elapsed <= seconds; elapsed += 10) {

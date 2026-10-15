@@ -57,16 +57,20 @@ try {
       { timeout: 90000 },
     );
     const canvas = page.locator(".fall canvas");
+    assert.ok(
+      await canvas.evaluate(
+        (e) => e.clientHeight === e.parentElement.clientHeight,
+      ),
+      "waterfall canvas must fit its container at every DPR",
+    );
     const state = () =>
-      page
-        .locator(".visual")
-        .evaluate((e) => ({
-          frequency: document.querySelector("#frequency").value,
-          start: +e.dataset.start,
-          span: +e.dataset.span,
-          zoom: +e.dataset.zoom,
-          cuts: document.querySelector(".filter-control small").textContent,
-        }));
+      page.locator(".visual").evaluate((e) => ({
+        frequency: document.querySelector("#frequency").value,
+        start: +e.dataset.start,
+        span: +e.dataset.span,
+        zoom: +e.dataset.zoom,
+        cuts: document.querySelector(".filter-control small").textContent,
+      }));
     async function ready() {
       await canvas.scrollIntoViewIfNeeded();
       await page.waitForTimeout(450);
