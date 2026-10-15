@@ -1,0 +1,154 @@
+{
+  "fixture": "Deterministic gateway signal levels; no generated signal in application code",
+  "widths": [
+    {
+      "width": 360,
+      "dialSizes": [
+        {
+          "width": 84,
+          "height": 84
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "stepsHz": [
+        1,
+        10,
+        100,
+        1000
+      ],
+      "inputMethods": [
+        "keyboard",
+        "wheel",
+        "mouse",
+        "touch"
+      ],
+      "signalLevels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "meterHeight": 88,
+      "maxGeometryShiftPx": 0
+    },
+    {
+      "width": 390,
+      "dialSizes": [
+        {
+          "width": 98,
+          "height": 98
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "stepsHz": [
+        1,
+        10,
+        100,
+        1000
+      ],
+      "inputMethods": [
+        "keyboard",
+        "wheel",
+        "mouse",
+        "touch"
+      ],
+      "signalLevels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "meterHeight": 88,
+      "maxGeometryShiftPx": 0
+    },
+    {
+      "width": 768,
+      "dialSizes": [
+        {
+          "width": 140,
+          "height": 140
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "stepsHz": [
+        1,
+        10,
+        100,
+        1000
+      ],
+      "inputMethods": [
+        "keyboard",
+        "wheel",
+        "mouse",
+        "touch"
+      ],
+      "signalLevels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "meterHeight": 88,
+      "maxGeometryShiftPx": 0
+    },
+    {
+      "width": 1440,
+      "dialSizes": [
+        {
+          "width": 164,
+          "height": 164
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "stepsHz": [
+        1,
+        10,
+        100,
+        1000
+      ],
+      "inputMethods": [
+        "keyboard",
+        "wheel",
+        "mouse",
+        "touch"
+      ],
+      "signalLevels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "meterHeight": 76,
+      "maxGeometryShiftPx": 0
+    }
+  ],
+  "errors": [],
+  "unitTests": {
+    "pass": 73,
+    "fail": 0
+  }
+}

@@ -12,7 +12,11 @@ export function SMeter({ rssi }: { rssi: number | null }) {
       const v = target.current;
       if (v === null) {
         level.current = peak.current = -127;
-        setDisplay((previous) => previous.level === -127 && previous.peak === -127 ? previous : { level: -127, peak: -127 });
+        setDisplay((previous) =>
+          previous.level === -127 && previous.peak === -127
+            ? previous
+            : { level: -127, peak: -127 },
+        );
         return;
       }
       level.current += (v - level.current) * (v > level.current ? 0.7 : 0.12);
@@ -26,6 +30,7 @@ export function SMeter({ rssi }: { rssi: number | null }) {
     }, 80);
     return () => clearInterval(id);
   }, []);
+  const displayDb = Math.round(display.level * 10) / 10;
   const percent = (value: number) =>
     Math.max(0, Math.min(100, ((value + 127) / 114) * 100));
   return (
@@ -33,7 +38,9 @@ export function SMeter({ rssi }: { rssi: number | null }) {
       <div className="smeter-top">
         <label>S-METER</label>
         <strong>
-          {rssi === null ? "—" : signalLabel(display.level)}{" "}
+          <span className="smeter-value">
+            {rssi === null ? "—" : signalLabel(displayDb)}
+          </span>
           <small>
             {rssi === null ? "Нет сигнала" : `${display.level.toFixed(1)} dBm`}
           </small>
@@ -49,7 +56,7 @@ export function SMeter({ rssi }: { rssi: number | null }) {
         aria-valuetext={
           rssi === null
             ? "Нет подключения"
-            : `${signalLabel(display.level)}, ${display.level.toFixed(1)} dBm`
+            : `${signalLabel(displayDb)}, ${display.level.toFixed(1)} dBm`
         }
       >
         <div

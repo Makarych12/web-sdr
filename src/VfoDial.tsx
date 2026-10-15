@@ -1,19 +1,20 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { PointerEvent } from "react";
+import { stepFrequency } from "./tuning";
 export function VfoDial({
-  frequency,
-  step,
+  frequencyHz,
+  stepHz,
   onTune,
   onEnd,
   label = "VFO — ручка настройки",
 }: {
-  frequency: number;
-  step: number;
-  onTune: (f: number) => void;
+  frequencyHz: number;
+  stepHz: number;
+  onTune: (frequencyHz: number) => void;
   onEnd: () => void;
   label?: string;
 }) {
-  const previousFrequency = useRef(frequency);
+  const previousFrequency = useRef(frequencyHz);
   const motion = useRef({
     angle: 0,
     target: 0,
@@ -70,24 +71,34 @@ export function VfoDial({
     };
   }, []);
   useLayoutEffect(() => {
-    // Both values use kHz. Keep the angle unwrapped across whole revolutions.
+    // Both values use integer Hz. Keep the angle unwrapped across whole revolutions.
     motion.current.target +=
-      ((frequency - previousFrequency.current) / step) * 6;
-    previousFrequency.current = frequency;
+      ((frequencyHz - previousFrequency.current) / stepHz) * 6;
+    previousFrequency.current = frequencyHz;
     scheduleRotation();
-  }, [frequency, step]);
+  }, [frequencyHz, stepHz]);
   const dial = useRef<HTMLDivElement>(null);
-  const latest = useRef({ frequency, step, onTune, onEnd });
-  latest.current = { frequency, step, onTune, onEnd };
+  const latest = useRef({ frequencyHz, stepHz, onTune, onEnd });
+  latest.current = { frequencyHz, stepHz, onTune, onEnd };
   function nudge(ticks: number) {
     const v = latest.current;
-    // Pointer/wheel events can arrive before React renders the next frequency.
-    v.frequency =
-      Math.round(
-        Math.max(0, Math.min(30000, v.frequency + ticks * v.step)) * 1000,
-      ) / 1000;
-    v.onTune(v.frequency);
+    // Apply integer ticks to the shared VFO; App commits the result synchronously.
+    v.onTune(stepFrequency(v.frequencyHz, v.stepHz, ticks));
   }
+  const pendingTicks = useRef(0),
+    tuneFrame = useRef(0);
+  function flushTicks() {
+    cancelAnimationFrame(tuneFrame.current);
+    tuneFrame.current = 0;
+    const ticks = pendingTicks.current;
+    pendingTicks.current = 0;
+    if (ticks) nudge(ticks);
+  }
+  function finish() {
+    flushTicks();
+    latest.current.onEnd();
+  }
+  useEffect(() => () => cancelAnimationFrame(tuneFrame.current), []);
   useEffect(() => {
     const element = dial.current!;
     const wheel = (event: WheelEvent) => {
@@ -95,6 +106,7 @@ export function VfoDial({
       event.preventDefault();
       const sign = event.deltaY < 0 ? 1 : -1;
       nudge(sign);
+      latest.current.onEnd();
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
@@ -120,7 +132,9 @@ export function VfoDial({
     const ticks = Math.trunc(d.carry / 6);
     if (ticks) {
       d.carry -= ticks * 6;
-      nudge(ticks);
+      pendingTicks.current += ticks;
+      if (!tuneFrame.current)
+        tuneFrame.current = requestAnimationFrame(flushTicks);
     }
   }
   return (
@@ -133,10 +147,11 @@ export function VfoDial({
         aria-label={label}
         aria-valuemin={0}
         aria-valuemax={30000000}
-        aria-valuenow={Math.round(frequency * 1000)}
-        aria-valuetext={`${Math.round(frequency * 1000)} Hz; шаг ${step * 1000} Hz`}
+        aria-valuenow={frequencyHz}
+        aria-valuetext={`${frequencyHz} Hz; шаг ${stepHz} Hz`}
         onPointerDown={(e) => {
-          if (e.pointerType === "mouse" && e.button !== 0) return;
+          if ((e.pointerType === "mouse" && e.button !== 0) || drag.current)
+            return;
           e.preventDefault();
           e.currentTarget.focus({ preventScroll: true });
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -155,16 +170,19 @@ export function VfoDial({
         onPointerUp={(e) => {
           if (drag.current?.id !== e.pointerId) return;
           drag.current = null;
-          latest.current.onEnd();
+          finish();
+          if (e.currentTarget.hasPointerCapture(e.pointerId))
+            e.currentTarget.releasePointerCapture(e.pointerId);
         }}
-        onPointerCancel={() => {
+        onPointerCancel={(e) => {
+          if (drag.current?.id !== e.pointerId) return;
           drag.current = null;
-          latest.current.onEnd();
+          finish();
         }}
-        onLostPointerCapture={() => {
-          if (drag.current) {
+        onLostPointerCapture={(e) => {
+          if (drag.current?.id === e.pointerId) {
             drag.current = null;
-            latest.current.onEnd();
+            finish();
           }
         }}
         onKeyDown={(e) => {
@@ -185,7 +203,7 @@ export function VfoDial({
             : -1;
           const mult = e.key.startsWith("Page") ? 10 : 1;
           nudge(sign * mult);
-          latest.current.onEnd();
+          finish();
         }}
       >
         <div className="vfo-face">
@@ -193,7 +211,7 @@ export function VfoDial({
         </div>
         <span>VFO</span>
       </div>
-      <small>Поверните ручку · {step * 1000} Hz / шаг</small>
+      <small>Поверните ручку · {stepHz} Hz / шаг</small>
     </div>
   );
 }

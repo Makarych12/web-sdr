@@ -28,13 +28,11 @@ try {
   const x = (f) => b.x + b.width * f;
   const cdp = await context.newCDPSession(page);
   const view = () =>
-    page
-      .locator(".visual")
-      .evaluate((e) => ({
-        start: +e.dataset.start,
-        span: +e.dataset.span,
-        zoom: +e.dataset.zoom,
-      }));
+    page.locator(".visual").evaluate((e) => ({
+      start: +e.dataset.start,
+      span: +e.dataset.span,
+      zoom: +e.dataset.zoom,
+    }));
   async function touch(from, to) {
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
@@ -65,7 +63,10 @@ try {
   assert.equal(await field.inputValue(), f);
   assert.ok(Math.abs((await view()).start - v.start - v.span * 0.2) < 0.01);
   checks.push("background touch pans without tuning");
-  await page.getByRole("button", { name: "К частоте", exact: true }).click();
+  await page
+    .locator(".gesture-toolbar")
+    .getByRole("button", { name: "К частоте", exact: true })
+    .click();
   v = await view();
   f = await field.inputValue();
   await touch(0.5, 0.55);

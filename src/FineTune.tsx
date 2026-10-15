@@ -1,28 +1,29 @@
+import { stepFrequency } from "./tuning";
 import { VfoDial } from "./VfoDial";
 
 export function FineTune({
-  frequency,
-  step,
+  frequencyHz,
+  stepHz,
   onTune,
   onEnd,
-  viewCenter,
+  viewCenterHz,
   zoom,
   maxZoom,
   onRecenter,
   onZoom,
 }: {
-  frequency: number;
-  step: number;
-  onTune: (frequency: number) => void;
+  frequencyHz: number;
+  stepHz: number;
+  onTune: (frequencyHz: number) => void;
   onEnd: () => void;
-  viewCenter: number;
+  viewCenterHz: number;
   zoom: number;
   maxZoom: number;
   onRecenter: () => void;
   onZoom: (zoom: number) => void;
 }) {
   function nudge(steps: number) {
-    onTune(frequency + steps * step);
+    onTune(stepFrequency(frequencyHz, stepHz, steps));
     onEnd();
   }
   return (
@@ -30,10 +31,9 @@ export function FineTune({
       <div className="fine-readout">
         <label>ТОЧНАЯ ПОДСТРОЙКА · VFO A</label>
         <output aria-label="Частота точной подстройки">
-          {Math.round(frequency * 1000).toLocaleString("de-DE")}{" "}
-          <small>Hz</small>
+          {frequencyHz.toLocaleString("de-DE")} <small>Hz</small>
         </output>
-        <small>Шаг {step * 1000} Hz · ← / → · PageDown / PageUp</small>
+        <small>Шаг {stepHz} Hz · ← / → · PageDown / PageUp</small>
       </div>
       <div className="fine-buttons">
         <div className="fine-primary">
@@ -43,7 +43,7 @@ export function FineTune({
           >
             <b>−</b>
             <span>
-              Частота − шаг<small>−{step * 1000} Hz</small>
+              Частота − шаг<small>−{stepHz} Hz</small>
             </span>
           </button>
           <button
@@ -52,7 +52,7 @@ export function FineTune({
           >
             <b>+</b>
             <span>
-              Частота + шаг<small>+{step * 1000} Hz</small>
+              Частота + шаг<small>+{stepHz} Hz</small>
             </span>
           </button>
         </div>
@@ -77,7 +77,7 @@ export function FineTune({
           <button
             aria-label="Настроиться на центр обзора"
             onClick={() => {
-              onTune(viewCenter);
+              onTune(viewCenterHz);
               onEnd();
             }}
           >
@@ -100,8 +100,8 @@ export function FineTune({
         </div>
       </div>
       <VfoDial
-        frequency={frequency}
-        step={step}
+        frequencyHz={frequencyHz}
+        stepHz={stepHz}
         onTune={onTune}
         onEnd={onEnd}
         label="VFO — точная подстройка"

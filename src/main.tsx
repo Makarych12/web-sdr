@@ -15,6 +15,8 @@ import {
   type Preset,
 } from "./tuning";
 import { FrequencyDigits } from "./FrequencyDigits";
+import { VfoDial } from "./VfoDial";
+import { FineTune } from "./FineTune";
 import { StepControl } from "./StepControl";
 import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
@@ -1059,6 +1061,12 @@ function App() {
             </form>
             <CallsignSearch />
           </div>
+          <VfoDial
+            frequencyHz={frequencyHz}
+            stepHz={Math.round(step * 1000)}
+            onTune={(hz) => tune(hz / 1000)}
+            onEnd={() => manager.current?.flushTune()}
+          />
           <div className="steps">
             <StepControl step={step} onChange={setStep} />
             <button
@@ -1383,6 +1391,17 @@ function App() {
               </div>
             )}
           </div>
+          <FineTune
+            frequencyHz={frequencyHz}
+            stepHz={Math.round(step * 1000)}
+            onTune={(hz) => tune(hz / 1000)}
+            onEnd={() => manager.current?.flushTune()}
+            viewCenterHz={Math.round((view.start + view.span / 2) * 1000)}
+            zoom={zoom}
+            maxZoom={maxZoom}
+            onRecenter={() => changeView(frequency, zoom)}
+            onZoom={changeZoom}
+          />
           <div className="visual-foot">
             <span>Касание — частота · два пальца — масштаб</span>
             <span>

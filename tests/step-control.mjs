@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-const steps = [0.001, 0.01, 0.1, 1, 5, 10];
+const steps = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10];
 export async function selectStep(page, step) {
   const target = steps.indexOf(Number(step));
   assert.notEqual(target, -1, "known tuning step");
