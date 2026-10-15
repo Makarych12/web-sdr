@@ -1,0 +1,1193 @@
+{
+  "runtimeCommit": "230b1618b038d158ed390962b89f1aa2d9d9c1ca",
+  "url": "https://web-sdr.vercel.app",
+  "holdStarted": "2026-10-15T09:34:20.567Z",
+  "finished": "2026-10-15T09:44:21.523Z",
+  "seconds": 600,
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "dpr": 3
+  },
+  "transitions": [
+    {
+      "label": "40m transition 1",
+      "medianLuminance": 25.426199999999998,
+      "grayFraction": 0,
+      "noiseDb": -101.08,
+      "minAlpha": 255,
+      "packets": 5,
+      "audioPackets": 17,
+      "audioPacketAgeMs": 47,
+      "audioRms": 0.022797218770229728,
+      "closes": 0
+    },
+    {
+      "label": "20m transition 2",
+      "medianLuminance": 29.0772,
+      "grayFraction": 0,
+      "noiseDb": -98.04,
+      "minAlpha": 255,
+      "packets": 11,
+      "audioPackets": 32,
+      "audioPacketAgeMs": 68,
+      "audioRms": 0.03271925285602404,
+      "closes": 0
+    },
+    {
+      "label": "15m transition 3",
+      "medianLuminance": 29.005000000000003,
+      "grayFraction": 0,
+      "noiseDb": -102,
+      "minAlpha": 255,
+      "packets": 16,
+      "audioPackets": 45,
+      "audioPacketAgeMs": 37,
+      "audioRms": 0.033642240255872875,
+      "closes": 0
+    },
+    {
+      "label": "20m transition 4",
+      "medianLuminance": 29.0772,
+      "grayFraction": 0,
+      "noiseDb": -98.04,
+      "minAlpha": 255,
+      "packets": 21,
+      "audioPackets": 58,
+      "audioPacketAgeMs": 57,
+      "audioRms": 0.06325702594964451,
+      "closes": 0
+    }
+  ],
+  "samples": [
+    {
+      "label": "20m 0s",
+      "medianLuminance": 33.1586,
+      "grayFraction": 0,
+      "noiseDb": -98,
+      "minAlpha": 255,
+      "packets": 22,
+      "audioPackets": 62,
+      "audioPacketAgeMs": 18,
+      "audioRms": 0.06978205559767262,
+      "closes": 0
+    },
+    {
+      "label": "20m 10s",
+      "medianLuminance": 33.230799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.13,
+      "minAlpha": 255,
+      "packets": 110,
+      "audioPackets": 296,
+      "audioPacketAgeMs": 14,
+      "audioRms": 0.06372925057741984,
+      "closes": 0
+    },
+    {
+      "label": "20m 20s",
+      "medianLuminance": 30.652,
+      "grayFraction": 0,
+      "noiseDb": -98.32,
+      "minAlpha": 255,
+      "packets": 200,
+      "audioPackets": 530,
+      "audioPacketAgeMs": 65,
+      "audioRms": 0.057069326752379655,
+      "closes": 0
+    },
+    {
+      "label": "20m 30s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.23,
+      "minAlpha": 255,
+      "packets": 290,
+      "audioPackets": 764,
+      "audioPacketAgeMs": 101,
+      "audioRms": 0.05980839187572345,
+      "closes": 0
+    },
+    {
+      "label": "20m 40s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.26,
+      "minAlpha": 255,
+      "packets": 383,
+      "audioPackets": 1000,
+      "audioPacketAgeMs": 37,
+      "audioRms": 0.060940576362186624,
+      "closes": 0
+    },
+    {
+      "label": "20m 50s",
+      "medianLuminance": 25.498399999999997,
+      "grayFraction": 0,
+      "noiseDb": -98.17,
+      "minAlpha": 255,
+      "packets": 476,
+      "audioPackets": 1232,
+      "audioPacketAgeMs": 114,
+      "audioRms": 0.059434468228446884,
+      "closes": 0
+    },
+    {
+      "label": "20m 60s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.17,
+      "minAlpha": 255,
+      "packets": 603,
+      "audioPackets": 1468,
+      "audioPacketAgeMs": 52,
+      "audioRms": 0.05954861186151742,
+      "closes": 0
+    },
+    {
+      "label": "20m 70s",
+      "medianLuminance": 26.285799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.36,
+      "minAlpha": 255,
+      "packets": 730,
+      "audioPackets": 1702,
+      "audioPacketAgeMs": 75,
+      "audioRms": 0.06925121431708393,
+      "closes": 0
+    },
+    {
+      "label": "20m 80s",
+      "medianLuminance": 29.7924,
+      "grayFraction": 0,
+      "noiseDb": -98.13,
+      "minAlpha": 255,
+      "packets": 857,
+      "audioPackets": 1936,
+      "audioPacketAgeMs": 118,
+      "audioRms": 0.06650796834912444,
+      "closes": 0
+    },
+    {
+      "label": "20m 90s",
+      "medianLuminance": 33.230799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.09,
+      "minAlpha": 255,
+      "packets": 984,
+      "audioPackets": 2173,
+      "audioPacketAgeMs": 6,
+      "audioRms": 0.06410123234998125,
+      "closes": 0
+    },
+    {
+      "label": "20m 100s",
+      "medianLuminance": 33.230799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.13,
+      "minAlpha": 255,
+      "packets": 1111,
+      "audioPackets": 2407,
+      "audioPacketAgeMs": 22,
+      "audioRms": 0.06853713111572933,
+      "closes": 0
+    },
+    {
+      "label": "20m 110s",
+      "medianLuminance": 25.426199999999998,
+      "grayFraction": 0,
+      "noiseDb": -98.1,
+      "minAlpha": 255,
+      "packets": 1238,
+      "audioPackets": 2641,
+      "audioPacketAgeMs": 48,
+      "audioRms": 0.06643622954996567,
+      "closes": 0
+    },
+    {
+      "label": "20m 120s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.26,
+      "minAlpha": 255,
+      "packets": 1364,
+      "audioPackets": 2876,
+      "audioPacketAgeMs": 22,
+      "audioRms": 0.06879255681523361,
+      "closes": 0
+    },
+    {
+      "label": "20m 130s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.21,
+      "minAlpha": 255,
+      "packets": 1492,
+      "audioPackets": 3110,
+      "audioPacketAgeMs": 50,
+      "audioRms": 0.05937909028440811,
+      "closes": 0
+    },
+    {
+      "label": "20m 140s",
+      "medianLuminance": 25.354,
+      "grayFraction": 0,
+      "noiseDb": -97.98,
+      "minAlpha": 255,
+      "packets": 1618,
+      "audioPackets": 3345,
+      "audioPacketAgeMs": 45,
+      "audioRms": 0.06655282222031632,
+      "closes": 0
+    },
+    {
+      "label": "20m 150s",
+      "medianLuminance": 33.1586,
+      "grayFraction": 0,
+      "noiseDb": -97.99,
+      "minAlpha": 255,
+      "packets": 1745,
+      "audioPackets": 3579,
+      "audioPacketAgeMs": 26,
+      "audioRms": 0.07164669654346068,
+      "closes": 0
+    },
+    {
+      "label": "20m 160s",
+      "medianLuminance": 26.213599999999996,
+      "grayFraction": 0,
+      "noiseDb": -98.18,
+      "minAlpha": 255,
+      "packets": 1872,
+      "audioPackets": 3814,
+      "audioPacketAgeMs": 24,
+      "audioRms": 0.06632143243443604,
+      "closes": 0
+    },
+    {
+      "label": "20m 170s",
+      "medianLuminance": 29.7924,
+      "grayFraction": 0,
+      "noiseDb": -98.11,
+      "minAlpha": 255,
+      "packets": 1998,
+      "audioPackets": 4046,
+      "audioPacketAgeMs": 153,
+      "audioRms": 0.0724938366238589,
+      "closes": 0
+    },
+    {
+      "label": "20m 180s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.19,
+      "minAlpha": 255,
+      "packets": 2126,
+      "audioPackets": 4283,
+      "audioPacketAgeMs": 51,
+      "audioRms": 0.0680289824764105,
+      "closes": 0
+    },
+    {
+      "label": "20m 190s",
+      "medianLuminance": 26.285799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.29,
+      "minAlpha": 255,
+      "packets": 2253,
+      "audioPackets": 4518,
+      "audioPacketAgeMs": 59,
+      "audioRms": 0.06310957739027859,
+      "closes": 0
+    },
+    {
+      "label": "20m 200s",
+      "medianLuminance": 33.1586,
+      "grayFraction": 0,
+      "noiseDb": -98,
+      "minAlpha": 255,
+      "packets": 2380,
+      "audioPackets": 4753,
+      "audioPacketAgeMs": 43,
+      "audioRms": 0.0640627600026486,
+      "closes": 0
+    },
+    {
+      "label": "20m 210s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.17,
+      "minAlpha": 255,
+      "packets": 2507,
+      "audioPackets": 4987,
+      "audioPacketAgeMs": 29,
+      "audioRms": 0.06254624933665118,
+      "closes": 0
+    },
+    {
+      "label": "20m 220s",
+      "medianLuminance": 34.0182,
+      "grayFraction": 0,
+      "noiseDb": -98.24,
+      "minAlpha": 255,
+      "packets": 2634,
+      "audioPackets": 5222,
+      "audioPacketAgeMs": 6,
+      "audioRms": 0.06710003130324116,
+      "closes": 0
+    },
+    {
+      "label": "20m 230s",
+      "medianLuminance": 36.737399999999994,
+      "grayFraction": 0,
+      "noiseDb": -97.91,
+      "minAlpha": 255,
+      "packets": 2760,
+      "audioPackets": 5457,
+      "audioPacketAgeMs": 26,
+      "audioRms": 0.06619731929153531,
+      "closes": 0
+    },
+    {
+      "label": "20m 240s",
+      "medianLuminance": 29.0772,
+      "grayFraction": 0,
+      "noiseDb": -98.02,
+      "minAlpha": 255,
+      "packets": 2887,
+      "audioPackets": 5691,
+      "audioPacketAgeMs": 19,
+      "audioRms": 0.06894942560586469,
+      "closes": 0
+    },
+    {
+      "label": "20m 250s",
+      "medianLuminance": 34.0182,
+      "grayFraction": 0,
+      "noiseDb": -98.27,
+      "minAlpha": 255,
+      "packets": 3014,
+      "audioPackets": 5925,
+      "audioPacketAgeMs": 27,
+      "audioRms": 0.06403135651709081,
+      "closes": 0
+    },
+    {
+      "label": "20m 260s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.19,
+      "minAlpha": 255,
+      "packets": 3141,
+      "audioPackets": 6161,
+      "audioPacketAgeMs": 41,
+      "audioRms": 0.06514612241810501,
+      "closes": 0
+    },
+    {
+      "label": "20m 270s",
+      "medianLuminance": 29.7924,
+      "grayFraction": 0,
+      "noiseDb": -98.14,
+      "minAlpha": 255,
+      "packets": 3268,
+      "audioPackets": 6395,
+      "audioPacketAgeMs": 53,
+      "audioRms": 0.07067419829952891,
+      "closes": 0
+    },
+    {
+      "label": "20m 280s",
+      "medianLuminance": 22.634800000000002,
+      "grayFraction": 0,
+      "noiseDb": -98.37,
+      "minAlpha": 255,
+      "packets": 3395,
+      "audioPackets": 6629,
+      "audioPacketAgeMs": 84,
+      "audioRms": 0.06296506211877219,
+      "closes": 0
+    },
+    {
+      "label": "20m 290s",
+      "medianLuminance": 36.737399999999994,
+      "grayFraction": 0,
+      "noiseDb": -97.89,
+      "minAlpha": 255,
+      "packets": 3523,
+      "audioPackets": 6865,
+      "audioPacketAgeMs": 43,
+      "audioRms": 0.06684746332019635,
+      "closes": 0
+    },
+    {
+      "label": "20m 300s",
+      "medianLuminance": 29.7924,
+      "grayFraction": 0,
+      "noiseDb": -98.09,
+      "minAlpha": 255,
+      "packets": 3650,
+      "audioPackets": 7099,
+      "audioPacketAgeMs": 38,
+      "audioRms": 0.06654905293245353,
+      "closes": 0
+    },
+    {
+      "label": "20m 310s",
+      "medianLuminance": 33.303,
+      "grayFraction": 0,
+      "noiseDb": -98.18,
+      "minAlpha": 255,
+      "packets": 3776,
+      "audioPackets": 7332,
+      "audioPacketAgeMs": 107,
+      "audioRms": 0.05740656965155041,
+      "closes": 0
+    },
+    {
+      "label": "20m 320s",
+      "medianLuminance": 29.7924,
+      "grayFraction": 0,
+      "noiseDb": -98.14,
+      "minAlpha": 255,
+      "packets": 3903,
+      "audioPackets": 7566,
+      "audioPacketAgeMs": 123,
+      "audioRms": 0.06720630233579632,
+      "closes": 0
+    },
+    {
+      "label": "20m 330s",
+      "medianLuminance": 29.005000000000003,
+      "grayFraction": 0,
+      "noiseDb": -97.98,
+      "minAlpha": 255,
+      "packets": 4031,
+      "audioPackets": 7803,
+      "audioPacketAgeMs": 38,
+      "audioRms": 0.05763675094239259,
+      "closes": 0
+    },
+    {
+      "label": "20m 340s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.19,
+      "minAlpha": 255,
+      "packets": 4158,
+      "audioPackets": 8038,
+      "audioPacketAgeMs": 13,
+      "audioRms": 0.06323056073813373,
+      "closes": 0
+    },
+    {
+      "label": "20m 350s",
+      "medianLuminance": 32.4434,
+      "grayFraction": 0,
+      "noiseDb": -97.92,
+      "minAlpha": 255,
+      "packets": 4285,
+      "audioPackets": 8272,
+      "audioPacketAgeMs": 107,
+      "audioRms": 0.06117514848861432,
+      "closes": 0
+    },
+    {
+      "label": "20m 360s",
+      "medianLuminance": 25.498399999999997,
+      "grayFraction": 0,
+      "noiseDb": -98.17,
+      "minAlpha": 255,
+      "packets": 4411,
+      "audioPackets": 8508,
+      "audioPacketAgeMs": 40,
+      "audioRms": 0.07237394648947944,
+      "closes": 0
+    },
+    {
+      "label": "20m 370s",
+      "medianLuminance": 33.303,
+      "grayFraction": 0,
+      "noiseDb": -98.17,
+      "minAlpha": 255,
+      "packets": 4538,
+      "audioPackets": 8742,
+      "audioPacketAgeMs": 30,
+      "audioRms": 0.0734050073649761,
+      "closes": 0
+    },
+    {
+      "label": "20m 380s",
+      "medianLuminance": 30.652,
+      "grayFraction": 0,
+      "noiseDb": -98.3,
+      "minAlpha": 255,
+      "packets": 4665,
+      "audioPackets": 8977,
+      "audioPacketAgeMs": 9,
+      "audioRms": 0.06611673287142798,
+      "closes": 0
+    },
+    {
+      "label": "20m 390s",
+      "medianLuminance": 33.303,
+      "grayFraction": 0,
+      "noiseDb": -98.2,
+      "minAlpha": 255,
+      "packets": 4792,
+      "audioPackets": 9211,
+      "audioPacketAgeMs": 23,
+      "audioRms": 0.06813676275043143,
+      "closes": 0
+    },
+    {
+      "label": "20m 400s",
+      "medianLuminance": 29.936799999999998,
+      "grayFraction": 0,
+      "noiseDb": -98.29,
+      "minAlpha": 255,
+      "packets": 4918,
+      "audioPackets": 9446,
+      "audioPacketAgeMs": 45,
+      "audioRms": 0.06453285692906702,
+      "closes": 0
+    },
+    {
+      "label": "20m 410s",
+      "medianLuminance": 26.285799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.36,
+      "minAlpha": 255,
+      "packets": 5045,
+      "audioPackets": 9679,
+      "audioPacketAgeMs": 52,
+      "audioRms": 0.0651732278803463,
+      "closes": 0
+    },
+    {
+      "label": "20m 420s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.17,
+      "minAlpha": 255,
+      "packets": 5172,
+      "audioPackets": 9913,
+      "audioPacketAgeMs": 78,
+      "audioRms": 0.06497071276280786,
+      "closes": 0
+    },
+    {
+      "label": "20m 430s",
+      "medianLuminance": 29.936799999999998,
+      "grayFraction": 0,
+      "noiseDb": -98.28,
+      "minAlpha": 255,
+      "packets": 5299,
+      "audioPackets": 10148,
+      "audioPacketAgeMs": 85,
+      "audioRms": 0.06116495515201736,
+      "closes": 0
+    },
+    {
+      "label": "20m 440s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.22,
+      "minAlpha": 255,
+      "packets": 5425,
+      "audioPackets": 10382,
+      "audioPacketAgeMs": 124,
+      "audioRms": 0.06278673489228714,
+      "closes": 0
+    },
+    {
+      "label": "20m 450s",
+      "medianLuminance": 30.652,
+      "grayFraction": 0,
+      "noiseDb": -98.31,
+      "minAlpha": 255,
+      "packets": 5553,
+      "audioPackets": 10619,
+      "audioPacketAgeMs": 2,
+      "audioRms": 0.0724783696665128,
+      "closes": 0
+    },
+    {
+      "label": "20m 460s",
+      "medianLuminance": 34.0182,
+      "grayFraction": 0,
+      "noiseDb": -98.2,
+      "minAlpha": 255,
+      "packets": 5680,
+      "audioPackets": 10853,
+      "audioPacketAgeMs": 47,
+      "audioRms": 0.06604747972302226,
+      "closes": 0
+    },
+    {
+      "label": "20m 470s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.15,
+      "minAlpha": 255,
+      "packets": 5807,
+      "audioPackets": 11088,
+      "audioPacketAgeMs": 9,
+      "audioRms": 0.06612316790166065,
+      "closes": 0
+    },
+    {
+      "label": "20m 480s",
+      "medianLuminance": 34.0182,
+      "grayFraction": 0,
+      "noiseDb": -98.21,
+      "minAlpha": 255,
+      "packets": 5934,
+      "audioPackets": 11322,
+      "audioPacketAgeMs": 7,
+      "audioRms": 0.07157472098524988,
+      "closes": 0
+    },
+    {
+      "label": "20m 490s",
+      "medianLuminance": 34.0182,
+      "grayFraction": 0,
+      "noiseDb": -98.2,
+      "minAlpha": 255,
+      "packets": 6061,
+      "audioPackets": 11556,
+      "audioPacketAgeMs": 71,
+      "audioRms": 0.06499132579085976,
+      "closes": 0
+    },
+    {
+      "label": "20m 500s",
+      "medianLuminance": 29.0772,
+      "grayFraction": 0,
+      "noiseDb": -98.06,
+      "minAlpha": 255,
+      "packets": 6188,
+      "audioPackets": 11792,
+      "audioPacketAgeMs": 40,
+      "audioRms": 0.06796001813618381,
+      "closes": 0
+    },
+    {
+      "label": "20m 510s",
+      "medianLuminance": 29.7924,
+      "grayFraction": 0,
+      "noiseDb": -98.12,
+      "minAlpha": 255,
+      "packets": 6315,
+      "audioPackets": 12026,
+      "audioPacketAgeMs": 64,
+      "audioRms": 0.06040291989217757,
+      "closes": 0
+    },
+    {
+      "label": "20m 520s",
+      "medianLuminance": 33.230799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.08,
+      "minAlpha": 255,
+      "packets": 6441,
+      "audioPackets": 12259,
+      "audioPacketAgeMs": 89,
+      "audioRms": 0.06797597351206255,
+      "closes": 0
+    },
+    {
+      "label": "20m 530s",
+      "medianLuminance": 30.652,
+      "grayFraction": 0,
+      "noiseDb": -98.33,
+      "minAlpha": 255,
+      "packets": 6568,
+      "audioPackets": 12493,
+      "audioPacketAgeMs": 135,
+      "audioRms": 0.07193355608912658,
+      "closes": 0
+    },
+    {
+      "label": "20m 540s",
+      "medianLuminance": 26.285799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.31,
+      "minAlpha": 255,
+      "packets": 6697,
+      "audioPackets": 12730,
+      "audioPacketAgeMs": 89,
+      "audioRms": 0.07031583928186443,
+      "closes": 0
+    },
+    {
+      "label": "20m 550s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.2,
+      "minAlpha": 255,
+      "packets": 6824,
+      "audioPackets": 12965,
+      "audioPacketAgeMs": 40,
+      "audioRms": 0.07608216962991173,
+      "closes": 0
+    },
+    {
+      "label": "20m 560s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.21,
+      "minAlpha": 255,
+      "packets": 6950,
+      "audioPackets": 13200,
+      "audioPacketAgeMs": 60,
+      "audioRms": 0.06331460294120361,
+      "closes": 0
+    },
+    {
+      "label": "20m 570s",
+      "medianLuminance": 34.0182,
+      "grayFraction": 0,
+      "noiseDb": -98.25,
+      "minAlpha": 255,
+      "packets": 7076,
+      "audioPackets": 13435,
+      "audioPacketAgeMs": 49,
+      "audioRms": 0.06665870406739029,
+      "closes": 0
+    },
+    {
+      "label": "20m 580s",
+      "medianLuminance": 26.285799999999995,
+      "grayFraction": 0,
+      "noiseDb": -98.34,
+      "minAlpha": 255,
+      "packets": 7203,
+      "audioPackets": 13670,
+      "audioPacketAgeMs": 42,
+      "audioRms": 0.06338278935042035,
+      "closes": 0
+    },
+    {
+      "label": "20m 590s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.22,
+      "minAlpha": 255,
+      "packets": 7329,
+      "audioPackets": 13902,
+      "audioPacketAgeMs": 92,
+      "audioRms": 0.07394077926400601,
+      "closes": 0
+    },
+    {
+      "label": "20m 600s",
+      "medianLuminance": 29.8646,
+      "grayFraction": 0,
+      "noiseDb": -98.18,
+      "minAlpha": 255,
+      "packets": 7457,
+      "audioPackets": 14139,
+      "audioPacketAgeMs": 46,
+      "audioRms": 0.06120321554637794,
+      "closes": 0
+    }
+  ],
+  "scroll": [
+    {
+      "width": 360,
+      "height": 800,
+      "dpr": 2,
+      "mainDiameter": 164,
+      "fineDiameter": 86,
+      "wheelScroll": true,
+      "swipeScroll": true,
+      "noAccidentalTune": true,
+      "ctrlWheelZoom": true,
+      "pinchBothDirections": true
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "dpr": 3,
+      "mainDiameter": 164,
+      "fineDiameter": 86,
+      "wheelScroll": true,
+      "swipeScroll": true,
+      "noAccidentalTune": true,
+      "ctrlWheelZoom": true,
+      "pinchBothDirections": true
+    },
+    {
+      "width": 1440,
+      "height": 1000,
+      "dpr": 1,
+      "mainDiameter": 164,
+      "fineDiameter": 86,
+      "wheelScroll": true,
+      "swipeScroll": true,
+      "noAccidentalTune": true,
+      "ctrlWheelZoom": true,
+      "pinchBothDirections": true
+    }
+  ],
+  "meter": [
+    {
+      "width": 360,
+      "sizes": [
+        {
+          "width": 164,
+          "height": 164
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "levels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "stableGeometry": true,
+      "checks": [
+        {
+          "dial": 0,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "sizes": [
+        {
+          "width": 164,
+          "height": 164
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "levels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "stableGeometry": true,
+      "checks": [
+        {
+          "dial": 0,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "sizes": [
+        {
+          "width": 164,
+          "height": 164
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "levels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "stableGeometry": true,
+      "checks": [
+        {
+          "dial": 0,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "sizes": [
+        {
+          "width": 164,
+          "height": 164
+        },
+        {
+          "width": 86,
+          "height": 86
+        }
+      ],
+      "levels": [
+        "S1",
+        "S5",
+        "S9",
+        "S9 +10",
+        "S9 +20",
+        "S9 +60",
+        "−84.4 dBm"
+      ],
+      "stableGeometry": true,
+      "checks": [
+        {
+          "dial": 0,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 10,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 100,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 0,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        },
+        {
+          "dial": 1,
+          "stepHz": 1000,
+          "keyboard": true,
+          "wheel": true,
+          "mouse": true,
+          "touch": true
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

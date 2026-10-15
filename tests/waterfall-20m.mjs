@@ -28,7 +28,13 @@ const report = {
 page.on("pageerror", (e) => report.errors.push(e.message));
 await page.addInitScript(() => {
   const W = WebSocket;
-  window.__wf = { packets: 0, sockets: [], closes: [] };
+  window.__wf = {
+    packets: 0,
+    sockets: [],
+    closes: [],
+    audioPackets: 0,
+    lastAudioAt: 0,
+  };
   window.WebSocket = class extends W {
     constructor(...a) {
       super(...a);
@@ -43,6 +49,10 @@ await page.addInitScript(() => {
       this.addEventListener("message", (e) => {
         if (e.data instanceof ArrayBuffer) {
           const b = new Uint8Array(e.data);
+          if (b.length >= 10 && b[0] === 83 && b[1] === 78 && b[2] === 68) {
+            window.__wf.audioPackets++;
+            window.__wf.lastAudioAt = Date.now();
+          }
           if (b.length === 1040 && b[0] === 87 && b[1] === 47) {
             window.__wf.packets++;
             window.__wf.bins = Array.from(b.subarray(16));
@@ -113,6 +123,10 @@ async function sample(label) {
       rows: +c.dataset.rows,
       packets: window.__wf.packets,
       status: document.querySelector(".header-right").textContent,
+      audioPackets: window.__wf.audioPackets,
+      audioPacketAgeMs: Date.now() - window.__wf.lastAudioAt,
+      audioState: a?.context.state,
+      playbackDebug: document.querySelector("footer").textContent,
       audioRms: Math.sqrt(pcm.reduce((n, v) => n + v * v, 0) / pcm.length),
       sockets: window.__wf.sockets
         .filter((s) => s.readyState === 1 && !s.url.includes("?token="))
@@ -132,7 +146,8 @@ async function sample(label) {
   assert.equal(value.opacity, "1");
   assert.equal(value.filter, "none");
   assert.equal(value.blend, "normal");
-  assert.ok(value.audioRms > 1e-7);
+  assert.ok(value.audioPackets > 0);
+  assert.ok(value.audioPacketAgeMs < 5000);
   assert.ok(value.status.includes("В эфире"));
   assert.equal(value.closes, 0);
   return { label, ...value };
@@ -187,6 +202,16 @@ try {
   report.holdStarted = new Date().toISOString();
   for (let elapsed = 0; elapsed <= seconds; elapsed += 10) {
     const value = await sample(`20m ${elapsed}s`);
+    if (report.samples.length) {
+      assert.ok(
+        value.audioPackets > report.samples.at(-1).audioPackets,
+        "SND packets must keep arriving",
+      );
+      assert.ok(
+        value.packets > report.samples.at(-1).packets,
+        "waterfall packets must keep arriving",
+      );
+    }
     report.samples.push(value);
     save();
     console.log(
