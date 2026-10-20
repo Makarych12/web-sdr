@@ -23,6 +23,9 @@ export function RadioMap({ close }: { close: () => void }) {
   const [origin, setOrigin] = useState<Point & { label: string }>();
   const [radius, setRadius] = useState(100);
   const [rows, setRows] = useState<Repeater[]>([]);
+  const [totalFound, setTotalFound] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const [catalogueDate, setCatalogueDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(
     "Выберите город или разрешите определение местоположения.",
@@ -72,19 +75,25 @@ export function RadioMap({ close }: { close: () => void }) {
     setBusy(true);
     setOrigin(point);
     setRows([]);
+    setTotalFound(0);
+    setFailed(false);
+    setCatalogueDate("");
     setCities([]);
-    setMessage("Ищем репитеры в OpenStreetMap…");
+    setMessage("Загружаем репитеры из HearHam…");
     map.current?.setView([point.lat, point.lon], radius > 100 ? 7 : 9);
     layer.current?.clearLayers();
     const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
-      const found = await nearbyRepeaters(point, radius, controller.signal);
+      const result = await nearbyRepeaters(point, radius, controller.signal);
       if (controller.signal.aborted) return;
+      const found = result.rows;
       setRows(found);
+      setTotalFound(result.count);
+      setCatalogueDate(result.fetchedAt);
       setMessage(
-        found.length
-          ? `Найдено: ${found.length} · радиус ${radius} км`
-          : `В радиусе ${radius} км в OSM нет записей. Каталог неполный — это не означает отсутствие репитеров.`,
+        result.count
+          ? `Найдено: ${result.count} · на карте: ${found.length} · радиус ${radius} км`
+          : `В радиусе ${radius} км в HearHam нет записей. Выберите другой регион или увеличьте радиус. Каталог неполный.`,
       );
       const originLabel = document.createElement("span");
       originLabel.textContent = point.label;
@@ -98,15 +107,17 @@ export function RadioMap({ close }: { close: () => void }) {
       found.slice(0, 250).forEach((row) => {
         const popup = document.createElement("div");
         const title = document.createElement("strong");
-        title.textContent = row.callsign;
+        title.textContent = row.callsign || "Репитер";
         popup.append(title);
         for (const text of [
           row.name,
-          `Частота: ${row.frequency}`,
-          `Сдвиг: ${row.shift}`,
-          `Тоны: ${row.tones}`,
+          row.frequency && `Частота: ${row.frequency}`,
+          row.shift && `Сдвиг: ${row.shift}`,
+          row.tones && `Тоны / доступ: ${row.tones}`,
+          `Координаты каталога: ${row.lat.toFixed(5)}, ${row.lon.toFixed(5)}`,
           `${distanceKm(point, row).toFixed(1)} км по прямой`,
         ]) {
+          if (!text) continue;
           const line = document.createElement("p");
           line.textContent = text;
           popup.append(line);
@@ -115,7 +126,7 @@ export function RadioMap({ close }: { close: () => void }) {
         source.href = row.source;
         source.target = "_blank";
         source.rel = "noreferrer";
-        source.textContent = "Запись в OpenStreetMap ↗";
+        source.textContent = "Источник: HearHam ↗";
         popup.append(source);
         L.circleMarker([row.lat, row.lon], {
           radius: 7,
@@ -128,12 +139,14 @@ export function RadioMap({ close }: { close: () => void }) {
           .addTo(layer.current!);
       });
     } catch (error) {
-      if (alive.current && request.current === controller)
+      if (alive.current && request.current === controller) {
+        setFailed(true);
         setMessage(
           controller.signal.aborted
-            ? "Время ожидания истекло. Повторите поиск."
+            ? "Каталог не ответил вовремя. Нажмите «Повторить загрузку»."
             : (error as Error).message,
         );
+      }
     } finally {
       clearTimeout(timeout);
       if (alive.current && request.current === controller) setBusy(false);
@@ -156,7 +169,6 @@ export function RadioMap({ close }: { close: () => void }) {
           format: "jsonv2",
           limit: "5",
           "accept-language": "ru",
-          featureType: "city",
         })}`,
         { signal: controller.signal, credentials: "omit" },
       );
@@ -169,7 +181,13 @@ export function RadioMap({ close }: { close: () => void }) {
           lon: Number(c.lon),
           label: c.display_name,
         }))
-        .filter((c: Point) => Number.isFinite(c.lat) && Number.isFinite(c.lon));
+        .filter(
+          (c: Point) =>
+            Number.isFinite(c.lat) &&
+            Number.isFinite(c.lon) &&
+            Math.abs(c.lat) <= 90 &&
+            Math.abs(c.lon) <= 180,
+        );
       setCities(choices);
       setMessage(
         choices.length
@@ -281,17 +299,45 @@ export function RadioMap({ close }: { close: () => void }) {
         </button>
       </header>
       <div className="radio-map-tools">
+        <label>
+          Регион{" "}
+          <select
+            aria-label="Выбрать регион"
+            disabled={busy}
+            value=""
+            onChange={(event) => {
+              const regions = [
+                { lat: 50.4501, lon: 30.5234, label: "Киев, Украина" },
+                { lat: 42.6977, lon: 23.3219, label: "София, Болгария" },
+                { lat: 48.2082, lon: 16.3738, label: "Вена, Австрия" },
+                { lat: 52.52, lon: 13.405, label: "Берлин, Германия" },
+                { lat: 49.2827, lon: -123.1207, label: "Ванкувер, Канада" },
+              ];
+              if (event.target.value !== "")
+                void load(regions[Number(event.target.value)]);
+            }}
+          >
+            <option value="" disabled>
+              Выберите регион…
+            </option>
+            <option value="0">Киев, Украина</option>
+            <option value="1">София, Болгария</option>
+            <option value="2">Вена, Австрия</option>
+            <option value="3">Берлин, Германия</option>
+            <option value="4">Ванкувер, Канада</option>
+          </select>
+        </label>
         <form onSubmit={searchCity}>
           <input
-            aria-label="Город и страна"
-            placeholder="Город, страна"
+            aria-label="Город или регион"
+            placeholder="Город или регион, страна"
             value={city}
             onChange={(event) => setCity(event.target.value)}
             minLength={2}
             maxLength={150}
             required
           />
-          <button disabled={busy}>Найти город</button>
+          <button disabled={busy}>Найти город / регион</button>
         </form>
         <button type="button" onClick={locate} disabled={busy}>
           ⌖ Моё местоположение
@@ -299,6 +345,7 @@ export function RadioMap({ close }: { close: () => void }) {
         <label>
           Радиус{" "}
           <select
+            disabled={busy}
             value={radius}
             onChange={(event) => setRadius(Number(event.target.value))}
           >
@@ -321,6 +368,13 @@ export function RadioMap({ close }: { close: () => void }) {
         >
           Искать в центре карты
         </button>
+        <button
+          type="button"
+          disabled={busy || !origin}
+          onClick={() => origin && void load(origin)}
+        >
+          {failed ? "Повторить загрузку" : "Обновить репитеры"}
+        </button>
         <form onSubmit={findCorrespondent}>
           <input
             aria-label="Позывной корреспондента"
@@ -336,6 +390,14 @@ export function RadioMap({ close }: { close: () => void }) {
       </div>
       <div className="radio-map-message" role="status">
         {message}
+      </div>
+      <div
+        className="radio-map-message"
+        aria-label="Количество репитеров"
+        data-count={totalFound}
+        data-markers={rows.length}
+      >
+        Репитеров: {totalFound} · показано: {rows.length}
       </div>
       {cities.length > 0 && (
         <div className="radio-map-cities">
@@ -368,9 +430,10 @@ export function RadioMap({ close }: { close: () => void }) {
                   });
                 }}
               >
-                <strong>{r.callsign}</strong>
+                <strong>{r.callsign || "Позывной не указан"}</strong>
                 <span>
-                  {distanceKm(origin, r).toFixed(1)} км · {r.frequency}
+                  {distanceKm(origin, r).toFixed(1)} км
+                  {r.frequency ? ` · ${r.frequency}` : ""}
                 </span>
               </button>
             ))}
@@ -381,19 +444,25 @@ export function RadioMap({ close }: { close: () => void }) {
         {origin && <span>Отсчёт расстояний: {origin.label}. </span>}
         Данные:{" "}
         <a
-          href="https://www.openstreetmap.org/copyright"
+          href="https://hearham.com/repeaters"
           target="_blank"
           rel="noreferrer"
         >
-          © OpenStreetMap, ODbL
+          HearHam
         </a>{" "}
-        · Overpass API · поиск городов: Nominatim.
+        · карта: © OpenStreetMap · поиск городов: Nominatim.
+        {catalogueDate && (
+          <span>
+            {" "}
+            Каталог получен: {new Date(catalogueDate).toLocaleString("ru-RU")}.
+          </span>
+        )}
         <span>
           {" "}
-          Каталог неполный; параметры и актуальность уточняйте у владельца
-          репитера. Показаны до 250 ближайших записей. QTH корреспондента
-          добавляется по позывному только при наличии координат из каталога; это
-          не текущее положение в эфире.
+          Координаты каталога приблизительные. Каталог неполный; параметры и
+          актуальность уточняйте у владельца репитера. Показаны до 250 ближайших
+          записей. QTH корреспондента добавляется по позывному только при
+          наличии координат из каталога; это не текущее положение в эфире.
         </span>
       </footer>
     </dialog>

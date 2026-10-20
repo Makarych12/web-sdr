@@ -1,5 +1,6 @@
 import express from "express";
 import { registerCallsignRoute } from "./callsign.js";
+import { repeaterHandler } from "./repeaters.js";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
@@ -91,6 +92,7 @@ app.get("/api/health", (_, res) =>
   }),
 );
 registerCallsignRoute(app);
+app.get("/api/repeaters", repeaterHandler);
 app.use(express.static("dist"));
 const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
 server.on("upgrade", (req, socket, head) => {

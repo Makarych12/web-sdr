@@ -1,23 +1,20 @@
+import { gateway } from "./gateway";
 export type Point = { lat: number; lon: number };
 export type Repeater = Point & {
   id: string;
   callsign: string;
-  frequency: string;
-  shift: string;
-  tones: string;
-  name: string;
+  frequency?: string;
+  shift?: string;
+  tones?: string;
+  name?: string;
   source: string;
 };
-type Element = {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: Point;
-  tags?: Record<string, string>;
+export type RepeaterResult = {
+  rows: Repeater[];
+  count: number;
+  fetchedAt: string;
+  source: string;
 };
-const prefix = "communication:amateur_radio:repeater";
-
 export function distanceKm(a: Point, b: Point) {
   const rad = Math.PI / 180;
   const h =
@@ -25,99 +22,63 @@ export function distanceKm(a: Point, b: Point) {
     Math.cos(a.lat * rad) *
       Math.cos(b.lat * rad) *
       Math.sin(((b.lon - a.lon) * rad) / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
+  return 12742 * Math.asin(Math.sqrt(Math.min(1, h)));
 }
-function frequency(value?: string) {
-  if (!value) return "нет данных";
-  // OSM specifies Hz without a unit; retain compound/unknown source values.
-  if (/^[+-]?\d+(\.\d+)?$/.test(value)) return `${Number(value) / 1e6} МГц`;
-  return value;
-}
-export function parseRepeaters(elements: Element[]): Repeater[] {
-  return elements.flatMap((e) => {
-    const p = e.center || e,
-      t = e.tags || {};
-    if (
-      !Number.isFinite(p.lat) ||
-      !Number.isFinite(p.lon) ||
-      Math.abs(p.lat!) > 90 ||
-      Math.abs(p.lon!) > 180
-    )
-      return [];
-    const rawCall = t["communication:amateur_radio:callsign"] || t[prefix];
-    const callsign =
-      rawCall && !["yes", "no", "1", "true"].includes(rawCall.toLowerCase())
-        ? rawCall
-        : "Позывной не указан";
-    return [
-      {
-        lat: p.lat!,
-        lon: p.lon!,
-        id: `${e.type}/${e.id}`,
-        callsign,
-        name: t.name || "Радиолюбительский репитер",
-        frequency: frequency(
-          t[`${prefix}:frequency_out`] ||
-            t["communication:amateur_radio:frequency_out"],
-        ),
-        shift: frequency(
-          t[`${prefix}:shift`] || t["communication:amateur_radio:shift"],
-        ),
-        tones:
-          [
-            ["ctcss", "CTCSS"],
-            ["dcs", "DCS"],
-            ["toneburst", "Тон вызова"],
-          ]
-            .flatMap(([key, label]) =>
-              t[`${prefix}:${key}`]
-                ? [
-                    `${label}: ${t[`${prefix}:${key}`]}${key === "dcs" ? "" : " Гц"}`,
-                  ]
-                : [],
-            )
-            .join(" · ") || "нет данных",
-        source: `https://www.openstreetmap.org/${e.type}/${e.id}`,
-      },
-    ];
-  });
-}
-const cache = new Map<string, { time: number; rows: Repeater[] }>();
 export async function nearbyRepeaters(
   point: Point,
   radius: number,
   signal: AbortSignal,
-) {
-  const key = `${point.lat.toFixed(3)},${point.lon.toFixed(3)},${radius}`;
-  const saved = cache.get(key);
-  if (saved && Date.now() - saved.time < 15 * 60_000) return saved.rows;
-  const query = `[out:json][timeout:20];nwr(around:${radius * 1000},${point.lat},${point.lon})["${prefix}"]["${prefix}"!="no"];out center tags;`;
-  const options: RequestInit = {
-    method: "POST", body: new URLSearchParams({ data: query }), signal,
-    credentials: "omit", referrerPolicy: "strict-origin-when-cross-origin",
-  };
-  let response: Response | undefined;
+): Promise<RepeaterResult> {
+  let response: Response;
   try {
-    response = await fetch("https://overpass-api.de/api/interpreter", options);
+    response = await fetch(
+      `${gateway.http}/api/repeaters?${new URLSearchParams({
+        lat: String(point.lat),
+        lon: String(point.lon),
+        radius: String(radius),
+      })}`,
+      { signal, cache: "no-store" },
+    );
   } catch (error) {
     if (signal.aborted) throw error;
+    throw new Error(
+      "Нет связи с каталогом репитеров. Проверьте интернет и нажмите «Повторить загрузку».",
+    );
   }
-  // At most one fallback request; do not retry a rate-limited service.
-  if (!response || (!response.ok && response.status !== 429 && !signal.aborted))
-    response = await fetch("https://overpass.kumi.systems/api/interpreter", options);
+  let data: RepeaterResult & { error?: string };
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(
+      "Сервер каталога вернул неверный ответ. Нажмите «Повторить загрузку».",
+    );
+  }
   if (!response.ok)
     throw new Error(
-      `Каталог временно недоступен (${response.status}). Повторите поиск позже.`,
+      data.error ||
+        `Каталог недоступен (HTTP ${response.status}). Повторите загрузку.`,
     );
-  const data = await response.json();
-  if (data.remark || !Array.isArray(data.elements))
+  if (
+    !Array.isArray(data.rows) ||
+    !Number.isInteger(data.count) ||
+    data.count < data.rows.length ||
+    data.source !== "HearHam" ||
+    typeof data.fetchedAt !== "string" ||
+    data.rows.some(
+      (r) =>
+        !r ||
+        !Number.isFinite(r.lat) ||
+        !Number.isFinite(r.lon) ||
+        Math.abs(r.lat) > 90 ||
+        Math.abs(r.lon) > 180 ||
+        distanceKm(point, r) > radius + 0.01 ||
+        typeof r.id !== "string" ||
+        typeof r.callsign !== "string" ||
+        !/^https:\/\/hearham\.com\/repeaters\/\d+$/.test(r.source),
+    )
+  )
     throw new Error(
-      "Каталог не завершил поиск. Попробуйте позже или уменьшите радиус.",
+      "Каталог вернул некорректные записи. Нажмите «Повторить загрузку».",
     );
-  const rows = parseRepeaters(data.elements)
-    .filter((r) => distanceKm(point, r) <= radius)
-    .sort((a, b) => distanceKm(point, a) - distanceKm(point, b));
-  if (cache.size >= 5) cache.delete(cache.keys().next().value!);
-  cache.set(key, { time: Date.now(), rows });
-  return rows;
+  return data;
 }
