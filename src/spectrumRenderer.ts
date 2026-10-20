@@ -110,7 +110,7 @@ function validView(view: SpectrumView) {
       (Number.isInteger(view.zoom) && view.zoom >= 0 && view.zoom <= 14))
   );
 }
-/** Bounded real-row queue; integer scroll, no interpolation, no redraw animation. */
+/** Bounded real-row queue; at most one upward scroll per animation frame. */
 export class SpectrumRenderer {
   private history = document.createElement("canvas");
   private strip!: ImageData;
@@ -248,18 +248,17 @@ export class SpectrumRenderer {
   private render() {
     this.frames++;
     if (!this.resize() && this.pending.length) {
-      const queue = this.pending.splice(0);
+      // Spread packet bursts across frames instead of jumping several rows.
+      const queue = this.pending.splice(0, 1);
       const ctx = this.history.getContext("2d")!;
       const width = this.history.width,
         height = this.history.height;
       const shift = Math.min(height, queue.length * this.rowHeight);
-      this.rowViews.unshift(
-        ...queue
-          .slice()
-          .reverse()
-          .flatMap((row) => Array(this.rowHeight).fill(row.view)),
+      this.rowViews.push(
+        ...queue.flatMap((row) => Array(this.rowHeight).fill(row.view)),
       );
-      this.rowViews.length = Math.min(height, this.rowViews.length);
+      if (this.rowViews.length > height)
+        this.rowViews.splice(0, this.rowViews.length - height);
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
       ctx.imageSmoothingEnabled = false;
@@ -267,11 +266,11 @@ export class SpectrumRenderer {
         ctx.drawImage(
           this.history,
           0,
-          0,
+          shift,
           width,
           height - shift,
           0,
-          shift,
+          0,
           width,
           height - shift,
         );
@@ -289,14 +288,16 @@ export class SpectrumRenderer {
           const bin = clampByte(
             row.bins[Math.min(1023, Math.floor((x * 1024) / width))],
           );
-          this.strip.data.set(
-            this.palette.subarray(bin * 4, bin * 4 + 4),
-            x * 4,
-          );
+          const color = bin * 4,
+            pixel = x * 4;
+          this.strip.data[pixel] = this.palette[color];
+          this.strip.data[pixel + 1] = this.palette[color + 1];
+          this.strip.data[pixel + 2] = this.palette[color + 2];
+          this.strip.data[pixel + 3] = 255;
         }
-        const y = (queue.length - 1 - n) * this.rowHeight;
+        const y = height - (queue.length - n) * this.rowHeight;
         for (let i = 0; i < this.rowHeight && y + i < height; i++)
-          ctx.putImageData(this.strip, 0, y + i);
+          if (y + i >= 0) ctx.putImageData(this.strip, 0, y + i);
         this.last = row;
       }
       this.rowCount = Math.min(height, this.rowCount + shift);
@@ -317,20 +318,22 @@ export class SpectrumRenderer {
       while (end < this.rowViews.length && sameView(this.rowViews[end], view))
         end++;
       const p = projectView(view, this.view, this.waterfall.width);
+      const rowY = this.waterfall.height - this.rowViews.length + y;
       wc.drawImage(
         this.history,
         0,
-        y,
+        rowY,
         this.history.width,
         end - y,
         p.x,
-        y,
+        rowY,
         p.width,
         end - y,
       );
       y = end;
     }
     this.waterfall.dataset.frames = String(this.frames);
+    if (this.pending.length) this.schedule();
     const sc = this.spectrum.getContext("2d")!;
     sc.clearRect(0, 0, this.spectrum.width, this.spectrum.height);
     const sw = this.spectrum.width,

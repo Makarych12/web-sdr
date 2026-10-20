@@ -37,6 +37,7 @@ import {
 } from "./connection";
 import { useSpectrumGesture } from "./useSpectrumGesture";
 import { SpectrumRenderer } from "./spectrumRenderer";
+import { RadioMapLauncher } from "./RadioMapLauncher";
 import {
   viewFor,
   sameView,
@@ -1608,6 +1609,7 @@ function App() {
           </span>
         </footer>
       </main>
+      <RadioMapLauncher />
     </div>
   );
 }

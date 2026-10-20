@@ -1,0 +1,212 @@
+.radio-map-dialog {
+  width: min(1160px, calc(100vw - 24px));
+  max-width: none;
+  height: min(820px, calc(100dvh - 24px));
+  max-height: none;
+  padding: 0;
+  border: 1px solid #246875;
+  border-radius: 18px;
+  background: #07121b;
+  color: #d9efef;
+  box-shadow: 0 0 50px #16cab51c;
+  overflow: hidden;
+}
+.radio-map-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.radio-map-dialog::backdrop {
+  background: #01060bba;
+}
+.radio-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  border-bottom: 1px solid #193441;
+}
+.radio-map-header small {
+  color: #61dfd4;
+  letter-spacing: 2px;
+  font-size: 10px;
+}
+.radio-map-header h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+.radio-map-dialog button,
+.radio-map-dialog input,
+.radio-map-dialog select {
+  font: inherit;
+  color: #d6f9f2;
+  background: #10232d;
+  border: 1px solid #285260;
+  border-radius: 8px;
+  padding: 9px 11px;
+  min-height: 40px;
+}
+.radio-map-dialog button {
+  cursor: pointer;
+}
+.radio-map-dialog button:hover {
+  border-color: #61dfd4;
+  background: #15333d;
+}
+.radio-map-dialog button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.radio-map-dialog :focus-visible {
+  outline: 2px solid #61dfd4;
+  outline-offset: 2px;
+}
+.radio-map-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 0;
+  font-size: 13px;
+}
+.radio-map-tools form {
+  display: flex;
+  flex: 1 1 300px;
+  gap: 6px;
+}
+.radio-map-tools input {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+}
+.radio-map-tools label {
+  white-space: nowrap;
+}
+.radio-map-message {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: #95c4cf;
+}
+.radio-map-cities {
+  padding: 0 16px 10px;
+  max-height: 140px;
+  overflow: auto;
+}
+.radio-map-cities button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 4px;
+}
+.radio-map-body {
+  display: flex;
+  flex: 1;
+  min-height: 160px;
+  overflow: hidden;
+}
+.radio-map-canvas {
+  flex: 1;
+  min-width: 0;
+  background: #07121b;
+}
+.radio-map-canvas .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(170deg) saturate(0.65) brightness(0.78);
+}
+.radio-map-canvas .leaflet-popup-content-wrapper,
+.radio-map-canvas .leaflet-popup-tip {
+  background: #0b202c;
+  color: #d9efef;
+}
+.radio-map-canvas .leaflet-popup-content p {
+  margin: 8px 0;
+}
+.radio-map-canvas .leaflet-popup-content strong {
+  color: #69fff1;
+  font-size: 17px;
+}
+.radio-map-canvas a {
+  color: #64ddd0;
+}
+.radio-map-canvas .leaflet-bar a {
+  background: #10232d;
+  color: #b7fff2;
+  border-color: #285260;
+}
+.radio-map-canvas .leaflet-control-attribution {
+  background: #07121be8;
+  color: #b3c6cc;
+  font-size: 10px;
+}
+.radio-map-list {
+  width: 225px;
+  overflow: auto;
+  border-left: 1px solid #193441;
+  padding: 8px;
+}
+.radio-map-list button {
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+}
+.radio-map-list strong,
+.radio-map-list span {
+  display: block;
+}
+.radio-map-list span {
+  font-size: 12px;
+  color: #94b6c5;
+  margin-top: 4px;
+}
+.radio-map-note {
+  display: block;
+  padding: 10px 16px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8eacba;
+  border-top: 1px solid #193441;
+}
+.radio-map-note a {
+  color: #68d6cb;
+}
+@media (max-width: 640px) {
+  .radio-map-dialog {
+    width: calc(100vw - 12px);
+    height: calc(100dvh - 12px);
+    border-radius: 12px;
+  }
+  .radio-map-header {
+    padding: 10px 12px;
+  }
+  .radio-map-header h2 {
+    font-size: 18px;
+  }
+  .radio-map-tools {
+    padding: 8px 10px 0;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .radio-map-body {
+    flex-direction: column;
+  }
+  .radio-map-canvas {
+    min-height: 160px;
+  }
+  .radio-map-list {
+    display: flex;
+    flex: 0 0 76px;
+    gap: 6px;
+    width: auto;
+    border-left: 0;
+    border-top: 1px solid #193441;
+  }
+  .radio-map-list button {
+    flex: 0 0 185px;
+    margin: 0;
+  }
+  .radio-map-note {
+    font-size: 10px;
+    padding: 6px 10px;
+    max-height: 82px;
+    overflow: auto;
+  }
+}
