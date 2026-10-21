@@ -1,0 +1,26 @@
+.control-panel.panel { position: relative; }
+.nr-widget { position: absolute; top: -14px; right: 12px; z-index: 21; }
+.nr-widget > button {
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 11px;
+  background: #0b1726;
+}
+.nr-widget > button[aria-pressed="true"] { color: #76e4ff; border-color: #76e4ff; }
+.nr-widget .nr-level {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 160px;
+  padding: 8px;
+  margin: 0;
+  border: 1px solid #26466b;
+  border-radius: 6px;
+  background: #0b1726;
+  color: #dcecff;
+  font-size: 11px;
+  box-shadow: 0 4px 16px #0008;
+}
+.nr-widget:hover .nr-level, .nr-widget:focus-within .nr-level { display: grid; gap: 6px; }
+.nr-widget .nr-level input { width: 100%; min-width: 0; margin: 0; }

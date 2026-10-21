@@ -49,29 +49,15 @@ import { directEndpoint } from "./transport";
 import { DirectKiwiSocket } from "./directKiwi";
 import { RadioMedia } from "./radioMedia";
 import { SMeter } from "./SMeter";
+import { useWavRecording } from "./wavRecording";
+import { AfFft, type AfInput } from "./AfFft";
+import { ScanPanel } from "./ScanPanel";
+import type { FrequencyScanner } from "./frequencyScanner";
+import { MemoryBank } from "./MemoryBank";
+import { NoiseReduction } from "./NoiseReduction";
+import { NotchControls } from "./NotchControls";
+import { memoryId, mergeMemories, savedFrequencies, type SavedFrequency } from "./memoryBank";
 import { type Mode, DEFAULT_WIDTHS, FILTER_WIDTHS, passband } from "./radio";
-type SavedFrequency = {
-  id: string;
-  frequency: number;
-  mode: Mode;
-  width?: number;
-  cuts?: Cuts;
-};
-const savedFrequencies = (v: unknown): v is SavedFrequency[] =>
-  Array.isArray(v) &&
-  v.length <= 1000 &&
-  v.every(
-    (x) =>
-      x &&
-      typeof x.id === "string" &&
-      Number.isFinite(x.frequency) &&
-      x.frequency >= 0 &&
-      x.frequency <= 30000 &&
-      ["AM", "USB", "LSB", "CW", "FM"].includes(x.mode) &&
-      (x.cuts === undefined || validCuts(x.cuts)) &&
-      (x.width === undefined ||
-        FILTER_WIDTHS[x.mode as Mode].includes(x.width)),
-  );
 type View = {
   start: number;
   span: number;
@@ -80,6 +66,25 @@ type View = {
   sequence?: number;
 };
 function App() {
+  const recording = useWavRecording();
+  const afInput = useRef<AfInput>(null);
+  const scanner = useRef<FrequencyScanner | null>(null);
+  const nr = useRef<AudioWorkletNode | null>(null);
+  const [nrEnabled, setNrEnabled] = useState(false);
+  const [nrStrength, setNrStrength] = useState(40);
+  const notch = useRef<AudioWorkletNode | null>(null);
+  const [notchEnabled, setNotchEnabled] = useState(false);
+  const [notchAuto, setNotchAuto] = useState(false);
+  const [notchFrequency, setNotchFrequency] = useState(1000);
+  const [notchWidth, setNotchWidth] = useState(50);
+  const [notchDetected, setNotchDetected] = useState<number | null>(null);
+  useEffect(() => {
+    notch.current?.port.postMessage({ enabled: notchEnabled, auto: notchAuto,
+      frequency: notchFrequency, width: notchWidth });
+  }, [notchEnabled, notchAuto, notchFrequency, notchWidth]);
+  useEffect(() => {
+    nr.current?.port.postMessage({ enabled: nrEnabled, strength: nrStrength / 100 });
+  }, [nrEnabled, nrStrength]);
   const [agc, setAgc] = useStoredState<"fast" | "slow" | "off">(
     "wave.agc",
     "slow",
@@ -254,6 +259,18 @@ function App() {
         ? list.filter((v) => v.id !== id)
         : [...list, { id, frequency, mode, width: filterWidth, cuts }],
     );
+  }
+  function currentMemory(f = frequency): SavedFrequency {
+    return { id: memoryId(f, mode), frequency: f, mode, width: filterWidth, cuts: { ...cuts } };
+  }
+  function restoreMemory(entry: SavedFrequency) {
+    tune(entry.frequency, entry.mode, zoom, entry.width ?? DEFAULT_WIDTHS[entry.mode], undefined, entry.cuts);
+    manager.current?.flushTune();
+  }
+  function saveFoundMemory(f: number) {
+    const entry = currentMemory(f);
+    if (favoriteFrequencies.length >= 1000 && !favoriteFrequencies.some((saved) => saved.id === entry.id)) return;
+    setFavoriteFrequencies((list) => mergeMemories(list, [entry]));
   }
   const manager = useRef<StreamConnection | null>(null);
   const receiverRef = useRef(receiver);
@@ -486,12 +503,18 @@ function App() {
     width = widths[m],
     center?: number,
     customCuts?: Cuts,
+    automatic = false,
   ) {
+    if (!automatic) scanner.current?.stop();
     f = Math.round(Math.max(0, Math.min(30000, f)) * 1000) / 1000;
     // Fine tuning moves the VFO inside the existing overview. Recenter only
     // when it leaves the usable area, or when an explicit view was requested.
     const currentView = viewRef.current;
     const previous = settings.current;
+    if (f !== previous.frequency || m !== previous.mode) {
+      nr.current?.port.postMessage({ reset: true });
+      notch.current?.port.postMessage({ reset: true });
+    }
     const nextCuts =
       customCuts ??
       (m !== previous.mode
@@ -568,10 +591,12 @@ function App() {
   callbacks.current.message = (v) => {
     if (v instanceof Uint8Array) {
       if (v[0] === 1) {
+        recording.append(v.subarray(1), rate.current);
         const dv = new DataView(v.buffer, v.byteOffset, v.byteLength);
         const samples = new Float32Array((v.length - 1) / 2);
         for (let i = 0; i < samples.length; i++)
           samples[i] = dv.getInt16(1 + i * 2, false) / 32768;
+        afInput.current?.(samples, rate.current);
         player.current?.port.postMessage({ samples, rate: rate.current }, [
           samples.buffer,
         ]);
@@ -590,6 +615,10 @@ function App() {
       }
       return;
     }
+    if (v.type === "tuned" && finiteNumber(v.frequency)) scanner.current?.tuned(v.frequency);
+    if (v.type === "signal" && finiteNumber(v.rssi)) scanner.current?.signal(v.rssi);
+    if (v.type === "limits" && finiteNumber(v.maxFrequency)) scanner.current?.limits(v.maxFrequency);
+    if (v.type === "view" && finiteNumber(v.bandwidth)) scanner.current?.limits(v.bandwidth);
     if (v.type === "tuned") {
       const current = settings.current;
       if (
@@ -747,6 +776,11 @@ function App() {
         return true;
       },
       onReset: () => {
+        nr.current?.port.postMessage({ reset: true });
+        notch.current?.port.postMessage({ reset: true });
+        scanner.current?.reset();
+        recording.stop();
+        if (afInput.current) afInput.current(new Float32Array(0), rate.current);
         renderer.current?.clear();
         sourceView.current = null;
         awaitingTune.current = true;
@@ -799,6 +833,8 @@ function App() {
         context.current = new AudioContext({ latencyHint: "interactive" });
         void context.current.resume();
         await context.current.audioWorklet.addModule("/audio-worklet.js");
+        await context.current.audioWorklet.addModule("/nr-worklet.js");
+        await context.current.audioWorklet.addModule("/notch-worklet.js");
         if (generation !== startGeneration.current) {
           if (context.current.state !== "closed")
             void context.current.suspend();
@@ -810,7 +846,17 @@ function App() {
         };
         gain.current = context.current.createGain();
         gain.current.gain.value = muted ? 0 : volume;
-        player.current.connect(gain.current);
+        nr.current = new AudioWorkletNode(context.current, "wiener-nr", { outputChannelCount: [1] });
+        nr.current.port.postMessage({ enabled: nrEnabled, strength: nrStrength / 100 });
+        player.current.connect(nr.current);
+        notch.current = new AudioWorkletNode(context.current, "dsp-notch", { outputChannelCount: [1] });
+        notch.current.port.postMessage({ enabled: notchEnabled, auto: notchAuto,
+          frequency: notchFrequency, width: notchWidth });
+        notch.current.port.onmessage = ({ data }) => {
+          if (data.type === "notch") setNotchDetected(finiteNumber(data.frequency) ? data.frequency : null);
+        };
+        nr.current.connect(notch.current);
+        notch.current.connect(gain.current);
         media.current!.attach(context.current, gain.current);
         context.current.onstatechange = () => {
           setAudioPaused(
@@ -1080,6 +1126,11 @@ function App() {
             }
           }}
         >
+          <NoiseReduction enabled={nrEnabled} strength={nrStrength}
+            onEnabledChange={setNrEnabled} onStrengthChange={setNrStrength} />
+          <NotchControls enabled={notchEnabled} auto={notchAuto} frequency={notchFrequency}
+            width={notchWidth} detected={notchDetected} onEnabled={setNotchEnabled}
+            onAuto={setNotchAuto} onFrequency={setNotchFrequency} onWidth={setNotchWidth} />
           <div className="tuner">
             <div className="frequency">
               <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
@@ -1201,6 +1252,37 @@ function App() {
                   onChange={(e) => setVolume(Number(e.target.value))}
                 />
                 <span>{muted ? "MUTE" : Math.round(volume * 100) + "%"}</span>
+                <div className="wav-recording">
+                  <button
+                    type="button"
+                    className="rec-button"
+                    aria-label={recording.status ? "Завершить и сохранить WAV" : "Записать аудио в WAV"}
+                    aria-pressed={!!recording.status}
+                    disabled={!connected && !recording.status}
+                    onClick={() => recording.status
+                      ? recording.stop()
+                      : recording.start(rate.current, settings.current.frequency, settings.current.mode)}
+                  >
+                    {recording.status ? "STOP" : "REC"}
+                  </button>
+                  {recording.status && (
+                    <output aria-label="Длительность и размер записи">
+                      {String(Math.floor(recording.status.seconds / 60)).padStart(2, "0")}:{String(recording.status.seconds % 60).padStart(2, "0")}
+                      {" · "}{(recording.status.bytes / 1024 / 1024).toFixed(2)} MiB
+                    </output>
+                  )}
+                  <AfFft input={afInput} />
+                  <ScanPanel key={receiver} controller={scanner} connected={connected}
+                    min={Math.max(0, receivers.find((r) => r.id === receiver)?.minFrequency ?? 0)}
+                    max={Math.min(30000, receivers.find((r) => r.id === receiver)?.maxFrequency ?? 30000)}
+                    frequency={frequency}
+                    onTune={(f) => { tune(f, undefined, undefined, undefined, undefined, undefined, true); manager.current?.flushTune(); }}
+                    onSelect={(f) => { tune(f); manager.current?.flushTune(); }}
+                    onSave={saveFoundMemory}
+                    isSaved={(f) => favoriteFrequencies.some((entry) => entry.id === memoryId(f, mode)) || favoriteFrequencies.length >= 1000} />
+                  <MemoryBank entries={favoriteFrequencies} current={currentMemory()}
+                    onChange={setFavoriteFrequencies} onSelect={restoreMemory} />
+                </div>
               </div>
             </div>
           </div>
@@ -1552,18 +1634,9 @@ function App() {
               {favoriteFrequencies.map((v) => (
                 <span key={v.id}>
                   <button
-                    onClick={() =>
-                      tune(
-                        v.frequency,
-                        v.mode,
-                        zoom,
-                        v.width ?? widths[v.mode],
-                        undefined,
-                        v.cuts,
-                      )
-                    }
+                    onClick={() => restoreMemory(v)}
                   >
-                    {v.frequency} kHz · {v.mode}
+                    {v.name ? `${v.name} · ` : ""}{v.frequency} kHz · {v.mode}
                   </button>
                   <button
                     aria-label={`Удалить частоту ${v.frequency}`}

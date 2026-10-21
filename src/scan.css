@@ -1,0 +1,31 @@
+.signal-settings .scan-launch {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.scan-launch[aria-pressed="true"] { color: #76e4ff; border-color: #76e4ff; }
+.scan-panel {
+  width: min(360px, calc(100vw - 40px));
+  max-height: 75dvh;
+  overflow: auto;
+  padding: 16px;
+  color: #dcecff;
+  background: #0b1726;
+  border: 1px solid #26466b;
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+.scan-panel::backdrop { background: #0007; }
+.scan-heading, .scan-actions { display: flex; align-items: center; gap: 8px; }
+.scan-heading { justify-content: space-between; margin-bottom: 10px; }
+.scan-panel button { min-height: 30px; padding: 4px 8px; font-size: 12px; }
+.scan-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.signal-settings .scan-panel .scan-fields label { display: flex; flex-direction: column; align-items: stretch; min-width: 0; gap: 4px; font-size: 11px; margin: 0; }
+.signal-settings .scan-panel .scan-fields input,
+.signal-settings .scan-panel .scan-fields select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.scan-threshold { grid-column: 1 / -1; }
+.scan-panel small { display: block; margin: 8px 0; color: #9eb4cc; font-size: 11px; }
+.scan-actions { margin-bottom: 10px; }
+.scan-actions output, .scan-panel p { font-size: 11px; }
+.scan-skipped { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 10px; font-size: 11px; }
+.scan-found { max-height: 140px; overflow: auto; display: grid; gap: 4px; margin-top: 6px; }
+.scan-found button { display: flex; justify-content: space-between; gap: 8px; }

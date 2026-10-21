@@ -1,0 +1,22 @@
+.notch-widget { position: absolute; top: -14px; right: 88px; z-index: 22; }
+.notch-widget > button { min-height: 28px; padding: 3px 8px; font-size: 11px; background: #0b1726; }
+.notch-widget > button[aria-pressed="true"] { color: #76e4ff; border-color: #76e4ff; }
+.notch-settings {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 204px;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid #26466b;
+  border-radius: 6px;
+  background: #0b1726;
+  box-shadow: 0 4px 16px #0008;
+}
+.notch-widget:hover .notch-settings, .notch-widget:focus-within .notch-settings { display: grid; gap: 8px; }
+.notch-settings label { display: grid; gap: 4px; margin: 0; font-size: 11px; color: #dcecff; }
+.notch-settings input[type="number"] { width: 100%; min-width: 0; box-sizing: border-box; font-size: 12px; }
+.notch-settings .notch-auto { display: flex; align-items: center; gap: 6px; }
+.notch-auto input { margin: 0; }
+.notch-settings output { font-size: 11px; color: #9eb4cc; }
