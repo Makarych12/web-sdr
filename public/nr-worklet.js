@@ -46,6 +46,7 @@ class WienerNR extends AudioWorkletProcessor {
       if (data.reset) {
         // Keep overlap and gain continuity; only the noise estimate is invalidated.
         this.noiseReady = false;
+        this.bootstrapFrames = 0;
         this.minimumFrames = 0;
       }
     };
@@ -56,6 +57,7 @@ class WienerNR extends AudioWorkletProcessor {
     this.gain.fill(1);
     this.write = this.read = this.pending = this.samples = 0;
     this.noiseReady = false;
+    this.bootstrapFrames = 0;
     this.minimumFrames = 0;
   }
   fft(inverse) {
@@ -104,11 +106,15 @@ class WienerNR extends AudioWorkletProcessor {
       } else if (this.noiseReady) {
         this.power[i] += 0.2 * (p - this.power[i]);
         this.minimum[i] = Math.min(this.minimum[i], this.power[i]);
-        if (updateMinimum) {
+        if (this.bootstrapFrames < 16) {
+          // A single periodogram has deep random nulls. Average the first ~170 ms.
+          this.noise[i] += (p * 0.6 - this.noise[i]) / (this.bootstrapFrames + 1);
+          this.minimum[i] = this.power[i];
+        } else if (updateMinimum) {
           const estimate = Math.max(1e-12, this.minimum[i] * 1.5);
-          // Do not train a newly appearing strong speech component as noise.
-          if (estimate < this.noise[i] * 3 + 1e-12)
-            this.noise[i] += 0.3 * (estimate - this.noise[i]);
+          // Limit upward adaptation, rather than freezing forever after a noise jump.
+          const target = Math.min(estimate, this.noise[i] * 1.5 + 1e-12);
+          this.noise[i] += 0.3 * (target - this.noise[i]);
           this.minimum[i] = this.power[i];
         } else if (this.power[i] < this.noise[i]) {
           this.noise[i] += 0.04 * (this.power[i] - this.noise[i]);
@@ -118,6 +124,7 @@ class WienerNR extends AudioWorkletProcessor {
         ? Math.max(floor, 1 - this.amount * this.noise[i] / Math.max(p, 1e-12)) : 1;
     }
     if (initialise) this.noiseReady = true;
+    if (this.noiseReady && this.bootstrapFrames < 16) this.bootstrapFrames++;
     if (updateMinimum || initialise) this.minimumFrames = 0;
     for (let i = 0; i <= half; i++) {
       const target = 0.25 * this.desiredGain[Math.max(0, i - 1)] +

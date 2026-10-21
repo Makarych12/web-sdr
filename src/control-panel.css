@@ -141,12 +141,14 @@
   border-radius: 6px;
   background: #07121e;
   box-shadow: 0 4px 16px #0008;
-  pointer-events: none;
+  pointer-events: auto;
 }
 .af-fft-display canvas {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: crosshair;
+  touch-action: manipulation;
 }
 .visual + .precision-controls {
   min-width: 0;

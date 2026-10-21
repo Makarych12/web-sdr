@@ -20,3 +20,5 @@
 .notch-settings .notch-auto { display: flex; align-items: center; gap: 6px; }
 .notch-auto input { margin: 0; }
 .notch-settings output { font-size: 11px; color: #9eb4cc; }
+.notch-settings small { font-size: 11px; color: #9eb4cc; }
+.notch-settings input[type="range"] { width: 100%; min-width: 0; margin: 0; }

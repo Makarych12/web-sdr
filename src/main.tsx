@@ -77,13 +77,13 @@ function App() {
   const [notchAuto, setNotchAuto] = useState(false);
   const [notchFrequency, setNotchFrequency] = useState(1000);
   const [notchWidth, setNotchWidth] = useState(50);
+  const [notchAutoDepth, setNotchAutoDepth] = useState(9);
   const [notchDetected, setNotchDetected] = useState<number | null>(null);
-  const notchSettings = useRef({ enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth });
-  notchSettings.current = { enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth };
+  const notchSettings = useRef({ enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth, autoDepth: notchAutoDepth });
+  notchSettings.current = { enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth, autoDepth: notchAutoDepth };
   useEffect(() => {
-    notch.current?.port.postMessage({ enabled: notchEnabled, auto: notchAuto,
-      frequency: notchFrequency, width: notchWidth });
-  }, [notchEnabled, notchAuto, notchFrequency, notchWidth]);
+    notch.current?.port.postMessage(notchSettings.current);
+  }, [notchEnabled, notchAuto, notchFrequency, notchWidth, notchAutoDepth]);
   useEffect(() => {
     nr.current?.port.postMessage({ enabled: nrEnabled, strength: nrStrength / 100 });
   }, [nrEnabled, nrStrength]);
@@ -1131,8 +1131,8 @@ function App() {
           <NoiseReduction enabled={nrEnabled} strength={nrStrength}
             onEnabledChange={setNrEnabled} onStrengthChange={setNrStrength} />
           <NotchControls enabled={notchEnabled} auto={notchAuto} frequency={notchFrequency}
-            width={notchWidth} detected={notchDetected} onEnabled={setNotchEnabled}
-            onAuto={setNotchAuto} onFrequency={setNotchFrequency} onWidth={setNotchWidth} />
+            width={notchWidth} detected={notchDetected} autoDepth={notchAutoDepth} onEnabled={setNotchEnabled}
+            onAuto={setNotchAuto} onFrequency={setNotchFrequency} onWidth={setNotchWidth} onAutoDepth={setNotchAutoDepth} />
           <div className="tuner">
             <div className="frequency">
               <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
@@ -1273,7 +1273,11 @@ function App() {
                       {" · "}{(recording.status.bytes / 1024 / 1024).toFixed(2)} MiB
                     </output>
                   )}
-                  <AfFft input={afInput} />
+                  <AfFft input={afInput} notchFrequency={notchFrequency} notchEnabled={notchEnabled}
+                    notchAuto={notchAuto} notchDetected={notchDetected} onNotchFrequency={(hz) => {
+                      setNotchAuto(false);
+                      setNotchFrequency(hz);
+                    }} />
                   <ScanPanel key={receiver} controller={scanner} connected={connected}
                     voiceAvailable={mode !== "CW" && cuts.highCut - cuts.lowCut >= 1200}
                     min={Math.max(0, receivers.find((r) => r.id === receiver)?.minFrequency ?? 0)}

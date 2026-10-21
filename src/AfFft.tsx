@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
+import { createPortal } from "react-dom";
 
 export type AfInput = ((samples: Float32Array, sampleRate: number) => void) | null;
 const SIZE = 2048;
+type Props = {
+  input: MutableRefObject<AfInput>;
+  notchFrequency: number;
+  notchEnabled: boolean;
+  notchAuto: boolean;
+  notchDetected: number | null;
+  onNotchFrequency: (frequency: number) => void;
+};
 
 /** Analysis only: the playback samples are never modified or retained. */
 export class AudioSpectrum {
@@ -57,8 +66,11 @@ export class AudioSpectrum {
   }
 }
 
-function SpectrumCanvas({ input }: { input: MutableRefObject<AfInput> }) {
+function SpectrumCanvas(props: Props) {
+  const { input } = props;
   const canvas = useRef<HTMLCanvasElement>(null);
+  const settings = useRef(props);
+  settings.current = props;
   useEffect(() => {
     const model = new AudioSpectrum();
     const receive = (samples: Float32Array, sampleRate: number) => model.push(samples, sampleRate);
@@ -80,7 +92,7 @@ function SpectrumCanvas({ input }: { input: MutableRefObject<AfInput> }) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = "#07121e";
       ctx.fillRect(0, 0, width, height);
-      const left = 8, right = width - 12, top = 8, bottom = height - 20;
+      const left = 8, right = width - 12, top = 23, bottom = height - 20;
       ctx.font = "10px monospace";
       ctx.strokeStyle = "#20364c";
       ctx.fillStyle = "#9eb4cc";
@@ -104,6 +116,19 @@ function SpectrumCanvas({ input }: { input: MutableRefObject<AfInput> }) {
       ctx.shadowBlur = 4;
       ctx.stroke();
       ctx.shadowBlur = 0;
+      const state = settings.current;
+      ctx.fillStyle = "#9eb4cc";
+      ctx.textAlign = "left";
+      ctx.fillText("AF-FFT — спектр звука", left, 12);
+      const marker = state.notchAuto ? state.notchDetected : state.notchFrequency;
+      if (marker !== null) {
+        const x = left + (right - left) * marker / 4000;
+        ctx.strokeStyle = state.notchEnabled ? "#ffbf69" : "#687c92";
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+        ctx.fillStyle = ctx.strokeStyle;
+        const label = `NOTCH ${Math.round(marker)} Hz${state.notchEnabled ? "" : " · OFF"}`;
+        ctx.fillText(label, Math.max(left, Math.min(x + 4, right - ctx.measureText(label).width)), 21);
+      }
     };
     frame = requestAnimationFrame(draw);
     return () => {
@@ -111,14 +136,48 @@ function SpectrumCanvas({ input }: { input: MutableRefObject<AfInput> }) {
       if (input.current === receive) input.current = null;
     };
   }, [input]);
-  return <canvas ref={canvas} aria-label="Аудиоспектр от 0 до 4 кГц" role="img" />;
+  const setFrequency = (frequency: number) => props.onNotchFrequency(Math.max(100, Math.min(4000, Math.round(frequency))));
+  return <canvas ref={canvas} aria-label="Спектр звука AF-FFT: выбор частоты NOTCH" role="slider"
+    aria-valuemin={100} aria-valuemax={4000} aria-valuenow={Math.round(props.notchAuto ? props.notchDetected ?? props.notchFrequency : props.notchFrequency)}
+    tabIndex={0} onClick={(event) => {
+      const element = event.currentTarget, rect = element.getBoundingClientRect();
+      const x = (event.clientX - rect.left) * element.clientWidth / rect.width;
+      setFrequency((x - 8) / Math.max(1, element.clientWidth - 20) * 4000);
+    }} onKeyDown={(event) => {
+      event.stopPropagation();
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        setFrequency(event.key === "Home" ? 100 : event.key === "End" ? 4000 :
+          props.notchFrequency + (event.key === "ArrowRight" ? 10 : -10));
+      }
+    }} />;
 }
 
-export function AfFft({ input }: { input: MutableRefObject<AfInput> }) {
+export function AfFft(props: Props) {
   const [enabled, setEnabled] = useState(false);
-  return <div className="af-fft">
-    <button type="button" aria-label="AF-FFT" aria-pressed={enabled}
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const host = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    const place = () => {
+      const button = host.current?.querySelector("button")?.getBoundingClientRect();
+      if (!button) return;
+      const headerBottom = document.querySelector("header")?.getBoundingClientRect().bottom ?? 0;
+      const width = Math.min(260, innerWidth - 64), height = 92;
+      const minTop = Math.max(8, headerBottom + 8);
+      const preferred = button.top - height - 6 >= minTop ? button.top - height - 6 : button.bottom + 6;
+      setPosition({ left: Math.max(8, Math.min(button.right - width, innerWidth - width - 8)),
+        top: Math.max(minTop, Math.min(preferred, innerHeight - height - 72)) });
+    };
+    place();
+    window.addEventListener("scroll", place, { passive: true });
+    window.addEventListener("resize", place);
+    return () => { window.removeEventListener("scroll", place); window.removeEventListener("resize", place); };
+  }, [enabled]);
+  return <div className="af-fft" ref={host}>
+    <button type="button" aria-label="AF-FFT" title="AF-FFT — спектр звука" aria-pressed={enabled}
       onClick={() => setEnabled(!enabled)}>AF-FFT</button>
-    {enabled && <div className="af-fft-display"><SpectrumCanvas input={input} /></div>}
+    {enabled && position && createPortal(<div className="af-fft-display"
+      style={{ position: "fixed", bottom: "auto", right: "auto", ...position }}><SpectrumCanvas {...props} /></div>, document.body)}
   </div>;
 }

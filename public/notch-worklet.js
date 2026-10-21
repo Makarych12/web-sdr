@@ -6,6 +6,7 @@ class DSPNotch extends AudioWorkletProcessor {
     this.auto = false;
     this.frequency = 1000;
     this.width = 50;
+    this.autoDepth = 9;
     this.banks = [new Float64Array(7), new Float64Array(7)];
     this.bankFrequency = new Float64Array(2);
     this.bankWidth = new Float64Array(2);
@@ -48,6 +49,7 @@ class DSPNotch extends AudioWorkletProcessor {
       }
       if (Number.isFinite(data.frequency)) this.frequency = Math.max(100, Math.min(4000, data.frequency));
       if (Number.isFinite(data.width)) this.width = Math.max(10, Math.min(200, data.width));
+      if (Number.isFinite(data.autoDepth)) this.autoDepth = Math.max(0, Math.min(18, data.autoDepth));
       if (data.reset) this.resetAnalysis();
     };
   }
@@ -182,7 +184,7 @@ class DSPNotch extends AudioWorkletProcessor {
       this.bankMix = 0;
       this.switching = true;
     }
-    const targetMix = wanted ? (this.auto ? 0.65 : 1) : 0;
+    const targetMix = wanted ? (this.auto ? 1 - 10 ** (-this.autoDepth / 20) : 1) : 0;
     for (let i = 0; i < output.length; i++) {
       const dry = source ? source[i] : 0;
       if (analyse) {
