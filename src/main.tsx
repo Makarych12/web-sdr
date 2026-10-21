@@ -78,6 +78,8 @@ function App() {
   const [notchFrequency, setNotchFrequency] = useState(1000);
   const [notchWidth, setNotchWidth] = useState(50);
   const [notchDetected, setNotchDetected] = useState<number | null>(null);
+  const notchSettings = useRef({ enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth });
+  notchSettings.current = { enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth };
   useEffect(() => {
     notch.current?.port.postMessage({ enabled: notchEnabled, auto: notchAuto,
       frequency: notchFrequency, width: notchWidth });
@@ -597,6 +599,7 @@ function App() {
         for (let i = 0; i < samples.length; i++)
           samples[i] = dv.getInt16(1 + i * 2, false) / 32768;
         afInput.current?.(samples, rate.current);
+        scanner.current?.audio(samples, rate.current, settings.current.lowCut, settings.current.highCut);
         player.current?.port.postMessage({ samples, rate: rate.current }, [
           samples.buffer,
         ]);
@@ -850,8 +853,7 @@ function App() {
         nr.current.port.postMessage({ enabled: nrEnabled, strength: nrStrength / 100 });
         player.current.connect(nr.current);
         notch.current = new AudioWorkletNode(context.current, "dsp-notch", { outputChannelCount: [1] });
-        notch.current.port.postMessage({ enabled: notchEnabled, auto: notchAuto,
-          frequency: notchFrequency, width: notchWidth });
+        notch.current.port.postMessage(notchSettings.current);
         notch.current.port.onmessage = ({ data }) => {
           if (data.type === "notch") setNotchDetected(finiteNumber(data.frequency) ? data.frequency : null);
         };
@@ -1273,6 +1275,7 @@ function App() {
                   )}
                   <AfFft input={afInput} />
                   <ScanPanel key={receiver} controller={scanner} connected={connected}
+                    voiceAvailable={mode !== "CW" && cuts.highCut - cuts.lowCut >= 1200}
                     min={Math.max(0, receivers.find((r) => r.id === receiver)?.minFrequency ?? 0)}
                     max={Math.min(30000, receivers.find((r) => r.id === receiver)?.maxFrequency ?? 30000)}
                     frequency={frequency}

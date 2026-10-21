@@ -1,4 +1,5 @@
-export type ScanConfig = { start: number; end: number; step: number; squelch: number; dwell: number };
+import { ScanVoiceActivity } from "./scanVoiceActivity";
+export type ScanConfig = { start: number; end: number; step: number; squelch: number; dwell: number; activity?: "ALL" | "VOICE" };
 export type ScanState = {
   phase: "STOP" | "WAIT" | "SCAN" | "HOLD";
   frequency: number | null;
@@ -28,6 +29,12 @@ export class FrequencyScanner {
   private lastSignal = 0;
   private quietSince: number | null = null;
   private message = "";
+  private voice: ScanVoiceActivity | null = null;
+  private lastRssi = -Infinity;
+  private peakRssi = -Infinity;
+  private peakAt = 0;
+  private lastAudio = 0;
+  private readonly settleMs = 400;
   constructor(private options: Options) {}
   private now() { return this.options.now?.() ?? performance.now(); }
   private publish() {
@@ -55,7 +62,7 @@ export class FrequencyScanner {
     if (![config.start, config.end, config.step, config.squelch, config.dwell].every(Number.isFinite) ||
       config.start > config.end || ![1, 5, 10, 25].includes(config.step) ||
       config.dwell < 0.5 || config.dwell > 5 || config.squelch < -140 || config.squelch > 0 ||
-      !this.inBounds(config)) {
+      !this.inBounds(config) || (config.activity !== undefined && !["ALL", "VOICE"].includes(config.activity))) {
       this.stop("Проверьте START / END и доступный диапазон приёмника");
       return;
     }
@@ -66,6 +73,7 @@ export class FrequencyScanner {
   }
   stop(message = "") {
     this.phase = "STOP";
+    this.voice = null;
     this.message = message;
     this.publish();
   }
@@ -81,6 +89,9 @@ export class FrequencyScanner {
       this.phase = "WAIT";
       this.acknowledgedAt = null;
       this.fresh = 0;
+      this.voice = c.activity === "VOICE" ? new ScanVoiceActivity() : null;
+      this.lastRssi = this.peakRssi = -Infinity;
+      this.lastAudio = 0;
       this.quietSince = null;
       this.sentAt = this.lastSignal = this.now();
       this.publish();
@@ -97,10 +108,29 @@ export class FrequencyScanner {
     if (this.phase === "STOP" || !Number.isFinite(rssi)) return;
     const now = this.now(), c = this.config!;
     this.lastSignal = now;
-    if (this.acknowledgedAt === null || now - this.acknowledgedAt < 250) return;
-    if (++this.fresh < 2) return;
+    if (this.acknowledgedAt === null || now - this.acknowledgedAt < this.settleMs) return;
+    this.lastRssi = rssi;
+    if (rssi >= this.peakRssi || now - this.peakAt > 250) { this.peakRssi = rssi; this.peakAt = now; }
+    this.fresh++;
+    if (c.activity !== "VOICE") this.evaluate();
+  }
+  audio(samples: Float32Array, rate: number, lowCut: number, highCut: number) {
+    if (this.phase === "STOP" || !this.voice || this.acknowledgedAt === null ||
+      this.now() - this.acknowledgedAt < this.settleMs) return;
+    this.lastAudio = this.now();
+    this.voice.push(samples, rate, lowCut, highCut);
+    this.evaluate();
+  }
+  private evaluate() {
+    if (this.fresh < 2 || this.acknowledgedAt === null) return;
+    const now = this.now(), c = this.config!;
+    if (now - this.lastSignal > 200) return;
     if (this.skipped.has(this.frequency!)) { this.move(this.frequency! + c.step); return; }
-    if (rssi >= c.squelch) {
+    const voiceMode = c.activity === "VOICE";
+    const rssi = voiceMode && now - this.peakAt <= 250 ? this.peakRssi : this.lastRssi;
+    const audioActive = !voiceMode || (this.voice!.active && now - this.lastAudio < 200);
+    const threshold = this.phase === "HOLD" ? c.squelch - 3 : c.squelch;
+    if (rssi >= threshold && audioActive) {
       const old = this.found.get(this.frequency!);
       this.found.set(this.frequency!, Math.max(old ?? -Infinity, rssi));
       this.quietSince = null;
@@ -112,12 +142,13 @@ export class FrequencyScanner {
     }
     if (this.phase === "HOLD") {
       // Hysteresis and a quiet dwell prevent chatter around the threshold.
-      if (rssi > c.squelch - 3) { this.quietSince = null; return; }
+      if (!voiceMode && rssi > c.squelch - 3) { this.quietSince = null; return; }
       this.quietSince ??= now;
       if (now - this.quietSince < c.dwell * 1000) return;
     } else {
       if (this.phase === "WAIT") { this.phase = "SCAN"; this.publish(); }
-      if (now - this.acknowledgedAt < c.dwell * 1000) return;
+      // DWELL is observation time after settling, not time spent waiting for tuning.
+      if (now - this.acknowledgedAt - this.settleMs < c.dwell * 1000) return;
     }
     this.move(this.frequency! + c.step);
   }
@@ -125,7 +156,8 @@ export class FrequencyScanner {
     if (this.phase === "STOP") return;
     const now = this.now();
     if ((this.acknowledgedAt === null && now - this.sentAt > 5000) ||
-      now - this.lastSignal > 5000)
+      now - this.lastSignal > 5000 ||
+      (this.config?.activity === "VOICE" && now - (this.lastAudio || this.sentAt) > 5000))
       this.stop("Нет подтверждения настройки или свежего RSSI");
   }
   skip(frequency: number) {

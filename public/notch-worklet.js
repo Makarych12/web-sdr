@@ -126,7 +126,8 @@ class DSPNotch extends AudioWorkletProcessor {
     floor /= Math.max(1, neighbours);
     const centre = this.power[peak];
     const narrowPower = this.power[peak - 1] + centre + this.power[peak + 1];
-    let tonal = centre > Math.max(1e-8, floor * 32) && narrowPower > total * 0.12;
+    // An audible narrow whistle can contain far less energy than broadband speech.
+    let tonal = centre > Math.max(1e-8, floor * 32) && narrowPower > total * 0.02;
     // Reject a clear family of speech harmonics instead of notching its fundamental.
     let harmonics = 0;
     for (let multiple = 2; multiple <= 4; multiple++) {
