@@ -14,8 +14,10 @@ import {
   type Cuts,
   type Preset,
 } from "./tuning";
+import { WaterfallMode } from "./WaterfallMode";
+import { DEFAULT_WATERFALL_DISPLAY, validWaterfallDisplay } from "./waterfallMode";
 import { WaterfallColor } from "./WaterfallColor";
-import { validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
+import { readWaterfallTheme, WATERFALL_THEME_KEY, waterfallThemeGradient, validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
 import { CwDecoderPanel } from "./CwDecoderPanel";
 import type { CwDecoder } from "./cwDecoder";
 import { DxClusterPanel, DxMarkers, DxModePrompt } from "./DxCluster";
@@ -79,7 +81,8 @@ type View = {
 };
 function App() {
   const recording = useWavRecording();
-  const [waterfallTheme,setWaterfallTheme]=useStoredState<WaterfallTheme>("ur4mtn.waterfall-theme.v1","CLASSIC",validWaterfallTheme);
+  const [waterfallTheme,setWaterfallTheme]=useStoredState<WaterfallTheme>(WATERFALL_THEME_KEY,readWaterfallTheme(),validWaterfallTheme);
+  const [waterfallDisplay,setWaterfallDisplay]=useStoredState("ur4mtn.waterfall-display.v1",DEFAULT_WATERFALL_DISPLAY,validWaterfallDisplay);
   const cwDecoder = useRef<CwDecoder | null>(null);
   const dx = useDxCluster();
   const [dxModePending,setDxModePending]=useState<{ reason:string } | null>(null);
@@ -360,6 +363,7 @@ function App() {
     };
   }, []);
   useEffect(()=>{renderer.current?.setTheme(waterfallTheme);},[waterfallTheme]);
+  useEffect(()=>{renderer.current?.setWaterfallDisplay(waterfallDisplay);},[waterfallDisplay]);
   useEffect(() => {
     let disposed = false,
       attempt = 0;
@@ -1633,10 +1637,11 @@ function App() {
             )}
           </div>
           <div className="visual-foot">
+            <WaterfallMode settings={waterfallDisplay} onChange={setWaterfallDisplay} />
             <WaterfallColor theme={waterfallTheme} onChange={setWaterfallTheme} />
             <span>Касание — частота · два пальца — масштаб</span>
             <span>
-              Шум · авто <i /> Сильный сигнал
+              Шум · авто <i style={{background:waterfallThemeGradient(waterfallTheme)}} /> Сильный сигнал
             </span>
           </div>
         </section>

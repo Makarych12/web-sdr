@@ -1,8 +1,19 @@
 .visual-foot { position:relative; }
-.waterfall-color { position:absolute; right:8px; bottom:calc(100% + 4px); z-index:5; }
-.waterfall-color > button { min-height:24px; padding:2px 6px; font:10px monospace; background:#0b1726; }
-.waterfall-color-panel { width:min(280px,calc(100vw - 24px)); padding:12px; color:#dcecff; background:#0b1726; border:1px solid #26466b; border-radius:8px; }
+.waterfall-color { position:absolute; left:10px; bottom:calc(100% + 8px); z-index:5; }
+.waterfall-color-launch { display:flex; align-items:center; gap:9px; min-width:160px; min-height:44px; padding:6px 10px; border:1px solid #58dce6; border-radius:7px; color:#e5fcff; background:#102b3b; box-shadow:0 2px 10px #0009; font:12px monospace; text-align:left; }
+.waterfall-color-launch b { display:block; font-size:13px; letter-spacing:1px; }
+.waterfall-color-launch small { display:block; margin-top:2px; font-size:9px; color:#b7e6ee; }
+.waterfall-color-launch > .waterfall-theme-preview { width:34px; height:25px; }
+.waterfall-color-launch:hover { background:#174052; border-color:#b2f9ff; }
+.waterfall-color-launch:focus-visible,.waterfall-theme-options button:focus-visible { outline:2px solid #e8fbff; outline-offset:3px; }
+.waterfall-theme-preview { display:block; border:1px solid #ffffff35; border-radius:3px; pointer-events:none; }
+.waterfall-color-panel { box-sizing:border-box; width:min(352px,calc(100vw - 24px)); max-height:calc(100dvh - 32px); overflow:auto; padding:14px; color:#dcecff; background:#0b1726; border:1px solid #468194; border-radius:10px; }
 .waterfall-color-panel::backdrop { background:#0008; }
-.waterfall-color-panel header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-.waterfall-color-panel button { min-height:32px; padding:4px 8px; margin:3px; font-size:11px; }
-.waterfall-color-panel button[aria-pressed="true"] { border-color:#76e4ff; color:#76e4ff; }
+.waterfall-color-panel header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; font:12px monospace; }
+.waterfall-color-panel header button { min-width:36px; min-height:36px; font-size:20px; }
+.waterfall-theme-options { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
+.waterfall-theme-options button { min-width:0; padding:9px; margin:0; border:1px solid #334d66; border-radius:6px; color:#dcecff; background:#101f32; text-align:left; font:10px monospace; }
+.waterfall-theme-options .waterfall-theme-preview { height:24px; margin-top:8px; }
+.waterfall-theme-options button[aria-pressed="true"] { border-color:#76e4ff; color:#aff2ff; background:#153747; }
+.waterfall-color-panel > small { display:block; font-size:11px; line-height:1.5; color:#adc0d1; }
+@media(max-width:600px) { .waterfall-color { left:8px; } .waterfall-color-launch { min-width:144px; } }

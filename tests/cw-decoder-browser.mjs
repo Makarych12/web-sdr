@@ -14,6 +14,7 @@ try{for(const width of [1440,390]){
  });
  const launch=page.locator('#cw-test-root .cw-dec-launch');await launch.click();const dialog=page.getByRole('dialog',{name:'CW DECODER',exact:true});
  assert.equal(await page.evaluate(()=>window.cwTestRef.current),null);await dialog.getByRole('button',{name:'COPY',exact:true}).isDisabled().then(v=>assert.equal(v,true));
+ await dialog.getByRole('checkbox',{name:'AUTO TONE',exact:true}).uncheck();
  const tone=dialog.getByLabel('Тон CW',{exact:true});await tone.focus();await tone.press('Home');for(let i=0;i<22;i++)await tone.press('ArrowRight');assert.equal(await tone.inputValue(),'410');
  await dialog.getByRole('button',{name:'CW DEC OFF',exact:true}).click();assert.equal(await page.evaluate(()=>!!window.cwTestRef.current),true);
  const expected=await page.evaluate(async()=>{const pcm=new Float32Array(await(await fetch('/__cw_real')).arrayBuffer());window.cwTestPcm=pcm;const d=window.cwTestRef.current;for(let i=0;i<pcm.length;i+=512)d.push(pcm.subarray(i,i+512),12000);d.push(new Float32Array(36000),12000);return d.snapshot().text;});
@@ -21,7 +22,7 @@ try{for(const width of [1440,390]){
  await dialog.getByRole('button',{name:'COPY',exact:true}).click();assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),expected);
  await dialog.getByRole('button',{name:'CW DEC ON',exact:true}).click();assert.equal(await page.evaluate(()=>window.cwTestRef.current),null);
  const textBefore=await dialog.getByLabel('Декодированный CW текст',{exact:true}).inputValue();await page.evaluate(()=>{for(let i=0;i<100;i++)window.cwTestRef.current?.push(window.cwTestPcm.subarray(0,512),12000);});assert.equal(await dialog.getByLabel('Декодированный CW текст',{exact:true}).inputValue(),textBefore);
- await dialog.getByRole('checkbox').uncheck();await dialog.getByLabel('Скорость CW WPM',{exact:true}).fill('5');await dialog.getByRole('button',{name:'CW DEC OFF',exact:true}).click();assert.equal(await page.evaluate(()=>window.cwTestRef.current.snapshot().wpm),5);
+ await dialog.getByRole('checkbox',{name:'AUTO WPM',exact:true}).uncheck();await dialog.getByLabel('Скорость CW WPM',{exact:true}).fill('5');await dialog.getByRole('button',{name:'CW DEC OFF',exact:true}).click();assert.equal(await page.evaluate(()=>window.cwTestRef.current.snapshot().wpm),5);
  await dialog.getByLabel('Закрыть CW DEC',{exact:true}).click();assert.equal(await page.evaluate(()=>window.cwTestRef.current),null);
  await launch.click();assert.equal(await dialog.getByLabel('Декодированный CW текст',{exact:true}).inputValue(),textBefore);
  assert.ok(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth));await page.screenshot({path:`${dir}/${width}.png`});assert.deepEqual(errors,[]);

@@ -1,0 +1,16 @@
+.waterfall-mode { position:absolute; left:10px; bottom:calc(100% + 64px); z-index:5; }
+.waterfall-mode-launch { min-width:160px; min-height:44px; padding:6px 10px; border:1px solid #62b8dc; border-radius:7px; background:#102b3b; color:#e5fcff; text-align:left; font:11px monospace; box-shadow:0 2px 10px #0009; }
+.waterfall-mode-launch b,.waterfall-mode-launch small { display:block; }
+.waterfall-mode-launch small { margin-top:3px; color:#b7e6ee; font-size:10px; }
+.waterfall-mode-panel { box-sizing:border-box; width:min(360px,calc(100vw - 24px)); max-height:calc(100dvh - 32px); overflow:auto; padding:14px; border:1px solid #468194; border-radius:10px; background:#0b1726; color:#dcecff; }
+.waterfall-mode-panel::backdrop { background:#0008; }
+.waterfall-mode-panel header { display:flex; justify-content:space-between; align-items:center; padding:0; min-height:40px; gap:8px; font:12px monospace; }
+.waterfall-mode-panel header button { min-height:36px; min-width:36px; }
+.waterfall-mode-options { display:flex; gap:8px; margin:12px 0; }
+.waterfall-mode-options button { flex:1; padding:10px 6px; font:11px monospace; }
+.waterfall-mode-options button[aria-pressed="true"] { border-color:#76e4ff; color:#aff2ff; background:#153747; }
+.waterfall-mode-panel fieldset { margin:10px 0; padding:10px; border:1px solid #29455a; }
+.waterfall-mode-panel label { display:block; margin:6px 0 12px; font-size:12px; }
+.waterfall-mode-panel input { display:block; width:100%; margin-top:8px; }
+.waterfall-mode-panel p,.waterfall-mode-panel > small { font-size:11px; line-height:1.5; color:#adc0d1; }
+@media(max-width:600px) { .waterfall-mode { left:8px; } .waterfall-mode-launch { min-width:144px; } }

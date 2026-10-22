@@ -1,3 +1,4 @@
+import { DEFAULT_WATERFALL_DISPLAY, validWaterfallDisplay, malahitRow, type WaterfallDisplay } from "./waterfallMode";
 import { THEME_STOPS, validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
 import {
   projectView,
@@ -91,6 +92,24 @@ export function limitWaterfallSpikes(bins: Uint8Array) {
   }
   return result;
 }
+/** Packet-driven smoothing in dB: no timers, invented bins or moving peaks. */
+export class SpectrumEnvelope {
+  private values: Float32Array | null = null;
+  private time = 0;
+  reset() { this.values = null; this.time = 0; }
+  update(bins: Uint8Array, time: number) {
+    if (!this.values || this.values.length !== bins.length) this.values = Float32Array.from(bins);
+    else {
+      const dt = Math.max(.001, Math.min(1, (time - this.time) / 1000));
+      for (let i = 0; i < bins.length; i++) {
+        const tau = bins[i] > this.values[i] ? .035 : .28;
+        this.values[i] += (1 - Math.exp(-dt / tau)) * (bins[i] - this.values[i]);
+      }
+    }
+    this.time = time;
+    return this.values;
+  }
+}
 function validView(view: SpectrumView) {
   return (
     Number.isFinite(view.start) &&
@@ -103,27 +122,73 @@ function validView(view: SpectrumView) {
       (Number.isInteger(view.zoom) && view.zoom >= 0 && view.zoom <= 14))
   );
 }
+type HistoryRow = { bins:Uint8Array; blackDb:number; rangeDb:number; calibration:number; view:SpectrumView };
 /** Bounded real-row queue; at most one upward scroll per animation frame. */
 export class SpectrumRenderer {
   private history = document.createElement("canvas");
   private strip!: ImageData;
+  private envelope = new SpectrumEnvelope();
+  private traceBins: Float32Array | null = null;
   private last?: { bins: Uint8Array; view: SpectrumView };
   private view: SpectrumView;
   private frame = 0;
   private palette = new Uint8ClampedArray(256 * 4);
   private calibration = -13;
   private theme: WaterfallTheme = 'CLASSIC';
-  private colorRows: { bins:Uint8Array; blackDb:number; rangeDb:number; calibration:number }[]=[];
+  private display:WaterfallDisplay={...DEFAULT_WATERFALL_DISPLAY};
+  private colorRows:HistoryRow[]=[];
+  setWaterfallDisplay(display:WaterfallDisplay) {
+    if(!validWaterfallDisplay(display)||JSON.stringify(display)===JSON.stringify(this.display))return;
+    this.display={...display};
+    this.waterfall.dataset.mode=display.mode;
+    this.repaintHistory();
+  }
+  private paintHistoryRow(ctx:CanvasRenderingContext2D,row:HistoryRow,previous:HistoryRow|undefined,y:number) {
+    if(this.display.mode==='CLASSIC') {
+      this.paintColorRow(ctx,row.bins,row.calibration,row.blackDb,row.rangeDb,y);
+      return;
+    }
+    const contiguous=previous&&sameView(row.view,previous.view);
+    const noise=row.blackDb+10+255-row.calibration;
+    const previousNoise=previous?previous.blackDb+10+255-previous.calibration:noise;
+    const pixels=malahitRow(row.bins,contiguous?previous.bins:null,noise,previousNoise,this.display);
+    // Existing theme LUT maps the enhanced measurements; it is not the algorithm.
+    this.paintColorRow(ctx,pixels,0,-255,255,y);
+  }
+  private repaintFrame=0;
+  private repainting=false;
+  private repaintHistory() {
+    cancelAnimationFrame(this.repaintFrame);
+    const ctx=this.history.getContext('2d')!,rows=this.colorRows.slice();
+    let i=0,previous:HistoryRow|undefined;
+    this.repainting=true;
+    const chunk=()=>{
+      this.repaintFrame=0;
+      const start=performance.now();
+      // Yield to PCM delivery between small history batches. Live rows already
+      // use the new mode; locate old rows again because normal scrolling continues.
+      do {
+        const row=rows[i];
+        if(!row)break;
+        const index=this.colorRows.indexOf(row);
+        if(index>=0){
+          const y=this.history.height-this.colorRows.length+index;
+          this.paintHistoryRow(ctx,row,previous,y);
+          if(this.colorRows[index+1]===row)ctx.putImageData(this.strip,0,y+1);
+        }
+        previous=row;
+        do { i++; } while(rows[i]===row);
+      } while(i<rows.length&&performance.now()-start<2);
+      this.schedule();
+      if(i<rows.length)this.repaintFrame=requestAnimationFrame(chunk);
+      else this.repainting=false;
+    };
+    chunk();
+  }
   setTheme(theme:WaterfallTheme) {
     if(!validWaterfallTheme(theme)||theme===this.theme)return;
     this.theme=theme;
-    const ctx=this.history.getContext('2d')!;
-    for(let i=0;i<this.colorRows.length;i++){
-      const row=this.colorRows[i];
-      const y=this.history.height-this.colorRows.length+i;
-      if(i>0 && row===this.colorRows[i-1])ctx.putImageData(this.strip,0,y);
-      else this.paintColorRow(ctx,row.bins,row.calibration,row.blackDb,row.rangeDb,y);
-    }
+    this.repaintHistory();
     this.waterfall.dataset.theme=theme;
     this.schedule();
   }
@@ -182,6 +247,8 @@ export class SpectrumRenderer {
       this.pending = [];
       // Restore 7f3a7f2 normalization for the newly received range, while keeping history.
       this.levels.reset();
+      this.envelope.reset();
+      this.traceBins = null;
       this.schedule();
     }
   }
@@ -232,16 +299,20 @@ export class SpectrumRenderer {
       this.sequence = view.sequence;
     }
     this.resize();
-    this.pending.push({ bins: limitWaterfallSpikes(bins), view: { ...view } });
+    this.pending.push({ bins: bins.slice(), view: { ...view } });
     if (this.pending.length > 8) this.pending.shift();
     this.schedule();
     return true;
   }
   clear(resetSequence = true) {
+    cancelAnimationFrame(this.repaintFrame);
+    this.repaintFrame=0;this.repainting=false;
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     this.pending = [];
     this.last = undefined;
+    this.traceBins = null;
+    this.envelope.reset();
     this.rowCount = 0;
     this.rowViews = [];
     this.colorRows = [];
@@ -300,13 +371,15 @@ export class SpectrumRenderer {
         this.waterfall.dataset.noiseDb = levels.noiseDb.toFixed(2);
         this.waterfall.dataset.blackDb = levels.blackDb.toFixed(2);
         const y = height - (queue.length - n) * this.rowHeight;
-        const stored={bins:row.bins,calibration:this.calibration,blackDb:levels.blackDb,rangeDb:levels.rangeDb};
+        const stored={bins:row.bins,calibration:this.calibration,blackDb:levels.blackDb,rangeDb:levels.rangeDb,view:row.view};
+        const previous=this.colorRows.at(-1);
         for(let i=0;i<this.rowHeight && y+i<height;i++)if(y+i>=0){
-          if(i===0)this.paintColorRow(ctx,row.bins,this.calibration,levels.blackDb,levels.rangeDb,y+i);
+          if(i===0)this.paintHistoryRow(ctx,stored,previous,y+i);
           else ctx.putImageData(this.strip,0,y+i);
           this.colorRows.push(stored);
         }
         if(this.colorRows.length>height)this.colorRows.splice(0,this.colorRows.length-height);
+        this.traceBins = this.envelope.update(row.bins, performance.now());
         this.last = row;
       }
       this.rowCount = Math.min(height, this.rowCount + shift);
@@ -366,7 +439,8 @@ export class SpectrumRenderer {
       sc.stroke();
     }
     if (!this.last) return;
-    const { bins, view } = this.last;
+    const { view } = this.last;
+    const bins = this.traceBins ?? this.last.bins;
     const p = projectView(view, this.view, this.spectrum.width);
     const trace = new Path2D();
     for (let i = 0; i < bins.length; i++) {
@@ -401,6 +475,8 @@ export class SpectrumRenderer {
     sc.shadowBlur = 0;
   }
   dispose() {
+    cancelAnimationFrame(this.repaintFrame);
+    this.repaintFrame=0;this.repainting=false;
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     this.pending = [];
