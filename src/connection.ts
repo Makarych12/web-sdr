@@ -38,6 +38,7 @@ export class StreamConnection {
   private generation = 0;
   private attempts = 0;
   private failures = 0;
+  private reconnects = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private watchdog: ReturnType<typeof setInterval> | undefined;
   private options: Options;
@@ -51,9 +52,9 @@ export class StreamConnection {
     this.socket?.setBackground?.(hidden);
   }
   recoverAfterSleep() {
-    if (!this.desired) return;
+    if (!this.desired || this.timer !== undefined) return;
     const age = Date.now() - (this.lastAudioAt || this.startedAt);
-    if (!this.socket || this.socket.readyState > 1) this.reconnectNow();
+    if (!this.socket || this.socket.readyState > 1) this.retry("Соединение прервано после сна. Восстанавливаем текущий Kiwi.");
     else {
       if (age >= 22000) this.resumeUntil = Date.now() + 5000;
       this.socket.resume?.();
@@ -66,6 +67,7 @@ export class StreamConnection {
     this.desired = true;
     this.attempts = 0;
     this.failures = 0;
+    this.reconnects = 0;
     this.connect();
   }
   stop() {
@@ -77,6 +79,7 @@ export class StreamConnection {
     if (this.desired) {
       this.attempts = 0;
       this.failures = 0;
+      this.reconnects = 0;
       this.connect();
     }
   }
@@ -84,6 +87,7 @@ export class StreamConnection {
     if (this.desired) {
       this.attempts = 0;
       this.failures = 0;
+      this.reconnects = 0;
       this.connect();
     }
   }
@@ -192,19 +196,7 @@ export class StreamConnection {
               reason,
               failures: this.failures,
             });
-            const confirmedRefusal = ["badp", "too_busy", "down"].includes(
-              String(v.code),
-            );
-            const changedReceiver =
-              confirmedRefusal &&
-              this.failures >= 2 &&
-              this.options.onUnavailable?.(String(v.code), reason);
-            if (changedReceiver) {
-              this.failures = 0;
-              this.retry(`${reason} Подключаем другой публичный узел…`);
-              return;
-            }
-            if (v.retryable === false && !confirmedRefusal) {
+            if (v.retryable === false) {
               this.desired = false;
               this.disposeSocket();
               this.options.onState({
@@ -284,6 +276,12 @@ export class StreamConnection {
   private retry(reason: string, minDelay = 0) {
     if (!this.desired) return;
     this.disposeSocket();
+    if(this.reconnects>=5){
+      this.desired=false;
+      this.options.onState({phase:'blocked',message:`${reason} Автовосстановление остановлено после 5 попыток. Нажмите подключение для нового сеанса.`,attempt:this.attempts});
+      return;
+    }
+    this.reconnects++;
     const delay = Math.max(
       minDelay,
       Math.round(

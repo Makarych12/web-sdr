@@ -305,7 +305,6 @@ function App() {
   receiverRef.current = receiver;
   const availableReceivers = useRef(receivers);
   availableReceivers.current = receivers;
-  const failedReceivers = useRef(new Set<string>());
   const [gatewayFallback, setGatewayFallback] = useState<string[]>([]);
   const gatewayFallbackRef = useRef(new Set<string>());
   const [receiverChange, setReceiverChange] = useState("");
@@ -779,36 +778,6 @@ function App() {
           at: new Date().toISOString(),
         });
       },
-      onUnavailable: (_code, reason) => {
-        failedReceivers.current.add(receiverRef.current);
-        if (failedReceivers.current.size >= 6) return false;
-        const frequency = settings.current.frequency;
-        const next = availableReceivers.current
-          .filter(
-            (r) =>
-              !failedReceivers.current.has(r.id) &&
-              r.apiAvailable &&
-              (r.maxUsers ?? 0) > (r.users ?? 0) &&
-              frequency >= (r.minFrequency ?? 0) &&
-              frequency <= (r.maxFrequency ?? 30000),
-          )
-          .sort(
-            (a, b) =>
-              Number(!!b.directUrl) - Number(!!a.directUrl) ||
-              (b.snr ?? 0) - (a.snr ?? 0),
-          )[0];
-        if (!next) return false;
-        const previous = availableReceivers.current.find(
-          (r) => r.id === receiverRef.current,
-        );
-        setReceiverChange(
-          `${previous?.name || receiverRef.current}: ${reason} После повторного подключения выбран ${next.name}.`,
-        );
-        renderer.current?.clear();
-        receiverRef.current = next.id;
-        setReceiver(next.id);
-        return true;
-      },
       onReset: () => {
         cwDecoder.current?.resetSignal();
         nr.current?.port.postMessage({ reset: true });
@@ -827,7 +796,6 @@ function App() {
     });
   const chooseReceiver = useCallback(
     (id: string) => {
-      failedReceivers.current.clear();
       gatewayFallbackRef.current.delete(id);
       setGatewayFallback([...gatewayFallbackRef.current]);
       setReceiverChange("Приёмник выбран вручную");
@@ -854,7 +822,6 @@ function App() {
     setError("");
     stats.current = { audio: 0, wf: 0 };
     setCounts({ ...stats.current });
-    failedReceivers.current.clear();
     manager.current!.start();
     try {
       if (

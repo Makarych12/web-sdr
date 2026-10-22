@@ -100,49 +100,27 @@ test("server switch opens one new session with updated receiver", (t) => {
   c.stop();
 });
 
-test("unavailable Kiwi switches receiver while preserving the current tune", (t) => {
+test("remote refusal never retries or switches the selected receiver", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
-  let change: (v: any) => void;
-  const codes: string[] = [];
-  const { c, sockets, states, setConfig } = setup((code) => {
-    codes.push(code);
-    change({
-      receiver: "areg",
-      frequency: 7074,
-      mode: "USB",
-      zoom: 7,
-      lowCut: 300,
-      highCut: 2100,
-    });
-    return true;
-  });
-  change = setConfig;
-  c.start();
-  sockets[0].open();
-  sockets[0].message({
-    type: "error",
-    code: "badp",
-    retryable: false,
-    message: "Kiwi unavailable",
-  });
-  assert.deepEqual(codes, []);
-  t.mock.timers.tick(1000);
-  sockets[1].open();
-  assert.equal(JSON.parse(sockets[1].sent[0]).receiver, "france");
-  sockets[1].message({
-    type: "error",
-    code: "badp",
-    retryable: false,
-    message: "Kiwi unavailable",
-  });
-  assert.deepEqual(codes, ["badp"]);
-  assert.equal(c.desired, true);
-  assert.equal(states.at(-1).phase, "retrying");
-  t.mock.timers.tick(2000);
-  sockets[2].open();
-  assert.equal(JSON.parse(sockets[2].sent[0]).receiver, "areg");
-  assert.equal(JSON.parse(sockets[2].sent[0]).highCut, 2100);
-  c.stop();
+  let switched=0;
+  const { c, sockets, states } = setup(()=>{switched++;return true;});
+  c.start();sockets[0].open();
+  sockets[0].message({type:'error',code:'badp',retryable:false,message:'Access refused'});
+  t.mock.timers.tick(120000);c.recoverAfterSleep();
+  assert.equal(switched,0);assert.equal(sockets.length,1);assert.equal(c.desired,false);assert.equal(states.at(-1).phase,'blocked');
+});
+test("bounded recovery survives short healthy runs and wake events without endless retries", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+  const { c,sockets,states }=setup();c.start();
+  for(let n=0;n<6;n++){
+    const socket=sockets[n];socket.open();t.mock.timers.tick(6000);
+    for(let k=0;k<6;k++)for(const type of[1,2])socket.onmessage({data:Uint8Array.of(type).buffer});
+    socket.close();c.recoverAfterSleep();
+    if(n<5)t.mock.timers.tick(1000);
+  }
+  assert.equal(sockets.length,6);assert.equal(c.desired,false);assert.equal(states.at(-1).phase,'blocked');
+  t.mock.timers.tick(120000);c.recoverAfterSleep();assert.equal(sockets.length,6);
+  c.start();assert.equal(sockets.length,7);c.stop();
 });
 
 test("gateway disconnect and stream timeout retry the same Kiwi without failover", (t) => {

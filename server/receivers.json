@@ -18,5 +18,14 @@
     "id": "zl2p",
     "name": "ZL2P · New Zealand",
     "url": "http://zl2p-3.proxy.kiwisdr.com"
+  },
+  {
+    "id": "tambov-radiorubka",
+    "name": "Radiorubka · Тамбов, Россия",
+    "location": "Tambov, Russia",
+    "url": "https://sdr.radiorubka.org",
+    "minFrequency": 1600,
+    "maxFrequency": 10000,
+    "apiAvailable": true
   }
 ]

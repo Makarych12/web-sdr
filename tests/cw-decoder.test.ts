@@ -15,3 +15,13 @@ test('AUTO TONE uses PCM at its actual rate, manual tone is preserved; synthetic
   const r=d.snapshot();assert.ok(Math.abs(r.toneHz-tone)<15,JSON.stringify(r));assert.ok(r.text.includes('CQ DE UR4MTN TEST'),r.text);assert.ok(Math.abs(r.wpm-20)<=2);assert.equal(r.sampleRate,11999);assert.equal(r.samples,x.length);
  }
 });
+
+test('AUTO speed reacquires between variable-speed segments; synthetic reference only',()=>{
+ const d=new CwDecoder({tone:700,autoTone:false,auto:true,wpm:20});
+ for(const speed of[10,30,15]){
+  const x=signal('VVV VVV VVV CQ DE UR4MTN TEST',speed);
+  const start=d.snapshot().text.length;
+  for(let i=0;i<x.length;i+=512)d.push(x.subarray(i,i+512),12000);
+  const r=d.snapshot();assert.ok(Math.abs(r.wpm-speed)<=2,JSON.stringify(r));assert.ok(r.text.slice(start).includes('CQ DE UR4MTN TEST'),r.text.slice(start));
+ }
+});

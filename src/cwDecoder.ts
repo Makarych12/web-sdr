@@ -1,5 +1,6 @@
+export const CW_TEXT_LIMIT=50000;
 export type CwSettings = { tone: number; auto: boolean; wpm: number; autoTone?: boolean };
-export type CwSnapshot = { text: string; wpm: number; acquired: boolean; confidence: number; tonePresent: boolean; toneHz: number; levelDb: number; samples: number; sampleRate: number; state: string };
+export type CwSnapshot = { text: string; textStart:number; wpm: number; acquired: boolean; confidence: number; tonePresent: boolean; toneHz: number; levelDb: number; samples: number; sampleRate: number; state: string };
 const CODE: Record<string,string> = Object.fromEntries([
   ['A','.-'],['B','-...'],['C','-.-.'],['D','-..'],['E','.'],['F','..-.'],['G','--.'],['H','....'],['I','..'],['J','.---'],['K','-.-'],['L','.-..'],['M','--'],['N','-.'],['O','---'],['P','.--.'],['Q','--.-'],['R','.-.'],['S','...'],['T','-'],['U','..-'],['V','...-'],['W','.--'],['X','-..-'],['Y','-.--'],['Z','--..'],
   ['0','-----'],['1','.----'],['2','..---'],['3','...--'],['4','....-'],['5','.....'],['6','-....'],['7','--...'],['8','---..'],['9','----.'],['.','.-.-.-'],[',','--..--'],['?','..--..'],['/','-..-.'],['=','-...-'],['+','.-.-.'],['-','-....-'],['@','.--.-.'],['(','-.--.'],[')','-.--.-'],["'",'.----.'],[':', '---...'],[';', '-.-.-.'],['!', '-.-.--'],['"','.-..-.'],
@@ -54,10 +55,10 @@ export class CwDecoder {
   private on=false; private candidate=false; private candidateFrames=0; private edge=0;
   private symbols=''; private letterDone=true; private wordDone=true;
   private quality=0; private timing=0; private valid=0; private total=0;
-  private lastSignal=0; private lastDecoded=-Infinity; private text='';
+  private lastSignal=0; private lastDecoded=-Infinity; private text=''; private textStart=0;
   constructor(settings: CwSettings, text='') {
     if(!settingsOk(settings)) throw new Error('Invalid CW settings');
-    this.settings={...settings};this.text=text.slice(-12000);this.dot=1.2/settings.wpm;
+    this.settings={...settings};this.text=text.slice(-CW_TEXT_LIMIT);this.textStart=Math.max(0,text.length-CW_TEXT_LIMIT);this.dot=1.2/settings.wpm;
   }
   configure(settings:CwSettings) {
     if(!settingsOk(settings)) return;
@@ -72,7 +73,7 @@ export class CwDecoder {
     this.framePower=this.frameGuard=0;this.on=this.candidate=false;this.candidateFrames=0;this.edge=0;
     // A retune/rate change invalidates the unfinished symbol; never carry it to another station.
     this.lastDecoded=-Infinity;this.symbols='';this.letterDone=this.wordDone=true;this.quality=this.timing=this.valid=this.total=this.lastSignal=0;
-    if(this.text && !this.text.endsWith('\n'))this.text+='\n';
+    if(this.text && !this.text.endsWith('\n'))this.append('\n');
   }
   private initialise(rate:number) {
     this.rate=rate;this.frameSize=Math.max(1,Math.round(rate*.005));
@@ -112,6 +113,19 @@ export class CwDecoder {
   }
   private estimateSpeed() {
     if(!this.settings.auto||this.marks.length<6)return;
+    // Reacquire only when recent marks consistently fit a different speed.
+    // Keep the longer stable window through fades and isolated timing errors.
+    if(this.marks.length>=24 && this.quality>.7){
+      const tail=this.marks.slice(-12);
+      const fit=(d:number)=>tail.reduce((s,n)=>s+Math.min(1,Math.min(Math.abs(n-d)/d,Math.abs(n-3*d)/(3*d))),0)/tail.length;
+      const candidates=tail.flatMap(n=>[n,n/3]).filter(d=>d>=.03&&d<=.24);
+      const best=candidates.sort((a,b)=>fit(a)-fit(b))[0];
+      const dots=tail.filter(n=>n<best*2).length;
+      if(best && dots>=3&&dots<=9 && Math.abs(best-this.dot)/this.dot>.25 && fit(best)<.18 && fit(this.dot)>.3){
+        this.dot=best;this.marks=tail;this.gaps=this.gaps.slice(-12);
+      }
+    }
+    const recent=this.marks,recentGaps=this.gaps;
     const sorted=[...this.marks].sort((a,b)=>a-b),candidates:number[]=[];
     for(const q of [.1,.25,.5,.75,.9])for(const ratio of [1,3]){
       const d=sorted[Math.floor((sorted.length-1)*q)]/ratio;
@@ -120,16 +134,34 @@ export class CwDecoder {
     let best=this.dot,bestCost=Infinity;
     for(const d of candidates){
       let cost=0,dits=0,dahs=0;
-      for(const length of this.marks){const target=length<d*2?d:d*3;cost+=Math.min(1.5,Math.abs(length-target)/target);if(target===d)dits++;else dahs++;}
-      cost/=this.marks.length;
+      for(const length of recent){const target=length<d*2?d:d*3;cost+=Math.min(1.5,Math.abs(length-target)/target);if(target===d)dits++;else dahs++;}
+      cost/=recent.length;
       if(!dits||!dahs)cost+=.08;
-      if(this.gaps.length){let gapCost=0;for(const length of this.gaps)gapCost+=Math.min(...[1,3,7].map(r=>Math.min(1,Math.abs(length-d*r)/(d*r))));cost+=.25*gapCost/this.gaps.length;}
+      if(recentGaps.length){let gapCost=0;for(const length of recentGaps)gapCost+=Math.min(...[1,3,7].map(r=>Math.min(1,Math.abs(length-d*r)/(d*r))));cost+=.25*gapCost/recentGaps.length;}
       cost+=.01*Math.abs(d-this.dot)/this.dot;
       if(cost<bestCost){bestCost=cost;best=d;}
     }
     this.dot=this.marks.length<14?best:this.dot+.25*(best-this.dot);
   }
-  private append(value:string) { this.text=(this.text+value).slice(-12000); }
+  private setText(value:string) {
+    const overflow=Math.max(0,value.length-CW_TEXT_LIMIT);
+    this.text=value.slice(-CW_TEXT_LIMIT);this.textStart+=overflow;
+  }
+  private append(value:string) { this.setText(this.text+value); }
+  clearText() {
+    this.text='';this.textStart=0;this.symbols='';this.letterDone=this.wordDone=true;this.lastDecoded=-Infinity;
+  }
+  /** Apply the user's edit to the displayed revision without dropping PCM text
+   * decoded since the last 150ms UI poll, including a rolling head truncation. */
+  editText(before:{text:string;textStart:number},after:string) {
+    let prefix=0,suffix=0;
+    while(prefix<before.text.length&&prefix<after.length&&before.text[prefix]===after[prefix])prefix++;
+    while(suffix<before.text.length-prefix&&suffix<after.length-prefix&&before.text[before.text.length-1-suffix]===after[after.length-1-suffix])suffix++;
+    const shift=before.textStart-this.textStart;
+    const start=Math.max(0,Math.min(this.text.length,prefix+shift));
+    const end=Math.max(start,Math.min(this.text.length,before.text.length-suffix+shift));
+    this.setText(this.text.slice(0,start)+after.slice(prefix,after.length-suffix)+this.text.slice(end));
+  }
   private erasure() {
     if(this.sampleCount/this.rate-this.lastDecoded<3 && this.text && !/[�\s]$/.test(this.text))this.append('�');
   }
@@ -169,8 +201,11 @@ export class CwDecoder {
     if(this.frames%50===0){this.minima.push(this.minimum);if(this.minima.length>8)this.minima.shift();this.minimum=Infinity;
       const noise=Math.max(1e-12,Math.min(...this.minima)*1.5);this.floor+=.2*(noise-this.floor);
     }
-    this.peak=Math.max(power,this.peak*.992);
     const noise=Math.max(this.floor,guard*1.6,1e-12);
+    // Release a stale strong-signal peak faster only on credible weaker tone,
+    // not on key-up noise. Keep the existing noise/SNR guard and hysteresis.
+    const weakTone=!this.on&&t-this.edge>this.dot*2&&power>noise*2.5&&(!this.settings.autoTone||this.toneScore>.5);
+    this.peak=Math.max(power,this.peak*(weakTone?.97:.992));
     const threshold=Math.max(noise*(this.on?1.6:2.5),noise+(this.peak-noise)*(this.on?.10:.18));
     this.level=power;
     const present=power>threshold && (!this.settings.autoTone || this.detectedTone>0);
@@ -188,7 +223,7 @@ export class CwDecoder {
   }
   snapshot():CwSnapshot {
     const valid=this.total?this.valid/this.total:1;
-    return {text:this.text,wpm:Math.round(1.2/this.dot),acquired:!this.settings.auto||this.marks.length>=6,
+    return {text:this.text,textStart:this.textStart,wpm:Math.round(1.2/this.dot),acquired:!this.settings.auto||this.marks.length>=6,
       confidence:Math.round(100*this.quality*(.3+.7*this.timing)*valid),tonePresent:this.on,
       toneHz:Math.round(this.detectedTone),levelDb:10*Math.log10(Math.max(1e-12,this.level*4)),samples:this.sampleCount,sampleRate:this.rate,
       state:!this.sampleCount?'Ожидание PCM':this.settings.autoTone&&!this.detectedTone?'Поиск тона':this.on?'Сигнал':this.marks.length?'Пауза':'Ожидание посылок' };

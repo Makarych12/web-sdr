@@ -1,3 +1,5 @@
+> Current 50000-character editable transcript, timing/recovery checks and limits: [CW_SERVERS_CHECK.md](CW_SERVERS_CHECK.md). Earlier text-limit descriptions below are historical.
+
 > Current local tone-acquisition fixes and measurements: [SPECTRUM_CW_CHECK.md](SPECTRUM_CW_CHECK.md). Manual-only behavior below describes the previous version.
 
 # CW DECODER — 2026-10-22
