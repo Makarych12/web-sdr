@@ -1,0 +1,34 @@
+/* Overlay only: no change to the frequency scale's dimensions or flex labels. */
+.frequency-scale .band-plan {
+  position: absolute;
+  inset: auto 0 0;
+  height: 11px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.frequency-scale .band-plan-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-inline: 1px solid #07121e88;
+  pointer-events: auto;
+  cursor: crosshair;
+  container-type: inline-size;
+  font-style: normal;
+}
+.band-plan-cw { background: #29694f; }
+.band-plan-data { background: #514584; }
+.band-plan-ssb { background: #285c83; }
+.band-plan-ssb-data { background: repeating-linear-gradient(120deg, #285c83 0 5px, #514584 5px 10px); }
+.frequency-scale .band-plan-segment b {
+  display: none;
+  color: #fff;
+  font: 700 8px/11px monospace;
+  text-align: center;
+  white-space: nowrap;
+}
+@container (min-width: 45px) {
+  .frequency-scale .band-plan-segment b { display: block; }
+}

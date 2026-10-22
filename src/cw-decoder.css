@@ -1,0 +1,12 @@
+.control-panel > .cw-dec-launch { position:absolute; bottom:-14px; left:52px; z-index:20; min-height:28px; padding:3px 7px; font-size:11px; background:#0b1726; }
+.cw-dec-panel { width:min(410px,calc(100vw - 24px)); max-height:84dvh; overflow:auto; box-sizing:border-box; padding:14px; color:#dcecff; background:#0b1726; border:1px solid #26466b; border-radius:10px; }
+.cw-dec-panel::backdrop { background:#0008; }
+.cw-dec-panel header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.cw-dec-panel button { min-height:32px; padding:4px 8px; font-size:12px; }
+.cw-dec-panel button[aria-pressed="true"] { color:#76e4ff; border-color:#76e4ff; }
+.cw-dec-panel label { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:12px 0; font-size:12px; }
+.cw-dec-panel input[type="range"] { width:100%; min-width:0; accent-color:#76e4ff; }
+.cw-dec-panel input[type="checkbox"] { width:auto; }
+.cw-dec-panel input[type="number"] { width:70px; min-width:0; padding:4px; color:#dcecff; background:#07121e; border:1px solid #26466b; }
+.cw-dec-panel textarea { width:100%; max-width:100%; min-width:0; box-sizing:border-box; resize:vertical; overflow:auto; padding:8px; margin:10px 0; color:#dcecff; background:#07121e; border:1px solid #26466b; font:13px/1.5 monospace; }
+.cw-dec-panel p,.cw-dec-panel small,.cw-dec-panel output { display:block; color:#9eb4cc; font-size:11px; overflow-wrap:anywhere; }

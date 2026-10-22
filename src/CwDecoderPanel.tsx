@@ -1,0 +1,37 @@
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { CwDecoder, type CwSettings, type CwSnapshot } from "./cwDecoder";
+import "./cw-decoder.css";
+const empty:CwSnapshot={text:'',wpm:20,acquired:false,confidence:0,tonePresent:false};
+export function CwDecoderPanel({ input }: { input:MutableRefObject<CwDecoder|null> }) {
+  const dialog=useRef<HTMLDialogElement>(null), output=useRef<HTMLTextAreaElement>(null);
+  const [enabled,setEnabled]=useState(false),[settings,setSettings]=useState<CwSettings>({tone:700,auto:true,wpm:20});
+  const [wpmDraft,setWpmDraft]=useState('20');
+  const [snapshot,setSnapshot]=useState<CwSnapshot>(empty),[message,setMessage]=useState('');
+  const transcript=useRef('');
+  function stop(){if(input.current){const s=input.current.snapshot();transcript.current=s.text;setSnapshot({...s,confidence:0,tonePresent:false});}input.current=null;setEnabled(false);}
+  function start(){input.current=new CwDecoder(settings,transcript.current);setEnabled(true);setMessage('');}
+  function configure(next:CwSettings){setSettings(next);input.current?.configure(next);}
+  useEffect(()=>{
+    if(!enabled)return;
+    const timer=setInterval(()=>{if(input.current){const s=input.current.snapshot();transcript.current=s.text;setSnapshot(s);}},150);
+    return()=>clearInterval(timer);
+  },[enabled,input]);
+  useEffect(()=>()=>{input.current=null;},[input]);
+  useEffect(()=>{if(output.current)output.current.scrollTop=output.current.scrollHeight;},[snapshot.text]);
+  return <>
+    <button type="button" className="cw-dec-launch" aria-label="Открыть CW DEC" onClick={()=>dialog.current?.showModal()}>CW DEC</button>
+    <dialog ref={dialog} className="cw-dec-panel" aria-labelledby="cw-dec-title" onClose={stop} onKeyDown={e=>e.stopPropagation()}>
+      <header><strong id="cw-dec-title">CW DECODER</strong><button type="button" aria-label="Закрыть CW DEC" onClick={()=>dialog.current?.close()}>×</button></header>
+      <button type="button" aria-pressed={enabled} onClick={()=>enabled?stop():start()}>CW DEC {enabled?'ON':'OFF'}</button>
+      <label>Тон · {settings.tone} Hz<input aria-label="Тон CW" type="range" min="300" max="1000" step="5" value={settings.tone} onChange={e=>configure({...settings,tone:Number(e.target.value)})}/></label>
+      <label><input type="checkbox" checked={settings.auto} onChange={e=>configure({...settings,auto:e.target.checked})}/>AUTO WPM</label>
+      <label>Ручная скорость · WPM<input aria-label="Скорость CW WPM" type="number" min="5" max="40" step="1" disabled={settings.auto} value={wpmDraft} onChange={e=>{setWpmDraft(e.target.value);const wpm=Number(e.target.value);if(Number.isInteger(wpm)&&wpm>=5&&wpm<=40)configure({...settings,wpm});}} onBlur={()=>setWpmDraft(String(settings.wpm))}/></label>
+      <output>{enabled?(snapshot.acquired?`${snapshot.wpm} WPM`:'Определение скорости…'):'Обработка остановлена'} · {enabled&&snapshot.tonePresent?'Тон обнаружен':'Нет устойчивого тона'}</output>
+      <p>Уверенность: {enabled?snapshot.confidence:0}/100 — оценка сигнала и ритма, не вероятность правильного текста.</p>
+      <textarea ref={output} aria-label="Декодированный CW текст" readOnly value={snapshot.text} placeholder="Здесь появятся символы, распознанные из принимаемого PCM" rows={7}/>
+      <button type="button" disabled={!snapshot.text} onClick={async()=>{try{await navigator.clipboard.writeText(snapshot.text);setMessage('Скопировано');}catch{setMessage('Не удалось скопировать: проверьте разрешение буфера обмена');}}}>COPY</button>
+      {message&&<small role="status">{message}</small>}
+      <p>Настройте тон принимаемой станции. Помехи, замирания и неровная передача дают ошибки; � — неизвестный символ. Закрытие панели выключает декодер.</p>
+    </dialog>
+  </>;
+}

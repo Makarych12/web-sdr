@@ -14,6 +14,15 @@ import {
   type Cuts,
   type Preset,
 } from "./tuning";
+import { CwDecoderPanel } from "./CwDecoderPanel";
+import type { CwDecoder } from "./cwDecoder";
+import { DxClusterPanel, DxMarkers } from "./DxCluster";
+import { useDxCluster } from "./useDxCluster";
+import { dxBand, freshDx } from "./dxCluster";
+import { AudioEq, DEFAULT_EQ, validEq } from "./audioEq";
+import { AudioEqControls } from "./AudioEqControls";
+import { SwlLogbook } from "./SwlLogbook";
+import { BandPlan } from "./BandPlan";
 import { FrequencyDigits } from "./FrequencyDigits";
 import { FrequencyNudges } from "./FrequencyNudges";
 import { VfoDial } from "./VfoDial";
@@ -67,6 +76,14 @@ type View = {
 };
 function App() {
   const recording = useWavRecording();
+  const cwDecoder = useRef<CwDecoder | null>(null);
+  const dx = useDxCluster();
+  const [dxBandOnly, setDxBandOnly] = useState(false);
+  const audioEq = useRef<AudioEq | null>(null);
+  const [eqSettings, setEqSettings] = useStoredState("ur4mtn.audio-eq.v1", DEFAULT_EQ, validEq);
+  const latestEq = useRef(eqSettings);
+  latestEq.current = eqSettings;
+  useEffect(() => { audioEq.current?.update(eqSettings); }, [eqSettings]);
   const afAnalysers = useRef<{ before: AnalyserNode; after: AnalyserNode } | null>(null);
   const afInput = useRef<AfInput>(null);
   const scanner = useRef<FrequencyScanner | null>(null);
@@ -515,6 +532,7 @@ function App() {
     const currentView = viewRef.current;
     const previous = settings.current;
     if (f !== previous.frequency || m !== previous.mode) {
+      cwDecoder.current?.resetSignal();
       nr.current?.port.postMessage({ reset: true });
       notch.current?.port.postMessage({ reset: true });
     }
@@ -577,6 +595,7 @@ function App() {
     setView(next);
   }
   callbacks.current.state = (v) => {
+    if (v.phase !== "live") cwDecoder.current?.resetSignal();
     setWanted(manager.current?.desired ?? false);
     if (v.phase === "idle" || v.phase === "blocked") media.current?.pause();
     if (
@@ -599,6 +618,7 @@ function App() {
         const samples = new Float32Array((v.length - 1) / 2);
         for (let i = 0; i < samples.length; i++)
           samples[i] = dv.getInt16(1 + i * 2, false) / 32768;
+        cwDecoder.current?.push(samples, rate.current);
         afInput.current?.(samples, rate.current);
         scanner.current?.audio(samples, rate.current, settings.current.lowCut, settings.current.highCut);
         player.current?.port.postMessage({ samples, rate: rate.current }, [
@@ -780,6 +800,7 @@ function App() {
         return true;
       },
       onReset: () => {
+        cwDecoder.current?.resetSignal();
         nr.current?.port.postMessage({ reset: true });
         notch.current?.port.postMessage({ reset: true });
         scanner.current?.reset();
@@ -859,7 +880,9 @@ function App() {
           if (data.type === "notch") setNotchDetected(finiteNumber(data.frequency) ? data.frequency : null);
         };
         nr.current.connect(notch.current);
-        notch.current.connect(gain.current);
+        audioEq.current = new AudioEq(context.current, latestEq.current);
+        notch.current.connect(audioEq.current.input);
+        audioEq.current.output.connect(gain.current);
         const before = context.current.createAnalyser(), after = context.current.createAnalyser();
         before.fftSize = after.fftSize = 2048;
         player.current.connect(before);
@@ -976,6 +999,19 @@ function App() {
     Math.min(100, ((frequency - view.start) / view.span) * 100),
   );
   const filterBand = filterPosition(view, frequency, cuts.lowCut, cuts.highCut);
+  const dxReceiver = receivers.find(r => r.id === receiver);
+  const dxRange = dxReceiver ? {
+    min: Math.max(0, dxReceiver.minFrequency ?? 0),
+    max: Math.min(30000, view.bandwidth ?? 30000, dxReceiver.maxFrequency ?? 30000),
+  } : null;
+  const dxSpots = dx.error || !dx.enabled || (dxBandOnly && !dxBand(frequency))
+    ? [] : freshDx(dx.spots, dx.now, dxBandOnly ? dxBand(frequency) : null);
+  const tuneDx = (spot: { frequency: number }) => {
+    if (dxRange && spot.frequency >= dxRange.min && spot.frequency <= dxRange.max) {
+      tune(spot.frequency);
+      manager.current?.flushTune();
+    }
+  };
   return (
     <div className={"app" + (wanted ? " playing" : "")}>
       <header className="site-header">
@@ -1134,6 +1170,14 @@ function App() {
             }
           }}
         >
+          <CwDecoderPanel input={cwDecoder} />
+          <DxClusterPanel feed={dx} frequency={frequency} range={dxRange} currentBandOnly={dxBandOnly}
+            onBandOnly={setDxBandOnly} onTune={tuneDx} />
+          <AudioEqControls settings={eqSettings} onChange={setEqSettings} />
+          <SwlLogbook frequencyHz={frequencyHz} mode={mode} onTune={(entry) => {
+            tune(entry.frequencyHz / 1000, entry.mode);
+            manager.current?.flushTune();
+          }} />
           <NoiseReduction enabled={nrEnabled} strength={nrStrength}
             onEnabledChange={setNrEnabled} onStrengthChange={setNrStrength} />
           <NotchControls enabled={notchEnabled} auto={notchAuto} frequency={notchFrequency}
@@ -1473,6 +1517,7 @@ function App() {
             </button>
           </div>
           <div className="scope">
+            <DxMarkers spots={dxSpots} view={view} range={dxRange} onTune={tuneDx} />
             <canvas
               ref={spectrum}
               width={1024}
@@ -1516,7 +1561,7 @@ function App() {
             className="axis frequency-scale"
             role="slider"
             tabIndex={0}
-            aria-label="Шкала частоты: перетащите для настройки"
+            aria-label="Шкала частоты и BAND PLAN Region 1: нажмите или перетащите для настройки"
             aria-valuemin={0}
             aria-valuemax={30000000}
             aria-valuenow={Math.round(frequency * 1000)}
@@ -1531,8 +1576,10 @@ function App() {
                 {frequencyLabel(view.start + (view.span * i) / 4, view.span)}
               </span>
             ))}
+            <BandPlan view={view} />
           </div>
           <div className="fall">
+            <DxMarkers spots={dxSpots} view={view} range={dxRange} onTune={tuneDx} waterfall />
             {filterBand && (
               <div
                 className="passband waterfall-passband"

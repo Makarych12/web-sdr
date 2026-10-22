@@ -1,0 +1,67 @@
+{
+  "source": "https://www.hamqth.com/api/v2/spots?limit=100",
+  "note": "Real source records for parser tests only; never loaded by the application.",
+  "spots": [
+    {
+      "dxcall": "EA2FGQ",
+      "spotter": "OZ3MC",
+      "freq": 14080.0,
+      "time": "2026-10-22T09:36:00Z"
+    },
+    {
+      "dxcall": "RA0AY",
+      "spotter": "UI0B",
+      "freq": 21194.0,
+      "time": "2026-10-22T09:35:00Z"
+    },
+    {
+      "dxcall": "EA7LMB",
+      "spotter": "EA3HFS",
+      "freq": 14227.0,
+      "time": "2026-10-22T09:35:00Z"
+    },
+    {
+      "dxcall": "EA6SA",
+      "spotter": "EA1AHP",
+      "freq": 7047.5,
+      "time": "2026-10-22T09:35:00Z"
+    },
+    {
+      "dxcall": "A41RX",
+      "spotter": "R3YCI",
+      "freq": 21270.0,
+      "time": "2026-10-22T09:34:00Z"
+    },
+    {
+      "dxcall": "HB0/DC6ST",
+      "spotter": "HB9EFJ",
+      "freq": 7175.0,
+      "time": "2026-10-22T09:34:00Z"
+    },
+    {
+      "dxcall": "RU4CM",
+      "spotter": "UI0B",
+      "freq": 21188.0,
+      "time": "2026-10-22T09:34:00Z"
+    },
+    {
+      "dxcall": "EA4IYL",
+      "spotter": "EA3EE",
+      "freq": 7118.0,
+      "time": "2026-10-22T09:34:00Z"
+    },
+    {
+      "dxcall": "F6IFX",
+      "spotter": "DL1BEC",
+      "freq": 144182.0,
+      "time": "2026-10-22T09:34:00Z"
+    },
+    {
+      "dxcall": "EA4IYL",
+      "spotter": "OS8D",
+      "freq": 7118.0,
+      "time": "2026-10-22T09:34:00Z"
+    }
+  ],
+  "capturedDateUtc": "2026-10-22"
+}

@@ -1,0 +1,25 @@
+.control-panel > .log-launch {
+  position: absolute; top: -14px; right: 190px; z-index: 20;
+  min-height: 28px; padding: 3px 8px; font-size: 11px; background: #0b1726;
+}
+.swl-logbook {
+  width: min(560px, calc(100vw - 24px)); max-height: 84dvh; overflow: auto;
+  box-sizing: border-box; padding: 14px; color: #dcecff; background: #0b1726;
+  border: 1px solid #26466b; border-radius: 10px; text-align: left;
+}
+.swl-logbook::backdrop { background: #0008; }
+.swl-logbook header, .swl-logbook .swl-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.swl-logbook header { justify-content: space-between; }
+.swl-logbook button { min-height: 32px; padding: 4px 8px; font-size: 12px; }
+.swl-logbook p, .swl-logbook small { font-size: 11px; color: #9eb4cc; overflow-wrap: anywhere; }
+.swl-logbook form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 12px; }
+.swl-logbook label { display: grid; gap: 4px; font-size: 12px; min-width: 0; }
+.swl-logbook input, .swl-logbook select, .swl-logbook textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; font: inherit; padding: 6px; color: #dcecff; background: #07121e; border: 1px solid #26466b; border-radius: 4px; }
+.swl-logbook textarea { resize: vertical; }
+.swl-logbook .swl-wide, .swl-logbook .swl-snapshot { grid-column: 1 / -1; }
+.swl-logbook .swl-list { max-height: 32dvh; overflow: auto; margin: 10px 0; }
+.swl-logbook article { border-top: 1px solid #26466b; padding: 10px 0; }
+.swl-logbook article > small { display: block; }
+.swl-logbook .swl-comment { white-space: pre-wrap; margin: 4px 0; }
+.swl-logbook .swl-frequency { color: #76e4ff; margin: 4px 0; }
+.swl-logbook [role="alert"] { color: #ff9e9e; }

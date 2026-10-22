@@ -1,0 +1,18 @@
+.control-panel > .eq-launch {
+  position: absolute; top: -14px; right: 244px; z-index: 20;
+  min-height: 28px; padding: 3px 8px; font-size: 11px; background: #0b1726;
+}
+.control-panel > .eq-launch[aria-pressed="true"] { color: #76e4ff; border-color: #76e4ff; }
+.audio-eq-panel {
+  width: min(330px, calc(100vw - 24px)); max-height: 84dvh; overflow: auto;
+  box-sizing: border-box; padding: 14px; color: #dcecff; background: #0b1726;
+  border: 1px solid #26466b; border-radius: 10px;
+}
+.audio-eq-panel::backdrop { background: #0008; }
+.audio-eq-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.audio-eq-panel button { min-height: 32px; padding: 4px 8px; font-size: 12px; }
+.audio-eq-panel label { display: grid; gap: 6px; margin: 14px 0; font: 12px monospace; }
+.audio-eq-panel input { width: 100%; min-width: 0; accent-color: #76e4ff; }
+.audio-eq-panel .eq-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.audio-eq-panel button[aria-pressed="true"] { color: #76e4ff; border-color: #76e4ff; }
+.audio-eq-panel p { font-size: 11px; color: #9eb4cc; }
