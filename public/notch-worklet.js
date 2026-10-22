@@ -6,8 +6,8 @@ class DSPNotch extends AudioWorkletProcessor {
     this.auto = false;
     this.frequency = 1000;
     this.width = 50;
-    this.autoDepth = 9;
-    this.banks = [new Float64Array(7), new Float64Array(7)];
+    this.autoDepth = 40;
+    this.banks = [new Float64Array(9), new Float64Array(9)];
     this.bankFrequency = new Float64Array(2);
     this.bankWidth = new Float64Array(2);
     this.active = 0;
@@ -49,7 +49,7 @@ class DSPNotch extends AudioWorkletProcessor {
       }
       if (Number.isFinite(data.frequency)) this.frequency = Math.max(100, Math.min(4000, data.frequency));
       if (Number.isFinite(data.width)) this.width = Math.max(10, Math.min(200, data.width));
-      if (Number.isFinite(data.autoDepth)) this.autoDepth = Math.max(0, Math.min(18, data.autoDepth));
+      if (Number.isFinite(data.autoDepth)) this.autoDepth = Math.max(0, Math.min(60, data.autoDepth));
       if (data.reset) this.resetAnalysis();
     };
   }
@@ -73,7 +73,7 @@ class DSPNotch extends AudioWorkletProcessor {
     bank[0] = bank[2] = 1 / (1 + alpha);
     bank[1] = bank[3] = -2 * Math.cos(omega) / (1 + alpha);
     bank[4] = (1 - alpha) / (1 + alpha);
-    bank[5] = bank[6] = 0;
+    bank[5] = bank[6] = bank[7] = bank[8] = 0;
     this.bankFrequency[index] = frequency;
     this.bankWidth[index] = width;
   }
@@ -81,7 +81,11 @@ class DSPNotch extends AudioWorkletProcessor {
     const output = bank[0] * input + bank[5];
     bank[5] = bank[1] * input - bank[3] * output + bank[6];
     bank[6] = bank[2] * input - bank[4] * output;
-    return output;
+    // A second identical section gives a deep stop even between FFT bins.
+    const second = bank[0] * output + bank[7];
+    bank[7] = bank[1] * output - bank[3] * second + bank[8];
+    bank[8] = bank[2] * output - bank[4] * second;
+    return second;
   }
   beginAnalysis() {
     const n = this.size;

@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 export type AfInput = ((samples: Float32Array, sampleRate: number) => void) | null;
 const SIZE = 2048;
 type Props = {
+  analysers: MutableRefObject<{ before: AnalyserNode; after: AnalyserNode } | null>;
   input: MutableRefObject<AfInput>;
   notchFrequency: number;
   notchEnabled: boolean;
@@ -72,7 +73,8 @@ function SpectrumCanvas(props: Props) {
   const settings = useRef(props);
   settings.current = props;
   useEffect(() => {
-    const model = new AudioSpectrum();
+    const model = new AudioSpectrum(), processed = new AudioSpectrum();
+    const beforeSamples = new Float32Array(SIZE), afterSamples = new Float32Array(SIZE);
     const receive = (samples: Float32Array, sampleRate: number) => model.push(samples, sampleRate);
     input.current = receive;
     const element = canvas.current!;
@@ -102,24 +104,32 @@ function SpectrumCanvas(props: Props) {
         ctx.textAlign = khz === 0 ? "left" : khz === 4 ? "right" : "center";
         ctx.fillText(khz === 4 ? "4 kHz" : String(khz), x, height - 5);
       }
-      const bins = model.transform();
-      ctx.beginPath();
-      const end = Math.min(bins.length - 1, Math.floor(4000 * SIZE / model.sampleRate));
-      for (let i = 0; i <= end; i++) {
-        const x = left + (right - left) * (i * model.sampleRate / SIZE) / 4000;
-        const y = bottom - Math.max(0, Math.min(1, (bins[i] + 100) / 100)) * (bottom - top);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      const taps = settings.current.analysers.current;
+      if (taps) {
+        taps.before.getFloatTimeDomainData(beforeSamples);
+        taps.after.getFloatTimeDomainData(afterSamples);
+        model.push(beforeSamples, taps.before.context.sampleRate);
+        processed.push(afterSamples, taps.after.context.sampleRate);
       }
-      ctx.strokeStyle = "#76e4ff";
-      ctx.lineWidth = 1;
-      ctx.shadowColor = "#44caff";
-      ctx.shadowBlur = 4;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      const spectra = [model, processed];
+      for (let trace = 0; trace < spectra.length; trace++) {
+        if (!taps && trace === 1) continue;
+        const spectrum = spectra[trace], bins = spectrum.transform();
+        ctx.beginPath();
+        const end = Math.min(bins.length - 1, Math.floor(4000 * SIZE / spectrum.sampleRate));
+        for (let i = 0; i <= end; i++) {
+          const x = left + (right - left) * (i * spectrum.sampleRate / SIZE) / 4000;
+          const y = bottom - Math.max(0, Math.min(1, (bins[i] + 100) / 100)) * (bottom - top);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = trace === 0 ? "#687c92" : "#76e4ff";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
       const state = settings.current;
       ctx.fillStyle = "#9eb4cc";
       ctx.textAlign = "left";
-      ctx.fillText("AF-FFT — спектр звука", left, 12);
+      ctx.fillText("AF-FFT · серый ДО · голубой ПОСЛЕ", left, 12);
       const marker = state.notchAuto ? state.notchDetected : state.notchFrequency;
       if (marker !== null) {
         const x = left + (right - left) * marker / 4000;

@@ -39,7 +39,7 @@ export function NotchControls(props: Props) {
           if (Number.isFinite(value) && value >= 10 && value <= 200) props.onWidth(value);
         }} onBlur={() => setWidth(String(props.width))} /></label>
       {props.auto && <label>Глубина AUTO · {props.autoDepth} dB<input type="range" aria-label="Глубина AUTO NOTCH"
-        min="0" max="18" step="1" value={props.autoDepth} onChange={(e) => props.onAutoDepth(Number(e.target.value))} /></label>}
+        min="0" max="60" step="1" value={props.autoDepth} onChange={(e) => props.onAutoDepth(Number(e.target.value))} /></label>}
       {props.auto && <output>{props.enabled && props.detected !== null
         ? `${Math.round(props.detected)} Hz · до ${props.autoDepth} dB` : "Поиск устойчивого тона"}</output>}
     </div>

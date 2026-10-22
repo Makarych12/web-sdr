@@ -16,6 +16,7 @@ class WienerNR extends AudioWorkletProcessor {
     this.power = new Float32Array(this.hop + 1);
     this.noise = new Float32Array(this.hop + 1);
     this.minimum = new Float32Array(this.hop + 1);
+    this.previousPower = new Float32Array(this.hop + 1);
     this.desiredGain = new Float32Array(this.hop + 1);
     this.gain = new Float32Array(this.hop + 1).fill(1);
     for (let i = 0; i < this.size; i++) {
@@ -55,6 +56,7 @@ class WienerNR extends AudioWorkletProcessor {
     this.input.fill(0);
     this.overlap.fill(0);
     this.gain.fill(1);
+    this.previousPower.fill(0);
     this.write = this.read = this.pending = this.samples = 0;
     this.noiseReady = false;
     this.bootstrapFrames = 0;
@@ -97,21 +99,24 @@ class WienerNR extends AudioWorkletProcessor {
     if (this.enabled && this.strength > 0) this.amount += (this.strength - this.amount) * 0.2;
     const initialise = !this.noiseReady && this.samples >= n && energy > 1e-10;
     const updateMinimum = ++this.minimumFrames >= this.minimumPeriod;
-    const floor = 1 - 0.85 * this.amount;
+    // Bound attenuation of weak consonants and phrase endings. A 24 dB
+    // floor plus slow decision-directed attack risked masking low-SNR speech.
+    const floor = 10 ** (-(4 + 10 * this.amount) / 20);
     for (let i = 0; i <= half; i++) {
       const p = this.real[i] * this.real[i] + this.imag[i] * this.imag[i];
       if (initialise) {
         this.power[i] = this.minimum[i] = p;
-        this.noise[i] = p * 0.5;
+        this.noise[i] = p;
+        this.previousPower[i] = 0;
       } else if (this.noiseReady) {
         this.power[i] += 0.2 * (p - this.power[i]);
         this.minimum[i] = Math.min(this.minimum[i], this.power[i]);
         if (this.bootstrapFrames < 16) {
           // A single periodogram has deep random nulls. Average the first ~170 ms.
-          this.noise[i] += (p * 0.6 - this.noise[i]) / (this.bootstrapFrames + 1);
+          this.noise[i] += (p - this.noise[i]) / (this.bootstrapFrames + 1);
           this.minimum[i] = this.power[i];
         } else if (updateMinimum) {
-          const estimate = Math.max(1e-12, this.minimum[i] * 1.5);
+          const estimate = Math.max(1e-12, this.minimum[i] * 2.0);
           // Limit upward adaptation, rather than freezing forever after a noise jump.
           const target = Math.min(estimate, this.noise[i] * 1.5 + 1e-12);
           this.noise[i] += 0.3 * (target - this.noise[i]);
@@ -120,8 +125,15 @@ class WienerNR extends AudioWorkletProcessor {
           this.noise[i] += 0.04 * (this.power[i] - this.noise[i]);
         }
       }
+      // Decision-directed a priori SNR: retain coherent speech, suppress random
+      // periodogram peaks rather than treating each noise peak as new speech.
+      const noise = Math.max(this.noise[i], 1e-12);
+      const posterior = p / noise;
+      const prior = 0.90 * this.previousPower[i] / noise +
+        0.10 * Math.max(0, posterior - 1);
+      const suppression = 1 + 0.75 * this.amount;
       this.desiredGain[i] = this.noiseReady || initialise
-        ? Math.max(floor, 1 - this.amount * this.noise[i] / Math.max(p, 1e-12)) : 1;
+        ? Math.max(floor, prior / (prior + suppression)) : 1;
     }
     if (initialise) this.noiseReady = true;
     if (this.noiseReady && this.bootstrapFrames < 16) this.bootstrapFrames++;
@@ -129,7 +141,9 @@ class WienerNR extends AudioWorkletProcessor {
     for (let i = 0; i <= half; i++) {
       const target = 0.25 * this.desiredGain[Math.max(0, i - 1)] +
         0.5 * this.desiredGain[i] + 0.25 * this.desiredGain[Math.min(half, i + 1)];
-      this.gain[i] += (target - this.gain[i]) * (target > this.gain[i] ? 0.6 : 0.15);
+      this.gain[i] += (target - this.gain[i]) * (target > this.gain[i] ? 0.75 : 0.12);
+      // Store this frame's enhanced power, after updating the actual gain.
+      this.previousPower[i] = (this.real[i] ** 2 + this.imag[i] ** 2) * this.gain[i] ** 2;
       this.real[i] *= this.gain[i]; this.imag[i] *= this.gain[i];
       if (i > 0 && i < half) {
         this.real[n - i] *= this.gain[i]; this.imag[n - i] *= this.gain[i];

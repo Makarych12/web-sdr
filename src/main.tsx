@@ -67,6 +67,7 @@ type View = {
 };
 function App() {
   const recording = useWavRecording();
+  const afAnalysers = useRef<{ before: AnalyserNode; after: AnalyserNode } | null>(null);
   const afInput = useRef<AfInput>(null);
   const scanner = useRef<FrequencyScanner | null>(null);
   const nr = useRef<AudioWorkletNode | null>(null);
@@ -77,7 +78,7 @@ function App() {
   const [notchAuto, setNotchAuto] = useState(false);
   const [notchFrequency, setNotchFrequency] = useState(1000);
   const [notchWidth, setNotchWidth] = useState(50);
-  const [notchAutoDepth, setNotchAutoDepth] = useState(9);
+  const [notchAutoDepth, setNotchAutoDepth] = useState(40);
   const [notchDetected, setNotchDetected] = useState<number | null>(null);
   const notchSettings = useRef({ enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth, autoDepth: notchAutoDepth });
   notchSettings.current = { enabled: notchEnabled, auto: notchAuto, frequency: notchFrequency, width: notchWidth, autoDepth: notchAutoDepth };
@@ -859,6 +860,11 @@ function App() {
         };
         nr.current.connect(notch.current);
         notch.current.connect(gain.current);
+        const before = context.current.createAnalyser(), after = context.current.createAnalyser();
+        before.fftSize = after.fftSize = 2048;
+        player.current.connect(before);
+        notch.current.connect(after);
+        afAnalysers.current = { before, after };
         media.current!.attach(context.current, gain.current);
         context.current.onstatechange = () => {
           setAudioPaused(
@@ -1273,7 +1279,7 @@ function App() {
                       {" · "}{(recording.status.bytes / 1024 / 1024).toFixed(2)} MiB
                     </output>
                   )}
-                  <AfFft input={afInput} notchFrequency={notchFrequency} notchEnabled={notchEnabled}
+                  <AfFft analysers={afAnalysers} input={afInput} notchFrequency={notchFrequency} notchEnabled={notchEnabled}
                     notchAuto={notchAuto} notchDetected={notchDetected} onNotchFrequency={(hz) => {
                       setNotchAuto(false);
                       setNotchFrequency(hz);
