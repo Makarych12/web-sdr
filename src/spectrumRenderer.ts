@@ -1,3 +1,4 @@
+import { sdrProLevels, sdrProRow, type SdrProLevels } from "./sdrPro";
 import { DEFAULT_WATERFALL_DISPLAY, validWaterfallDisplay, malahitRow, type WaterfallDisplay } from "./waterfallMode";
 import { THEME_STOPS, validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
 import {
@@ -122,7 +123,7 @@ function validView(view: SpectrumView) {
       (Number.isInteger(view.zoom) && view.zoom >= 0 && view.zoom <= 14))
   );
 }
-type HistoryRow = { bins:Uint8Array; blackDb:number; rangeDb:number; calibration:number; view:SpectrumView };
+type HistoryRow = { bins:Uint8Array; blackDb:number; rangeDb:number; calibration:number; view:SpectrumView; pro:SdrProLevels };
 /** Bounded real-row queue; at most one upward scroll per animation frame. */
 export class SpectrumRenderer {
   private history = document.createElement("canvas");
@@ -140,6 +141,7 @@ export class SpectrumRenderer {
   setWaterfallDisplay(display:WaterfallDisplay) {
     if(!validWaterfallDisplay(display)||JSON.stringify(display)===JSON.stringify(this.display))return;
     this.display={...display};
+    this.stopProScroll();
     this.waterfall.dataset.mode=display.mode;
     this.repaintHistory();
   }
@@ -148,12 +150,35 @@ export class SpectrumRenderer {
       this.paintColorRow(ctx,row.bins,row.calibration,row.blackDb,row.rangeDb,y);
       return;
     }
+    if(this.display.mode==='SDR PRO'){
+      const pixels=sdrProRow(row.bins,row.pro,this.display.proContrast??1.1,this.display.proSensitivity??0);
+      this.paintColorRow(ctx,pixels,0,-255,255,y);
+      return;
+    }
     const contiguous=previous&&sameView(row.view,previous.view);
     const noise=row.blackDb+10+255-row.calibration;
     const previousNoise=previous?previous.blackDb+10+255-previous.calibration:noise;
     const pixels=malahitRow(row.bins,contiguous?previous.bins:null,noise,previousNoise,this.display);
     // Existing theme LUT maps the enhanced measurements; it is not the algorithm.
     this.paintColorRow(ctx,pixels,0,-255,255,y);
+  }
+  private proScrollTimer:ReturnType<typeof setTimeout>|undefined;
+  private proStepUntil=0;
+  private proLastRowTime=0;
+  private proPeriod=125;
+  private stopProScroll() {
+    if(this.proScrollTimer!==undefined)clearTimeout(this.proScrollTimer);
+    this.proScrollTimer=undefined;this.proStepUntil=0;
+  }
+  private stepProScroll() {
+    const now=performance.now();
+    if(this.proLastRowTime)this.proPeriod+=.2*(Math.max(32,Math.min(500,now-this.proLastRowTime))-this.proPeriod);
+    this.proLastRowTime=now;
+    if(this.display.mode!=='SDR PRO')return;
+    this.stopProScroll();
+    const delay=Math.max(16,Math.min(80,this.proPeriod/2));
+    this.proStepUntil=now+delay;
+    this.proScrollTimer=setTimeout(()=>{this.proScrollTimer=undefined;this.proStepUntil=0;this.schedule();},delay);
   }
   private repaintFrame=0;
   private repainting=false;
@@ -213,6 +238,7 @@ export class SpectrumRenderer {
   setVisible(visible: boolean) {
     if (visible === this.visible) return;
     this.visible = visible;
+    if(!visible)this.stopProScroll();
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     this.pending = [];
@@ -305,6 +331,7 @@ export class SpectrumRenderer {
     return true;
   }
   clear(resetSequence = true) {
+    this.stopProScroll();this.proLastRowTime=0;this.proPeriod=125;
     cancelAnimationFrame(this.repaintFrame);
     this.repaintFrame=0;this.repainting=false;
     cancelAnimationFrame(this.frame);
@@ -371,8 +398,10 @@ export class SpectrumRenderer {
         this.waterfall.dataset.noiseDb = levels.noiseDb.toFixed(2);
         this.waterfall.dataset.blackDb = levels.blackDb.toFixed(2);
         const y = height - (queue.length - n) * this.rowHeight;
-        const stored={bins:row.bins,calibration:this.calibration,blackDb:levels.blackDb,rangeDb:levels.rangeDb,view:row.view};
         const previous=this.colorRows.at(-1);
+        const preceding=previous&&sameView(previous.view,row.view)&&previous.calibration===this.calibration?previous.pro:undefined;
+        const stored={bins:row.bins,calibration:this.calibration,blackDb:levels.blackDb,rangeDb:levels.rangeDb,view:row.view,pro:sdrProLevels(row.bins,preceding)};
+        this.stepProScroll();
         for(let i=0;i<this.rowHeight && y+i<height;i++)if(y+i>=0){
           if(i===0)this.paintHistoryRow(ctx,stored,previous,y+i);
           else ctx.putImageData(this.strip,0,y+i);
@@ -392,6 +421,7 @@ export class SpectrumRenderer {
     wc.fillStyle = "#03060b";
     wc.fillRect(0, 0, this.waterfall.width, this.waterfall.height);
     wc.imageSmoothingEnabled = false;
+    const scrollOffset=this.display.mode==='SDR PRO'&&performance.now()<this.proStepUntil?1:0;
     // Most rows share a range. Project contiguous runs with one draw call,
     // keeping pan history without hundreds of canvas calls on every packet.
     for (let y = 0; y < this.rowViews.length;) {
@@ -408,7 +438,7 @@ export class SpectrumRenderer {
         this.history.width,
         end - y,
         p.x,
-        rowY,
+        rowY+scrollOffset,
         p.width,
         end - y,
       );
@@ -475,6 +505,7 @@ export class SpectrumRenderer {
     sc.shadowBlur = 0;
   }
   dispose() {
+    this.stopProScroll();
     cancelAnimationFrame(this.repaintFrame);
     this.repaintFrame=0;this.repainting=false;
     cancelAnimationFrame(this.frame);
