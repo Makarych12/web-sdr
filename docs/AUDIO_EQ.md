@@ -1,3 +1,5 @@
+> Current local corrections and measurements: [DX_EQ_COLOR_CHECK.md](DX_EQ_COLOR_CHECK.md). Earlier measurements below describe the previous implementation.
+
 # AUDIO EQ — 2026-10-22
 
 Playback path: existing PCM player → existing NR → existing NOTCH → new AudioEq → existing volume → existing media output. AudioEq uses real Web Audio BiquadFilterNodes: low shelf at 250 Hz, peaking at 1250 Hz (Q=.8), high shelf at 3000 Hz. Band gains are -12…+12 dB. The dry path bypasses every biquad. ON/OFF crossfades over 50 ms; coefficient changes ramp over 40 ms, with headroom established first. Once OFF settles, the EQ input branch is disconnected. Suspended contexts resume in exact dry bypass when OFF.

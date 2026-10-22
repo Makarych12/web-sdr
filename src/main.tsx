@@ -14,11 +14,14 @@ import {
   type Cuts,
   type Preset,
 } from "./tuning";
+import { WaterfallColor } from "./WaterfallColor";
+import { validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
 import { CwDecoderPanel } from "./CwDecoderPanel";
 import type { CwDecoder } from "./cwDecoder";
-import { DxClusterPanel, DxMarkers } from "./DxCluster";
+import { DxClusterPanel, DxMarkers, DxModePrompt } from "./DxCluster";
 import { useDxCluster } from "./useDxCluster";
-import { dxBand, freshDx } from "./dxCluster";
+import { dxMode } from "./dxMode";
+import { dxBand, freshDx, type DxSpot } from "./dxCluster";
 import { AudioEq, DEFAULT_EQ, validEq } from "./audioEq";
 import { AudioEqControls } from "./AudioEqControls";
 import { SwlLogbook } from "./SwlLogbook";
@@ -76,8 +79,10 @@ type View = {
 };
 function App() {
   const recording = useWavRecording();
+  const [waterfallTheme,setWaterfallTheme]=useStoredState<WaterfallTheme>("ur4mtn.waterfall-theme.v1","CLASSIC",validWaterfallTheme);
   const cwDecoder = useRef<CwDecoder | null>(null);
   const dx = useDxCluster();
+  const [dxModePending,setDxModePending]=useState<{ reason:string } | null>(null);
   const [dxBandOnly, setDxBandOnly] = useState(false);
   const audioEq = useRef<AudioEq | null>(null);
   const [eqSettings, setEqSettings] = useStoredState("ur4mtn.audio-eq.v1", DEFAULT_EQ, validEq);
@@ -354,6 +359,7 @@ function App() {
       renderer.current = null;
     };
   }, []);
+  useEffect(()=>{renderer.current?.setTheme(waterfallTheme);},[waterfallTheme]);
   useEffect(() => {
     let disposed = false,
       attempt = 0;
@@ -1006,10 +1012,13 @@ function App() {
   } : null;
   const dxSpots = dx.error || !dx.enabled || (dxBandOnly && !dxBand(frequency))
     ? [] : freshDx(dx.spots, dx.now, dxBandOnly ? dxBand(frequency) : null);
-  const tuneDx = (spot: { frequency: number }) => {
+  const tuneDx = (spot: DxSpot) => {
     if (dxRange && spot.frequency >= dxRange.min && spot.frequency <= dxRange.max) {
-      tune(spot.frequency);
+      const decision=dxMode(spot,settings.current.mode);
+      // One atomic tune applies frequency, mode and matching filter before one flush.
+      tune(spot.frequency,decision.mode);
       manager.current?.flushTune();
+      setDxModePending(decision.uncertain?{reason:decision.reason}:null);
     }
   };
   return (
@@ -1171,6 +1180,11 @@ function App() {
           }}
         >
           <CwDecoderPanel input={cwDecoder} />
+          <DxModePrompt pending={dxModePending} current={mode} onClose={()=>setDxModePending(null)} onSelect={m=>{
+            tune(settings.current.frequency,m);
+            manager.current?.flushTune();
+            setDxModePending(null);
+          }} />
           <DxClusterPanel feed={dx} frequency={frequency} range={dxRange} currentBandOnly={dxBandOnly}
             onBandOnly={setDxBandOnly} onTune={tuneDx} />
           <AudioEqControls settings={eqSettings} onChange={setEqSettings} />
@@ -1619,6 +1633,7 @@ function App() {
             )}
           </div>
           <div className="visual-foot">
+            <WaterfallColor theme={waterfallTheme} onChange={setWaterfallTheme} />
             <span>Касание — частота · два пальца — масштаб</span>
             <span>
               Шум · авто <i /> Сильный сигнал

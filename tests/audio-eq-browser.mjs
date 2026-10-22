@@ -63,9 +63,9 @@ try{
   const positions=()=>p.evaluate(()=>['.tuner','.steps','.mode','.frequency-scale','.vfo-dial','.fall','.log-launch','.nr-widget','.notch-widget'].map(s=>{const r=document.querySelector(s).getBoundingClientRect();return[s,r.x,r.y,r.width,r.height];}));
   const before=await positions();await launch.evaluate(e=>e.style.display='none');assert.deepEqual(await positions(),before);await launch.evaluate(e=>e.style.display='');
   await launch.click();const dialog=p.getByRole('dialog',{name:'AUDIO EQ',exact:true});await dialog.getByRole('button',{name:'EQ OFF',exact:true}).click();await dialog.getByRole('button',{name:'DX',exact:true}).click();
-  const settings=await p.evaluate(()=>JSON.parse(localStorage.getItem('ur4mtn.audio-eq.v1')));assert.deepEqual(settings,{enabled:true,bass:-9,mid:2,treble:-6});
+  const settings=await p.evaluate(()=>JSON.parse(localStorage.getItem('ur4mtn.audio-eq.v1')));assert.deepEqual(settings,{enabled:true,bass:-12,mid:5,treble:-6});
   await p.getByLabel('EQ TREBLE',{exact:true}).focus();await p.keyboard.press('End');assert.equal(await p.getByLabel('EQ TREBLE',{exact:true}).inputValue(),'12');
-  await p.getByLabel('Закрыть AUDIO EQ',{exact:true}).click();await p.reload();assert.equal(await launch.getAttribute('aria-pressed'),'true');await launch.click();assert.equal(await p.getByLabel('EQ BASS',{exact:true}).inputValue(),'-9');assert.equal(await p.getByLabel('EQ TREBLE',{exact:true}).inputValue(),'12');
+  await p.getByLabel('Закрыть AUDIO EQ',{exact:true}).click();await p.reload();assert.equal(await launch.getAttribute('aria-pressed'),'true');await launch.click();assert.equal(await p.getByLabel('EQ BASS',{exact:true}).inputValue(),'-12');assert.equal(await p.getByLabel('EQ TREBLE',{exact:true}).inputValue(),'12');
   await dialog.getByRole('button',{name:'FLAT',exact:true}).click();for(const band of ['BASS','MID','TREBLE'])assert.equal(await p.getByLabel(`EQ ${band}`,{exact:true}).inputValue(),'0');
   await dialog.getByRole('button',{name:'EQ ON',exact:true}).click();await p.screenshot({path:`${dir}/${width}.png`});assert.ok(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth));assert.deepEqual(errors,[]);
   report.ui.push({width,persistence:true,presets:true,off:true,layoutPreserved:true,errors});await context.close();

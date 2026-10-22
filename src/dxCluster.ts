@@ -1,7 +1,7 @@
 export const DX_URL = "https://www.hamqth.com/api/v2/spots?limit=200";
 export const DX_INTERVAL = 60000;
 export const DX_MAX_AGE = 30 * 60000;
-export type DxSpot = { id: string; call: string; frequency: number; time: number; spotter: string; band: string };
+export type DxSpot = { id: string; call: string; frequency: number; time: number; spotter: string; band: string; mode?: string | null };
 export type DxRange = { min: number; max: number } | null;
 // Band envelopes for filtering cluster reports, not mode allocations or licensing rules.
 const BANDS: readonly [string, number, number][] = [
@@ -30,7 +30,7 @@ export function parseDxSpots(value: unknown): DxSpot[] {
     const band = dxBand(s.freq);
     if (s.freq > 30000 || !band) continue;
     const id = `${s.dxcall}:${s.freq}:${time}:${s.spotter}`;
-    unique.set(id, { id, call: s.dxcall.toUpperCase(), frequency: s.freq, time, spotter: s.spotter.toUpperCase(), band });
+    unique.set(id, { id, call: s.dxcall.toUpperCase(), frequency: s.freq, time, spotter: s.spotter.toUpperCase(), band, mode: typeof s.mode === "string" ? s.mode.trim().toUpperCase() : null });
   }
   if (rows.length && !recognized) throw new Error("HamQTH: отсутствуют корректные споты");
   return [...unique.values()].sort((a,b) => b.time - a.time);

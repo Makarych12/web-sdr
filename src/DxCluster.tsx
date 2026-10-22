@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { dxAvailable, dxBand, freshDx, projectDx, type DxRange, type DxSpot } from "./dxCluster";
+import { MODES, type Mode } from "./radio";
 import type { DxFeed } from "./useDxCluster";
 import "./dx-cluster.css";
 type Props = { feed: DxFeed; frequency: number; range: DxRange; currentBandOnly: boolean; onBandOnly: (value: boolean) => void; onTune: (spot: DxSpot) => void };
@@ -21,7 +22,7 @@ export function DxClusterPanel(props: Props) {
         <button type="button" disabled={!dxAvailable(spot,range)} title={!dxAvailable(spot,range) ? "Частота недоступна выбранному приёмнику" : "Настроить VFO"}
           onClick={() => { if (dxAvailable(spot,range)) { onTune(spot); dialog.current?.close(); } }}>
           <b>{spot.call}</b> · {spot.frequency} kHz
-        </button><small>{utc(spot.time)} UTC · HamQTH / {spot.spotter}</small>
+        </button><small>{utc(spot.time)} UTC · {spot.mode ?? "режим неизвестен"} · HamQTH / {spot.spotter}</small>
       </article>)}</div>
       {!spots.length && !feed.error && <p>{feed.updated ? "Свежих спотов по выбранному фильтру нет" : "Загрузка реальных спотов…"}</p>}
       {feed.updated && <small>Получено: {utc(feed.updated)} UTC</small>}
@@ -48,4 +49,14 @@ export function DxMarkers({ spots, view, range, onTune, waterfall = false }: { s
         onClick={() => { if(dxAvailable(spot,range)) onTune(spot); }}>{spot.call}</button>
     </div>)}
   </div>;
+}
+
+export function DxModePrompt({ pending, current, onSelect, onClose }: { pending: { reason: string } | null; current: Mode; onSelect: (mode: Mode) => void; onClose: () => void }) {
+  const dialog=useRef<HTMLDialogElement>(null);
+  useLayoutEffect(()=>{if(pending&&!dialog.current?.open)dialog.current?.showModal();else if(!pending&&dialog.current?.open)dialog.current.close();},[pending]);
+  return <dialog ref={dialog} className="dx-panel" aria-label="Режим DX-спота" onClose={onClose} onKeyDown={e=>e.stopPropagation()}>
+    <strong>Выберите модуляцию</strong><p>{pending?.reason}</p><p>Сохранён {current}. Частота уже установлена.</p>
+    <div>{MODES.map(m=><button type="button" key={m} onClick={()=>onSelect(m)}>{m}</button>)}</div>
+    <button type="button" onClick={onClose}>Оставить {current}</button>
+  </dialog>;
 }

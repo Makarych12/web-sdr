@@ -1,0 +1,8 @@
+.visual-foot { position:relative; }
+.waterfall-color { position:absolute; right:8px; bottom:calc(100% + 4px); z-index:5; }
+.waterfall-color > button { min-height:24px; padding:2px 6px; font:10px monospace; background:#0b1726; }
+.waterfall-color-panel { width:min(280px,calc(100vw - 24px)); padding:12px; color:#dcecff; background:#0b1726; border:1px solid #26466b; border-radius:8px; }
+.waterfall-color-panel::backdrop { background:#0008; }
+.waterfall-color-panel header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.waterfall-color-panel button { min-height:32px; padding:4px 8px; margin:3px; font-size:11px; }
+.waterfall-color-panel button[aria-pressed="true"] { border-color:#76e4ff; color:#76e4ff; }

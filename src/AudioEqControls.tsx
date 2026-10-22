@@ -16,7 +16,7 @@ export function AudioEqControls({ settings, onChange }: Props) {
       <div className="eq-presets">{Object.entries(EQ_PRESETS).map(([name, preset]) => <button type="button" key={name}
         aria-pressed={settings.bass === preset.bass && settings.mid === preset.mid && settings.treble === preset.treble}
         onClick={() => onChange({ enabled: settings.enabled, ...preset })}>{name}</button>)}</div>
-      <p>250 Hz / 1,25 kHz / 3 kHz. REC и AF-FFT — без EQ. Для защиты пиков EQ может снижать громкость.</p>
+      <p>300 Hz / 1,65 kHz / 2,6 kHz. REC и AF-FFT — без EQ. Для защиты пиков EQ может снижать громкость.</p>
     </dialog>
   </>;
 }

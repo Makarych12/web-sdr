@@ -1,3 +1,4 @@
+import { THEME_STOPS, validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
 import {
   projectView,
   sameView,
@@ -10,23 +11,15 @@ export function clampByte(value: number) {
     Math.max(0, Math.min(255, Number.isFinite(value) ? value : 0)),
   );
 }
-const colorStops = [
-  [0, 2, 5, 13],
-  [0.18, 6, 21, 65],
-  [0.36, 15, 75, 161],
-  [0.54, 13, 175, 201],
-  [0.7, 58, 204, 117],
-  [0.84, 224, 213, 49],
-  [0.95, 247, 121, 24],
-  [1, 226, 44, 29],
-];
 /** One calibrated transfer curve for all receivers, bands and zoom levels. */
 export function waterfallColor(
   bin: number,
   calibration: number,
   blackDb = -115,
   rangeDb = 90,
+  theme: WaterfallTheme = "CLASSIC",
 ): number[] {
+  const colorStops = THEME_STOPS[theme];
   blackDb = Number.isFinite(blackDb) ? blackDb : -115;
   rangeDb = Number.isFinite(rangeDb) && rangeDb > 0 ? rangeDb : 90;
   const db = Math.max(
@@ -119,6 +112,32 @@ export class SpectrumRenderer {
   private frame = 0;
   private palette = new Uint8ClampedArray(256 * 4);
   private calibration = -13;
+  private theme: WaterfallTheme = 'CLASSIC';
+  private colorRows: { bins:Uint8Array; blackDb:number; rangeDb:number; calibration:number }[]=[];
+  setTheme(theme:WaterfallTheme) {
+    if(!validWaterfallTheme(theme)||theme===this.theme)return;
+    this.theme=theme;
+    const ctx=this.history.getContext('2d')!;
+    for(let i=0;i<this.colorRows.length;i++){
+      const row=this.colorRows[i];
+      const y=this.history.height-this.colorRows.length+i;
+      if(i>0 && row===this.colorRows[i-1])ctx.putImageData(this.strip,0,y);
+      else this.paintColorRow(ctx,row.bins,row.calibration,row.blackDb,row.rangeDb,y);
+    }
+    this.waterfall.dataset.theme=theme;
+    this.schedule();
+  }
+  private paintColorRow(ctx:CanvasRenderingContext2D,bins:Uint8Array,calibration:number,blackDb:number,rangeDb:number,y:number) {
+    for(let i=0;i<256;i++)this.palette.set(waterfallColor(i,calibration,blackDb,rangeDb,this.theme),i*4);
+    const width=this.history.width;
+    for(let x=0;x<width;x++){
+      const color=clampByte(bins[Math.min(1023,Math.floor(x*1024/width))])*4;
+      const pixel=x*4;
+      this.strip.data[pixel]=this.palette[color];this.strip.data[pixel+1]=this.palette[color+1];
+      this.strip.data[pixel+2]=this.palette[color+2];this.strip.data[pixel+3]=255;
+    }
+    ctx.putImageData(this.strip,0,y);
+  }
   private levels = new WaterfallLevels();
   private pending: { bins: Uint8Array; view: SpectrumView }[] = [];
   private sequence?: number;
@@ -153,7 +172,7 @@ export class SpectrumRenderer {
     const changed = next !== this.calibration;
     this.calibration = next;
     for (let i = 0; i < 256; i++)
-      this.palette.set(waterfallColor(i, this.calibration), i * 4);
+      this.palette.set(waterfallColor(i, this.calibration, -115, 90, this.theme), i * 4);
     if (changed) this.clear(false);
   }
   setView(view: SpectrumView) {
@@ -225,6 +244,7 @@ export class SpectrumRenderer {
     this.last = undefined;
     this.rowCount = 0;
     this.rowViews = [];
+    this.colorRows = [];
     this.levels.reset();
     if (resetSequence) this.sequence = undefined;
     for (const canvas of [this.history, this.waterfall]) {
@@ -277,27 +297,16 @@ export class SpectrumRenderer {
       for (let n = 0; n < queue.length; n++) {
         const row = queue[n];
         const levels = this.levels.update(row.bins, this.calibration);
-        for (let i = 0; i < 256; i++)
-          this.palette.set(
-            waterfallColor(i, this.calibration, levels.blackDb, levels.rangeDb),
-            i * 4,
-          );
         this.waterfall.dataset.noiseDb = levels.noiseDb.toFixed(2);
         this.waterfall.dataset.blackDb = levels.blackDb.toFixed(2);
-        for (let x = 0; x < width; x++) {
-          const bin = clampByte(
-            row.bins[Math.min(1023, Math.floor((x * 1024) / width))],
-          );
-          const color = bin * 4,
-            pixel = x * 4;
-          this.strip.data[pixel] = this.palette[color];
-          this.strip.data[pixel + 1] = this.palette[color + 1];
-          this.strip.data[pixel + 2] = this.palette[color + 2];
-          this.strip.data[pixel + 3] = 255;
-        }
         const y = height - (queue.length - n) * this.rowHeight;
-        for (let i = 0; i < this.rowHeight && y + i < height; i++)
-          if (y + i >= 0) ctx.putImageData(this.strip, 0, y + i);
+        const stored={bins:row.bins,calibration:this.calibration,blackDb:levels.blackDb,rangeDb:levels.rangeDb};
+        for(let i=0;i<this.rowHeight && y+i<height;i++)if(y+i>=0){
+          if(i===0)this.paintColorRow(ctx,row.bins,this.calibration,levels.blackDb,levels.rangeDb,y+i);
+          else ctx.putImageData(this.strip,0,y+i);
+          this.colorRows.push(stored);
+        }
+        if(this.colorRows.length>height)this.colorRows.splice(0,this.colorRows.length-height);
         this.last = row;
       }
       this.rowCount = Math.min(height, this.rowCount + shift);

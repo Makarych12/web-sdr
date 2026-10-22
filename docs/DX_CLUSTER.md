@@ -1,3 +1,5 @@
+> Current local corrections and measurements: [DX_EQ_COLOR_CHECK.md](DX_EQ_COLOR_CHECK.md). Earlier measurements below describe the previous implementation.
+
 # DX CLUSTER — 2026-10-22
 
 ## Source verified before implementation
