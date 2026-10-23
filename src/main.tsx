@@ -759,7 +759,9 @@ function App() {
         if (
           event.type === "upstream_error" &&
           event.code === "connection" &&
-          event.failures === 2
+          event.failures === 2 &&
+          manager.current?.socket instanceof DirectKiwiSocket &&
+          !manager.current.socket.receivedAudio
         ) {
           const id = receiverRef.current;
           if (

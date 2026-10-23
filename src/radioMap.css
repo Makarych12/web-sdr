@@ -106,10 +106,7 @@
 .radio-map-canvas {
   flex: 1;
   min-width: 0;
-  background: #07121b;
-}
-.radio-map-canvas .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(170deg) saturate(0.65) brightness(0.78);
+  background: #e8edf0;
 }
 .radio-map-canvas .leaflet-popup-content-wrapper,
 .radio-map-canvas .leaflet-popup-tip {

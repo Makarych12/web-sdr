@@ -3,6 +3,7 @@ import { KiwiProtocol } from "../shared/kiwiProtocol.js";
 export class DirectKiwiSocket {
   readyState = 0;
   binaryType = "arraybuffer";
+  receivedAudio = false;
   onopen: ((event: unknown) => void) | null = null;
   onmessage: ((event: { data: string | ArrayBuffer }) => void) | null = null;
   onclose:
@@ -15,6 +16,8 @@ export class DirectKiwiSocket {
       url,
       (value) => {
         if (this.readyState !== 1) return;
+        if (value instanceof Uint8Array && value[0] === 1 && value.length > 1)
+          this.receivedAudio = true;
         this.onmessage?.({
           data:
             value instanceof Uint8Array

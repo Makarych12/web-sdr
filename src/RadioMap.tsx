@@ -42,10 +42,16 @@ export function RadioMap({ close }: { close: () => void }) {
       markerZoomAnimation: false,
     }).setView([48, 25], 5);
     map.current = m;
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const cartoKey = (import.meta as { env?: Record<string, string> }).env
+      ?.VITE_CARTO_API_KEY;
+    const tileUrl = cartoKey
+      ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoKey)}`
+      : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+    L.tileLayer(tileUrl, {
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
-      maxZoom: 19,
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>',
+      subdomains: "abcd",
+      maxZoom: 20,
       updateWhenIdle: true,
       keepBuffer: 1,
     }).addTo(m);
@@ -450,7 +456,7 @@ export function RadioMap({ close }: { close: () => void }) {
         >
           HearHam
         </a>{" "}
-        · карта: © OpenStreetMap · поиск городов: Nominatim.
+        · карта: © CARTO, © OpenStreetMap · поиск городов: Nominatim.
         {catalogueDate && (
           <span>
             {" "}
