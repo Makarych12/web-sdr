@@ -1,0 +1,214 @@
+.frequency-digit-control {
+  position: relative;
+  min-width: 0;
+}
+.frequency-digit-control .digital-frequency {
+  gap: 0;
+  letter-spacing: 0;
+}
+.frequency-digit-cell {
+  display: inline-flex;
+  align-items: baseline;
+}
+.frequency-digit-control .frequency-digit {
+  font: inherit;
+  line-height: 1.2;
+  letter-spacing: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0 1px;
+  min-height: 0;
+  min-width: 0;
+  box-shadow: none;
+  touch-action: manipulation;
+}
+.frequency-digit-control .frequency-digit.active {
+  color: #8affdf;
+  border-color: #46ddbf99;
+  background: #16caa51c;
+  box-shadow:
+    inset 0 -2px #4ef2ca,
+    0 0 12px #2addb821;
+}
+.frequency-digit-control .frequency-digit:hover {
+  background: #2abda722;
+}
+.frequency-dot {
+  color: #6c9cb9;
+}
+.frequency-digit-control .frequency-unit {
+  font:
+    11px system-ui,
+    sans-serif;
+  color: #7cafdb;
+  border: 0;
+  background: transparent;
+  padding: 5px;
+  min-height: 32px;
+  margin-left: 5px;
+  letter-spacing: 0;
+}
+.digit-step-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font:
+    9px ui-monospace,
+    monospace;
+  color: #81a4bd;
+  margin-top: 4px;
+}
+.digit-step-caption button {
+  font-size: 15px;
+  padding: 0 8px;
+  min-height: 24px;
+  background: #112536;
+  color: #96d7dd;
+  border: 1px solid #294c61;
+  border-radius: 5px;
+}
+.frequency-digit-menu {
+  position: fixed;
+  margin: 0;
+  left: 0;
+  top: 100%;
+  z-index: 40;
+  width: min(350px, calc(100vw - 44px));
+  max-height: min(560px, 70dvh);
+  overflow: auto;
+  padding: 12px;
+  background: #091b2c;
+  border: 1px solid #39758a;
+  border-radius: 10px;
+  box-shadow: 0 15px 45px #000a;
+  color: #dceef7;
+  white-space: normal;
+  font:
+    12px system-ui,
+    sans-serif;
+  letter-spacing: 0;
+}
+.digit-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.frequency-digit-menu button,
+.frequency-digit-menu select {
+  font:
+    12px system-ui,
+    sans-serif;
+  color: #cdeef4;
+  background: #112c3f;
+  border: 1px solid #30546a;
+  border-radius: 6px;
+  padding: 8px;
+  min-height: 42px;
+  touch-action: manipulation;
+}
+.frequency-digit-menu button[aria-pressed="true"] {
+  border-color: #5ceacb;
+  color: #81ffda;
+  background: #164939;
+}
+.digit-power-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.frequency-digit-menu label {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+}
+.frequency-digit-menu select {
+  width: 100%;
+}
+.digit-menu-nudges {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+.digit-menu-nudges button {
+  flex: 1;
+}
+.frequency-digit-menu .digit-bands-toggle {
+  width: 100%;
+  text-align: left;
+}
+.digit-band-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.digit-band-options button {
+  display: grid;
+  gap: 5px;
+  padding: 8px 4px;
+}
+.digit-band-options small {
+  font-size: 8px;
+  color: #94b3c9;
+}
+.frequency-digit-menu > small {
+  display: block;
+  margin-top: 10px;
+  font-size: 10px;
+  color: #8ca8bd;
+  line-height: 1.5;
+}
+.vfo-control .dial-step {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  color: #83a7c4;
+  font:
+    9px system-ui,
+    sans-serif;
+}
+.vfo-control .dial-step select {
+  width: auto;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 3px 7px;
+  background: #0b1d2c;
+  border: 1px solid #2e5069;
+  border-radius: 5px;
+  color: #ccecff;
+  font:
+    11px ui-monospace,
+    monospace;
+}
+.frequency-digit-control button:focus-visible {
+  outline: 2px solid #61e8d1;
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .frequency-digit-menu {
+    padding: 10px;
+  }
+  .digit-step-caption {
+    font-size: 8px;
+    gap: 4px;
+  }
+  .frequency-digit-control .frequency-unit {
+    font-size: 9px;
+    margin-left: 2px;
+    padding: 2px;
+  }
+  .frequency-digit-control .frequency-digit {
+    padding: 0;
+  }
+  .digit-power-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .vfo-control .dial-step select {
+    min-height: 36px;
+  }
+}

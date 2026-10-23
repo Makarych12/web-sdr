@@ -87,6 +87,10 @@ function App() {
   const [waterfallDisplay,setWaterfallDisplay]=useStoredState("ur4mtn.waterfall-display.v1",DEFAULT_WATERFALL_DISPLAY,validWaterfallDisplay);
   const ft8Decoder = useRef<Ft8Receiver | null>(null);
   const cwDecoder = useRef<CwDecoder | null>(null);
+  const [largeDialStepHz, setLargeDialStepHz] = useStoredState("wave.largeDialStepHz", 100,
+    (v): v is number => typeof v === "number" && [1,5,10,50,100,500,1000,5000,10000].includes(v));
+  const [fineDialStepHz, setFineDialStepHz] = useStoredState("wave.fineDialStepHz", 1,
+    (v): v is number => typeof v === "number" && [1,5,10,50,100].includes(v));
   const dx = useDxCluster();
   const dxPanel = useRef<DxClusterHandle | null>(null);
   const [dxModePending,setDxModePending]=useState<{ reason:string } | null>(null);
@@ -1199,7 +1203,8 @@ function App() {
               <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
               <FrequencyDigits
                 hz={frequencyHz}
-                stepHz={Math.round(step * 1000)}
+                range={dxRange}
+                onBand={(f,m) => { tune(f,m,Math.min(6,maxZoom),widths[m],f); manager.current?.flushTune(); }}
                 onTune={(hz) => {
                   tune(hz / 1000);
                   manager.current?.flushTune();
@@ -1249,7 +1254,8 @@ function App() {
             </div>
             <VfoDial
               frequencyHz={frequencyHz}
-              stepHz={Math.round(step * 1000)}
+              stepHz={largeDialStepHz}
+              onStepChange={setLargeDialStepHz}
               onTune={(hz) => tune(hz / 1000)}
               onEnd={() => manager.current?.flushTune()}
             />
@@ -1645,7 +1651,8 @@ function App() {
         >
           <FineTune
             frequencyHz={frequencyHz}
-            stepHz={Math.round(step * 1000)}
+            stepHz={fineDialStepHz}
+            onStepChange={setFineDialStepHz}
             onTune={(hz) => tune(hz / 1000)}
             onEnd={() => manager.current?.flushTune()}
             viewCenterHz={Math.round((view.start + view.span / 2) * 1000)}

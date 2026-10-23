@@ -1,18 +1,22 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { PointerEvent } from "react";
-import { stepFrequency } from "./tuning";
+import { stepFrequency, STEPS_HZ } from "./tuning";
 export function VfoDial({
   frequencyHz,
   stepHz,
   onTune,
   onEnd,
   label = "VFO — ручка настройки",
+  onStepChange,
+  stepOptions = STEPS_HZ,
 }: {
   frequencyHz: number;
   stepHz: number;
   onTune: (frequencyHz: number) => void;
   onEnd: () => void;
   label?: string;
+  onStepChange?: (stepHz: number) => void;
+  stepOptions?: readonly number[];
 }) {
   const previousFrequency = useRef(frequencyHz);
   const motion = useRef({
@@ -198,6 +202,7 @@ export function VfoDial({
           )
             return;
           e.preventDefault();
+          e.stopPropagation();
           const sign = ["ArrowUp", "ArrowRight", "PageUp"].includes(e.key)
             ? 1
             : -1;
@@ -212,6 +217,22 @@ export function VfoDial({
         <span>VFO</span>
       </div>
       <small>Поверните ручку · {stepHz} Hz / шаг</small>
+      {onStepChange && (
+        <label className="dial-step">
+          СВОЙ ШАГ
+          <select
+            aria-label={`Шаг: ${label}`}
+            value={stepHz}
+            onChange={(e) => onStepChange(Number(e.target.value))}
+          >
+            {stepOptions.map((n) => (
+              <option key={n} value={n}>
+                {n >= 1000 ? `${n / 1000} kHz` : `${n} Hz`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>
   );
 }

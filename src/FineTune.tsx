@@ -6,6 +6,7 @@ export function FineTune({
   children,
   frequencyHz,
   stepHz,
+  onStepChange,
   onTune,
   onEnd,
   viewCenterHz,
@@ -17,6 +18,7 @@ export function FineTune({
   children?: ReactNode;
   frequencyHz: number;
   stepHz: number;
+  onStepChange: (stepHz: number) => void;
   onTune: (frequencyHz: number) => void;
   onEnd: () => void;
   viewCenterHz: number;
@@ -109,6 +111,8 @@ export function FineTune({
         onTune={onTune}
         onEnd={onEnd}
         label="VFO — точная подстройка"
+        onStepChange={onStepChange}
+        stepOptions={[1, 5, 10, 50, 100]}
       />
     </section>
   );
