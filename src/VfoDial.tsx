@@ -9,6 +9,7 @@ export function VfoDial({
   label = "VFO — ручка настройки",
   onStepChange,
   stepOptions = STEPS_HZ,
+  stepSource = "manual",
 }: {
   frequencyHz: number;
   stepHz: number;
@@ -17,6 +18,7 @@ export function VfoDial({
   label?: string;
   onStepChange?: (stepHz: number) => void;
   stepOptions?: readonly number[];
+  stepSource?: "digit" | "manual";
 }) {
   const previousFrequency = useRef(frequencyHz);
   const motion = useRef({
@@ -222,15 +224,34 @@ export function VfoDial({
           СВОЙ ШАГ
           <select
             aria-label={`Шаг: ${label}`}
-            value={stepHz}
+            value={stepSource === "digit" ? "digit" : String(stepHz)}
             onChange={(e) => onStepChange(Number(e.target.value))}
           >
+            {stepSource === "digit" && (
+              <option value="digit" disabled>
+                Разряд:{" "}
+                {stepHz >= 1000000
+                  ? `${stepHz / 1000000} MHz`
+                  : stepHz >= 1000
+                    ? `${stepHz / 1000} kHz`
+                    : `${stepHz} Hz`}
+              </option>
+            )}
+            {stepSource === "manual" && !stepOptions.includes(stepHz) && (
+              <option value={stepHz}>
+                {stepHz >= 1000 ? `${stepHz / 1000} kHz` : `${stepHz} Hz`} ·
+                текущий
+              </option>
+            )}
             {stepOptions.map((n) => (
               <option key={n} value={n}>
                 {n >= 1000 ? `${n / 1000} kHz` : `${n} Hz`}
               </option>
             ))}
           </select>
+          <small>
+            {stepSource === "digit" ? "По выбранной цифре" : "Ручной шаг"}
+          </small>
         </label>
       )}
     </div>

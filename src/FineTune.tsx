@@ -6,6 +6,7 @@ export function FineTune({
   children,
   frequencyHz,
   stepHz,
+  stepSource,
   onStepChange,
   onTune,
   onEnd,
@@ -18,6 +19,7 @@ export function FineTune({
   children?: ReactNode;
   frequencyHz: number;
   stepHz: number;
+  stepSource: "digit" | "manual";
   onStepChange: (stepHz: number) => void;
   onTune: (frequencyHz: number) => void;
   onEnd: () => void;
@@ -108,6 +110,7 @@ export function FineTune({
       <VfoDial
         frequencyHz={frequencyHz}
         stepHz={stepHz}
+        stepSource={stepSource}
         onTune={onTune}
         onEnd={onEnd}
         label="VFO — точная подстройка"

@@ -30,7 +30,7 @@ import { AudioEq, DEFAULT_EQ, validEq } from "./audioEq";
 import { AudioEqControls } from "./AudioEqControls";
 import { SwlLogbook } from "./SwlLogbook";
 import { BandPlan } from "./BandPlan";
-import { FrequencyDigits } from "./FrequencyDigits";
+import { FrequencyDigits, type FrequencyStepSelection } from "./FrequencyDigits";
 import { FrequencyNudges } from "./FrequencyNudges";
 import { VfoDial } from "./VfoDial";
 import { FineTune } from "./FineTune";
@@ -88,9 +88,27 @@ function App() {
   const ft8Decoder = useRef<Ft8Receiver | null>(null);
   const cwDecoder = useRef<CwDecoder | null>(null);
   const [largeDialStepHz, setLargeDialStepHz] = useStoredState("wave.largeDialStepHz", 100,
-    (v): v is number => typeof v === "number" && [1,5,10,50,100,500,1000,5000,10000].includes(v));
+    (v): v is number => typeof v === "number" && [1,5,10,50,100,500,1000,5000,10000,100000,1000000,10000000].includes(v));
   const [fineDialStepHz, setFineDialStepHz] = useStoredState("wave.fineDialStepHz", 1,
-    (v): v is number => typeof v === "number" && [1,5,10,50,100].includes(v));
+    (v): v is number => typeof v === "number" && [1,5,10,50,100,500,1000,5000,10000,100000,1000000,10000000].includes(v));
+  const [frequencyStep, setFrequencyStep] = useState<FrequencyStepSelection>({ power: 2, stepHz: 100, source: "digit" });
+  const activeLargeStepHz = frequencyStep.source === "digit" ? frequencyStep.stepHz : largeDialStepHz;
+  const activeFineStepHz = frequencyStep.source === "digit" ? frequencyStep.stepHz : fineDialStepHz;
+  function selectFrequencyStep(power: number, stepHz: number) {
+    const source = stepHz === 10 ** power ? "digit" : "manual";
+    if (source === "manual") { setLargeDialStepHz(stepHz); setFineDialStepHz(stepHz); }
+    setFrequencyStep({ power, stepHz, source });
+  }
+  function selectManualDialStep(dial: "large" | "fine", stepHz: number) {
+    // Preserve the other dial's effective step when leaving digit mode;
+    // never revive a stale value previously stored in its manual list.
+    if (frequencyStep.source === "digit") {
+      setLargeDialStepHz(dial === "large" ? stepHz : frequencyStep.stepHz);
+      setFineDialStepHz(dial === "fine" ? stepHz : frequencyStep.stepHz);
+    } else if (dial === "large") setLargeDialStepHz(stepHz);
+    else setFineDialStepHz(stepHz);
+    setFrequencyStep(previous => ({ ...previous, source: "manual" }));
+  }
   const dx = useDxCluster();
   const dxPanel = useRef<DxClusterHandle | null>(null);
   const [dxModePending,setDxModePending]=useState<{ reason:string } | null>(null);
@@ -1203,6 +1221,8 @@ function App() {
               <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
               <FrequencyDigits
                 hz={frequencyHz}
+                selection={frequencyStep}
+                onSelectStep={selectFrequencyStep}
                 range={dxRange}
                 onBand={(f,m) => { tune(f,m,Math.min(6,maxZoom),widths[m],f); manager.current?.flushTune(); }}
                 onTune={(hz) => {
@@ -1254,8 +1274,9 @@ function App() {
             </div>
             <VfoDial
               frequencyHz={frequencyHz}
-              stepHz={largeDialStepHz}
-              onStepChange={setLargeDialStepHz}
+              stepHz={activeLargeStepHz}
+              stepSource={frequencyStep.source}
+              onStepChange={value => selectManualDialStep("large", value)}
               onTune={(hz) => tune(hz / 1000)}
               onEnd={() => manager.current?.flushTune()}
             />
@@ -1651,8 +1672,9 @@ function App() {
         >
           <FineTune
             frequencyHz={frequencyHz}
-            stepHz={fineDialStepHz}
-            onStepChange={setFineDialStepHz}
+            stepHz={activeFineStepHz}
+            stepSource={frequencyStep.source}
+            onStepChange={value => selectManualDialStep("fine", value)}
             onTune={(hz) => tune(hz / 1000)}
             onEnd={() => manager.current?.flushTune()}
             viewCenterHz={Math.round((view.start + view.span / 2) * 1000)}

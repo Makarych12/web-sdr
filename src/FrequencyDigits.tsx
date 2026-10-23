@@ -24,30 +24,37 @@ const stepLabel = (hz: number) =>
     : hz >= 1000
       ? `${hz / 1000} kHz`
       : `${hz} Hz`;
+export type FrequencyStepSelection = {
+  power: number;
+  stepHz: number;
+  source: "digit" | "manual";
+};
 export function FrequencyDigits({
   hz,
+  selection,
+  onSelectStep,
   onTune,
   range,
   onBand,
 }: {
   hz: number;
+  selection: FrequencyStepSelection;
+  onSelectStep: (power: number, stepHz: number) => void;
   onTune: (hz: number) => void;
   range: { min: number; max: number } | null;
   onBand: (khz: number, mode: Mode) => void;
 }) {
   const ref = useRef<HTMLOutputElement>(null),
     host = useRef<HTMLDivElement>(null);
-  const [power, setPower] = useState(2),
-    [step, setStep] = useState(100),
-    [open, setOpen] = useState(false),
+  const { power, stepHz: step, source } = selection;
+  const [open, setOpen] = useState(false),
     [showBands, setShowBands] = useState(false);
   const menuRef = useRef<HTMLElement>(null);
   const touch = useRef(false),
     latest = useRef({ hz, step, onTune });
   latest.current = { hz, step, onTune };
   function select(p: number) {
-    setPower(p);
-    setStep(10 ** p);
+    onSelectStep(p, 10 ** p);
   }
   function nudge(ticks: number) {
     const v = latest.current;
@@ -153,10 +160,13 @@ export function FrequencyDigits({
             <span key={p} className="frequency-digit-cell">
               <button
                 type="button"
-                className={"frequency-digit " + (power === p ? "active" : "")}
+                className={
+                  "frequency-digit " +
+                  (source === "digit" && power === p ? "active" : "")
+                }
                 data-power={p}
                 aria-label={`Разряд ${stepLabel(10 ** p)}`}
-                aria-pressed={power === p}
+                aria-pressed={source === "digit" && power === p}
                 title={`Выбрать ${stepLabel(10 ** p)} · колесо изменяет выбранный разряд`}
                 onPointerDown={(e) => {
                   touch.current =
@@ -224,7 +234,9 @@ export function FrequencyDigits({
         </button>
       </output>
       <div className="digit-step-caption">
-        Разряд: {stepLabel(10 ** power)} · шаг цифр {stepLabel(step)}
+        {source === "digit"
+          ? `Разряд: ${stepLabel(step)} · оба валкодера`
+          : `Ручные шаги валкодеров · цифры ${stepLabel(step)}`}
         <button
           type="button"
           aria-label="Открыть меню разряда и шага"
@@ -262,7 +274,7 @@ export function FrequencyDigits({
               <button
                 type="button"
                 key={p}
-                aria-pressed={power === p}
+                aria-pressed={source === "digit" && power === p}
                 onClick={() => {
                   select(p);
                   setShowBands(p >= 6);
@@ -273,14 +285,13 @@ export function FrequencyDigits({
             ))}
           </div>
           <label>
-            Шаг только цифровой шкалы
+            Шаг цифр и обоих валкодеров
             <select
               aria-label="Шаг цифровой шкалы"
               value={step}
               onChange={(e) => {
                 const n = Number(e.target.value);
-                setStep(n);
-                setPower(Math.floor(Math.log10(n)));
+                onSelectStep(Math.floor(Math.log10(n)), n);
               }}
             >
               {[...STEPS_HZ, 100000, 1000000, 10000000].map((n) => (
@@ -340,7 +351,11 @@ export function FrequencyDigits({
               {!range && <p>Диапазон приёмника ещё не получен.</p>}
             </div>
           )}
-          <small>Выбор разряда не меняет шаги валкодеров и кнопок «ШАГ».</small>
+          <small>
+            Цифра задаёт шаг обоим валкодерам. Ручной выбор в «СВОЙ ШАГ»
+            выключает разрядную подсветку; следующее нажатие на цифру снова
+            включает разрядный шаг. Кнопки «ШАГ» работают отдельно.
+          </small>
         </section>
       )}
     </div>
