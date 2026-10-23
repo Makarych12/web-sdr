@@ -1,3 +1,5 @@
+import { SignalHunterControls } from "./SignalHunter";
+import type { SignalHunter } from "./signalHunter";
 import { Ft8DecoderPanel } from "./Ft8DecoderPanel";
 import type { Ft8Receiver } from "./ft8";
 import React, { useState, useRef, useEffect, useCallback } from "react";
@@ -336,6 +338,8 @@ function App() {
   const [receiverChange, setReceiverChange] = useState("");
   const [viewPending, setViewPending] = useState(false);
   const renderer = useRef<SpectrumRenderer | null>(null);
+  const hunter = useRef<SignalHunter | null>(null);
+  const hunterScope = useRef<HTMLDivElement>(null);
   const sourceView = useRef<View | null>(null);
   const awaitingTune = useRef(false);
   const [waterfallReady, setWaterfallReady] = useState(false);
@@ -626,12 +630,14 @@ function App() {
 
   function displayView(next: View) {
     if (sameView(viewRef.current, next)) return;
+    hunter.current?.reset();
     viewRef.current = next;
     renderer.current?.setView(next);
     setView(next);
   }
   callbacks.current.state = (v) => {
     if (v.phase !== "live") {
+      hunter.current?.reset();
       cwDecoder.current?.resetSignal();
       ft8Decoder.current?.resetSignal();
     }
@@ -674,8 +680,10 @@ function App() {
           (!requestedView.current ||
             matchesRequest(incoming, requestedView.current)) &&
           renderer.current?.append(v.subarray(1), incoming)
-        )
+        ) {
+          hunter.current?.push(v.subarray(1), incoming, calibration.current, performance.now());
           setWaterfallReady(true);
+        }
       }
       return;
     }
@@ -1554,7 +1562,9 @@ function App() {
               →
             </button>
           </div>
-          <div className="scope">
+          <SignalHunterControls input={hunter} scope={hunterScope} view={view} connected={connected}
+            onTune={f => { tune(f); manager.current?.flushTune(); }} />
+          <div className="scope" ref={hunterScope}>
             <DxMarkers spots={dxSpots} view={view} range={dxRange} onTune={tuneDx} />
             <canvas
               ref={spectrum}

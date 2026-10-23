@@ -1,0 +1,165 @@
+.signal-hunter-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px 14px;
+  padding: 9px 12px;
+  border-top: 1px solid #1c3748;
+  background: #091b27;
+  font:
+    11px system-ui,
+    sans-serif;
+  color: #90b2c5;
+}
+.signal-hunter-controls > button {
+  background: #102a39;
+  color: #a8c9d7;
+  border: 1px solid #305269;
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 34px;
+  font:
+    600 10px ui-monospace,
+    monospace;
+  letter-spacing: 0.04em;
+}
+.signal-hunter-controls > button.active {
+  color: #8effdb;
+  background: #123e35;
+  border-color: #3bc8a2;
+  box-shadow: 0 0 12px #36e7bd16;
+}
+.signal-hunter-controls > button:disabled {
+  opacity: 0.45;
+}
+.signal-hunter-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #9bb7c7;
+}
+.signal-hunter-controls input[type="range"] {
+  width: 110px;
+  accent-color: #5ce7bd;
+  min-height: 30px;
+  padding: 0;
+  margin: 0;
+}
+.signal-hunter-controls output {
+  min-width: 30px;
+  color: #9cead9;
+  font:
+    10px ui-monospace,
+    monospace;
+}
+.signal-hunter-controls > small {
+  margin-left: auto;
+  font:
+    9px system-ui,
+    sans-serif;
+  color: #7596aa;
+}
+.hunter-count {
+  font:
+    10px ui-monospace,
+    monospace;
+  color: #8bd3c6;
+}
+.hunter-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  overflow: hidden;
+}
+.hunter-markers .hunter-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  pointer-events: auto;
+  touch-action: manipulation;
+  color: #9effd9;
+  transition:
+    left 0.24s linear,
+    top 0.24s linear,
+    opacity 0.25s linear;
+}
+.hunter-marker i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  left: 18px;
+  top: 18px;
+  border: 1px solid #d0ffec;
+  border-radius: 50%;
+  background: #4de6ad;
+  box-shadow:
+    0 0 7px #5dffbccc,
+    0 0 0 4px #52efae15;
+}
+.hunter-marker span {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font:
+    8px ui-monospace,
+    monospace;
+  color: #a6f7d5;
+  background: #071d21d9;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.hunter-markers .hunter-marker:hover,
+.hunter-markers .hunter-marker:focus-visible {
+  background: #4de6ad13;
+  outline: 1px solid #69f8c488;
+}
+.hunter-marker:hover i,
+.hunter-marker:focus-visible i {
+  box-shadow:
+    0 0 12px #68ffcc,
+    0 0 0 6px #52efae25;
+}
+@media (max-width: 640px) {
+  .signal-hunter-controls {
+    padding: 8px;
+    gap: 6px 9px;
+  }
+  .signal-hunter-controls > button {
+    min-height: 40px;
+  }
+  .signal-hunter-controls input[type="range"] {
+    width: 95px;
+    min-height: 40px;
+  }
+  .signal-hunter-controls > small {
+    margin-left: 0;
+    flex-basis: 100%;
+    font-size: 9px;
+  }
+  .hunter-marker span {
+    font-size: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hunter-markers .hunter-marker {
+    transition: none;
+  }
+}
+/* The site's generic pressed-button transform must not move the RF target
+   away from the pointer between pointerdown and click. */
+.hunter-markers .hunter-marker:active:not(:disabled) {
+  transform: translate(-50%, -50%);
+}
