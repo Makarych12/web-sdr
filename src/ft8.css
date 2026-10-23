@@ -1,3 +1,15 @@
+.control-panel > .ft8-launch {
+  position: absolute;
+  bottom: -14px;
+  left: 210px;
+  width: 72px;
+  white-space: nowrap;
+  z-index: 20;
+  min-height: 28px;
+  padding: 3px 7px;
+  font-size: 11px;
+  background: #0b1726;
+}
 .ft8-panel {
   --ft8-green: #61efa4;
   --ft8-cyan: #53e4da;

@@ -54,6 +54,7 @@ function download(rows: MonitorRow[]) {
 }
 export function Ft8DecoderPanel({
   input,
+  onOpenDx,
   mode,
   connected,
   range,
@@ -62,6 +63,7 @@ export function Ft8DecoderPanel({
   receiverName,
 }: {
   input: MutableRefObject<Ft8Receiver | null>;
+  onOpenDx: () => void;
   mode: string;
   connected: boolean;
   range: { min: number; max: number } | null;
@@ -249,10 +251,11 @@ export function Ft8DecoderPanel({
     <>
       <button
         type="button"
-        className="cw-dec-launch"
+        className="ft8-launch"
+        aria-label="Открыть FT8 PRO"
         onClick={() => dialog.current?.showModal()}
       >
-        FT8 DECODER
+        FT8 PRO
       </button>
       <dialog
         ref={dialog}
@@ -275,6 +278,7 @@ export function Ft8DecoderPanel({
             <p>Приём и анализ эфира · {receiverName}</p>
           </div>
           <div className="ft8-header-actions">
+            <button type="button" onClick={onOpenDx} title="Открыть DX Cluster, сохранив FT8 RX">DX CLUSTER</button>
             <span className={"ft8-rx-light " + (running ? "active" : "")}>
               {running ? "RX ACTIVE" : "RX IDLE"}
             </span>

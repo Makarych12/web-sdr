@@ -1,17 +1,20 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { dxAvailable, dxBand, freshDx, projectDx, type DxRange, type DxSpot } from "./dxCluster";
 import { MODES, type Mode } from "./radio";
 import type { DxFeed } from "./useDxCluster";
 import "./dx-cluster.css";
-type Props = { feed: DxFeed; frequency: number; range: DxRange; currentBandOnly: boolean; onBandOnly: (value: boolean) => void; onTune: (spot: DxSpot) => void };
+export type DxClusterHandle = { open: () => void };
+type Props = { openRef?: Ref<DxClusterHandle>; feed: DxFeed; frequency: number; range: DxRange; currentBandOnly: boolean; onBandOnly: (value: boolean) => void; onTune: (spot: DxSpot) => void };
 const utc = (time: number) => new Date(time).toISOString().slice(11,19);
 export function DxClusterPanel(props: Props) {
   const { feed, frequency, range, currentBandOnly, onBandOnly, onTune } = props;
   const dialog = useRef<HTMLDialogElement>(null);
+  const open = () => { feed.enable(); if (!dialog.current?.open) dialog.current?.showModal(); };
+  useImperativeHandle(props.openRef, () => ({ open }));
   const band = dxBand(frequency);
   const spots = currentBandOnly && !band ? [] : freshDx(feed.spots, feed.now, currentBandOnly ? band : null);
   return <>
-    <button type="button" className="dx-launch" aria-label="Открыть DX CLUSTER" onClick={() => { feed.enable(); dialog.current?.showModal(); }}>DX</button>
+    <button type="button" className="dx-launch" aria-label="Открыть DX CLUSTER" title="DX Cluster · реальные споты HamQTH" onClick={open}>DX CLUSTER</button>
     <dialog className="dx-panel" ref={dialog} aria-labelledby="dx-title" onKeyDown={e => e.stopPropagation()}>
       <header><strong id="dx-title">DX CLUSTER</strong><button type="button" aria-label="Закрыть DX CLUSTER" onClick={() => dialog.current?.close()}>×</button></header>
       <label><input type="checkbox" checked={currentBandOnly} onChange={e => onBandOnly(e.target.checked)} />Текущий диапазон{band ? ` · ${band}` : " · вне любительских КВ-диапазонов"}</label>

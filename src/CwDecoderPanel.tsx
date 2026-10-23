@@ -19,7 +19,7 @@ export function CwDecoderPanel({ input }: { input:MutableRefObject<CwDecoder|nul
   useEffect(()=>()=>{input.current=null;},[input]);
   useEffect(()=>{if(manualEdit.current){manualEdit.current=false;return;}if(output.current&&output.current.selectionStart===output.current.selectionEnd)output.current.scrollTop=output.current.scrollHeight;},[snapshot.text]);
   return <>
-    <button type="button" className="cw-dec-launch" aria-label="Открыть CW DEC" onClick={()=>dialog.current?.showModal()}>CW DEC</button>
+    <button type="button" className="cw-dec-launch" aria-label="Открыть CW DECODER" onClick={()=>dialog.current?.showModal()}>CW DECODER</button>
     <dialog ref={dialog} className="cw-dec-panel" aria-labelledby="cw-dec-title" onClose={stop} onKeyDown={e=>e.stopPropagation()}>
       <header><strong id="cw-dec-title">CW DECODER</strong><button type="button" aria-label="Закрыть CW DEC" onClick={()=>dialog.current?.close()}>×</button></header>
       <button type="button" aria-pressed={enabled} onClick={()=>enabled?stop():start()}>CW DEC {enabled?'ON':'OFF'}</button>

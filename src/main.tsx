@@ -22,7 +22,7 @@ import { WaterfallColor } from "./WaterfallColor";
 import { readWaterfallTheme, WATERFALL_THEME_KEY, waterfallThemeGradient, validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
 import { CwDecoderPanel } from "./CwDecoderPanel";
 import type { CwDecoder } from "./cwDecoder";
-import { DxClusterPanel, DxMarkers, DxModePrompt } from "./DxCluster";
+import { DxClusterPanel, DxMarkers, DxModePrompt, type DxClusterHandle } from "./DxCluster";
 import { useDxCluster } from "./useDxCluster";
 import { dxMode } from "./dxMode";
 import { dxBand, freshDx, type DxSpot } from "./dxCluster";
@@ -88,6 +88,7 @@ function App() {
   const ft8Decoder = useRef<Ft8Receiver | null>(null);
   const cwDecoder = useRef<CwDecoder | null>(null);
   const dx = useDxCluster();
+  const dxPanel = useRef<DxClusterHandle | null>(null);
   const [dxModePending,setDxModePending]=useState<{ reason:string } | null>(null);
   const [dxBandOnly, setDxBandOnly] = useState(false);
   const audioEq = useRef<AudioEq | null>(null);
@@ -1161,9 +1162,12 @@ function App() {
             }
           }}
         >
+          <DxClusterPanel openRef={dxPanel} feed={dx} frequency={frequency} range={dxRange} currentBandOnly={dxBandOnly}
+            onBandOnly={setDxBandOnly} onTune={tuneDx} />
           <CwDecoderPanel input={cwDecoder} />
           <Ft8DecoderPanel
             input={ft8Decoder}
+            onOpenDx={() => dxPanel.current?.open()}
             frequency={frequency}
             receiverName={dxReceiver?.name ?? "KiwiSDR"}
             mode={mode}
@@ -1179,8 +1183,7 @@ function App() {
             manager.current?.flushTune();
             setDxModePending(null);
           }} />
-          <DxClusterPanel feed={dx} frequency={frequency} range={dxRange} currentBandOnly={dxBandOnly}
-            onBandOnly={setDxBandOnly} onTune={tuneDx} />
+
           <AudioEqControls settings={eqSettings} onChange={setEqSettings} />
           <SwlLogbook frequencyHz={frequencyHz} mode={mode} onTune={(entry) => {
             tune(entry.frequencyHz / 1000, entry.mode);

@@ -1,4 +1,4 @@
-.control-panel > .dx-launch { position: absolute; bottom: -14px; left: 10px; z-index: 20; min-height: 28px; padding: 3px 7px; font-size: 11px; background: #0b1726; }
+.control-panel > .dx-launch { position: absolute; bottom: -14px; left: 10px; width: 88px; white-space: nowrap; z-index: 20; min-height: 28px; padding: 3px 7px; font-size: 11px; background: #0b1726; }
 .dx-panel { width: min(440px,calc(100vw - 24px)); max-height: 82dvh; overflow: auto; box-sizing: border-box; padding: 14px; color: #dcecff; background: #0b1726; border: 1px solid #26466b; border-radius: 10px; }
 .dx-panel::backdrop { background: #0008; }
 .dx-panel header { display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px; }
