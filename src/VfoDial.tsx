@@ -243,7 +243,7 @@ export function VfoDial({
           >
             {stepSource === "digit" && (
               <option value="digit" disabled>
-                Разряд:{" "}
+                Шаг:{" "}
                 {stepHz >= 1000000
                   ? `${stepHz / 1000000} MHz`
                   : stepHz >= 1000

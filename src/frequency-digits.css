@@ -212,3 +212,31 @@
     min-height: 36px;
   }
 }
+
+.frequency-digit-menu .digit-frequency-entry {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.frequency-digit-menu .digit-frequency-entry input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid #39758a;
+  border-radius: 6px;
+  background: #061522;
+  color: #a8ffe5;
+  font:
+    16px ui-monospace,
+    monospace;
+}
+.frequency-digit-menu .digit-confirm {
+  border-color: #46bd9d;
+  background: linear-gradient(135deg, #164939, #123b42);
+  color: #a8ffe5;
+}
+.digit-frequency-entry [role="alert"] {
+  color: #ffb6a3;
+}

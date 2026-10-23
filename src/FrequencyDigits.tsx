@@ -1,4 +1,4 @@
-import { stepFrequency, STEPS_HZ } from "./tuning";
+import { parseFrequency, stepFrequency, STEPS_HZ } from "./tuning";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Mode } from "./radio";
 import "./frequency-digits.css";
@@ -49,6 +49,29 @@ export function FrequencyDigits({
   const { power, stepHz: step, source } = selection;
   const [open, setOpen] = useState(false),
     [showBands, setShowBands] = useState(false);
+  const [draftMHz, setDraftMHz] = useState("");
+  const [bandMode, setBandMode] = useState<Mode | null>(null);
+  const [entryError, setEntryError] = useState("");
+  function openBands() {
+    setDraftMHz((hz / 1000000).toFixed(6));
+    setBandMode(null);
+    setEntryError("");
+    setShowBands(true);
+    setOpen(true);
+  }
+  function confirmFrequency() {
+    const value = parseFrequency(`${draftMHz.trim()} MHz`);
+    if (
+      value === null ||
+      (range && (value < range.min * 1000 || value > range.max * 1000))
+    ) {
+      setEntryError("Введите частоту в пределах диапазона приёмника.");
+      return;
+    }
+    if (bandMode) onBand(value / 1000, bandMode);
+    else onTune(value);
+    setOpen(false);
+  }
   const menuRef = useRef<HTMLElement>(null);
   const latest = useRef({ hz, step, onTune });
   latest.current = { hz, step, onTune };
@@ -164,13 +187,17 @@ export function FrequencyDigits({
                   (source === "digit" && power === p ? "active" : "")
                 }
                 data-power={p}
-                aria-label={`Разряд ${stepLabel(10 ** p)}`}
+                aria-label={`Шаг ${stepLabel(10 ** p)}${p >= 6 ? ": диапазоны и частота" : ""}`}
+                aria-haspopup={p >= 6 ? "dialog" : undefined}
                 aria-pressed={source === "digit" && power === p}
-                title={`Выбрать ${stepLabel(10 ** p)} · колесо изменяет выбранный разряд`}
+                title={`Выбрать ${stepLabel(10 ** p)} · колесо изменяет выбранный шаг`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  select(p);
-                  setOpen(false);
+                  if (p >= 6) openBands();
+                  else {
+                    select(p);
+                    setOpen(false);
+                  }
                 }}
                 onKeyDown={(e) => {
                   if (
@@ -214,11 +241,11 @@ export function FrequencyDigits({
         <button
           type="button"
           className="frequency-unit"
-          aria-label="MHz: разряды и диапазоны"
+          aria-label="MHz: диапазоны и частота"
           aria-expanded={open && showBands}
           onClick={() => {
-            setShowBands(true);
-            setOpen((v) => !v || !showBands);
+            if (open && showBands) setOpen(false);
+            else openBands();
           }}
         >
           MHz
@@ -226,11 +253,11 @@ export function FrequencyDigits({
       </output>
       <div className="digit-step-caption">
         {source === "digit"
-          ? `Разряд: ${stepLabel(step)} · оба валкодера`
+          ? `Шаг: ${stepLabel(step)} · оба валкодера`
           : `Ручные шаги валкодеров · цифры ${stepLabel(step)}`}
         <button
           type="button"
-          aria-label="Открыть меню разряда и шага"
+          aria-label="Открыть меню шага"
           onClick={() => {
             setShowBands(false);
             setOpen((v) => !v);
@@ -244,10 +271,13 @@ export function FrequencyDigits({
           ref={menuRef}
           popover="manual"
           className="frequency-digit-menu"
-          aria-label="Меню настройки цифр"
+          role="dialog"
+          aria-label={showBands ? "Диапазоны и частота" : "Меню настройки шага"}
         >
           <div className="digit-menu-head">
-            <strong>Разряд и шаг</strong>
+            <strong>
+              {showBands ? "Диапазоны и частота" : "Шаг настройки"}
+            </strong>
             <button
               type="button"
               aria-label="Закрыть меню частоты"
@@ -256,63 +286,98 @@ export function FrequencyDigits({
               ×
             </button>
           </div>
-          <div
-            className="digit-power-options"
-            role="group"
-            aria-label="Выбор разряда"
-          >
-            {Array.from({ length: 8 }, (_, p) => 7 - p).map((p) => (
-              <button
-                type="button"
-                key={p}
-                aria-pressed={source === "digit" && power === p}
-                onClick={() => {
-                  select(p);
-                  setShowBands(p >= 6);
-                }}
-              >
-                {stepLabel(10 ** p)}
-              </button>
-            ))}
-          </div>
-          <label>
-            Шаг цифр и обоих валкодеров
-            <select
-              aria-label="Шаг цифровой шкалы"
-              value={step}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                onSelectStep(Math.floor(Math.log10(n)), n);
+          {showBands ? (
+            <form
+              className="digit-frequency-entry"
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                confirmFrequency();
               }}
             >
-              {[...STEPS_HZ, 100000, 1000000, 10000000].map((n) => (
-                <option key={n} value={n}>
-                  {stepLabel(n)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="digit-menu-nudges">
-            <button
-              type="button"
-              aria-label="Цифровая шкала: минус шаг"
-              onClick={() => nudge(-1)}
-            >
-              − {stepLabel(step)}
-            </button>
-            <button
-              type="button"
-              aria-label="Цифровая шкала: плюс шаг"
-              onClick={() => nudge(1)}
-            >
-              + {stepLabel(step)}
-            </button>
-          </div>
+              <label>
+                Частота · MHz
+                <input
+                  aria-label="Прямая частота MHz"
+                  inputMode="decimal"
+                  type="text"
+                  value={draftMHz}
+                  onChange={(e) => {
+                    setDraftMHz(e.target.value.replace(",", "."));
+                    setBandMode(null);
+                    setEntryError("");
+                  }}
+                />
+              </label>
+              {entryError && <small role="alert">{entryError}</small>}
+              <button type="submit" className="digit-confirm">
+                Настроить
+              </button>
+            </form>
+          ) : (
+            <>
+              <div
+                className="digit-power-options"
+                role="group"
+                aria-label="Выбор шага"
+              >
+                {Array.from({ length: 8 }, (_, p) => 7 - p).map((p) => (
+                  <button
+                    type="button"
+                    key={p}
+                    aria-pressed={source === "digit" && power === p}
+                    onClick={() => {
+                      select(p);
+                      setShowBands(false);
+                    }}
+                  >
+                    {stepLabel(10 ** p)}
+                  </button>
+                ))}
+              </div>
+              <label>
+                Шаг цифр и обоих валкодеров
+                <select
+                  aria-label="Шаг цифровой шкалы"
+                  value={step}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    onSelectStep(Math.floor(Math.log10(n)), n);
+                  }}
+                >
+                  {[...STEPS_HZ, 100000, 1000000, 10000000].map((n) => (
+                    <option key={n} value={n}>
+                      {stepLabel(n)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="digit-menu-nudges">
+                <button
+                  type="button"
+                  aria-label="Цифровая шкала: минус шаг"
+                  onClick={() => nudge(-1)}
+                >
+                  − {stepLabel(step)}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Цифровая шкала: плюс шаг"
+                  onClick={() => nudge(1)}
+                >
+                  + {stepLabel(step)}
+                </button>
+              </div>
+            </>
+          )}
           <button
             type="button"
             className="digit-bands-toggle"
             aria-expanded={showBands}
-            onClick={() => setShowBands((v) => !v)}
+            onClick={() => {
+              if (showBands) setShowBands(false);
+              else openBands();
+            }}
           >
             Радиолюбительские диапазоны {showBands ? "↑" : "↓"}
           </button>
@@ -328,9 +393,13 @@ export function FrequencyDigits({
                   <button
                     type="button"
                     key={band}
+                    aria-pressed={
+                      bandMode === mode && Number(draftMHz) === f / 1000
+                    }
                     onClick={() => {
-                      onBand(f, mode);
-                      setOpen(false);
+                      setDraftMHz((f / 1000).toFixed(6));
+                      setBandMode(mode);
+                      setEntryError("");
                     }}
                   >
                     <b>{band}</b>
@@ -343,9 +412,9 @@ export function FrequencyDigits({
             </div>
           )}
           <small>
-            Цифра задаёт шаг обоим валкодерам. Ручной выбор в «СВОЙ ШАГ»
-            выключает разрядную подсветку; следующее нажатие на цифру снова
-            включает разрядный шаг. Кнопки «ШАГ» работают отдельно.
+            Цифры kHz и Hz задают шаг обоим валкодерам. Ручной выбор в «СВОЙ
+            ШАГ» выключает подсветку шага; следующее нажатие на цифру снова
+            включает выбранный шаг. Кнопки «ШАГ» работают отдельно.
           </small>
         </section>
       )}
