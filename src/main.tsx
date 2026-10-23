@@ -1164,6 +1164,8 @@ function App() {
           <CwDecoderPanel input={cwDecoder} />
           <Ft8DecoderPanel
             input={ft8Decoder}
+            frequency={frequency}
+            receiverName={dxReceiver?.name ?? "KiwiSDR"}
             mode={mode}
             connected={connected}
             range={dxRange}
