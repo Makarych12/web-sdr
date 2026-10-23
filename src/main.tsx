@@ -1,3 +1,5 @@
+import { Ft8DecoderPanel } from "./Ft8DecoderPanel";
+import type { Ft8Receiver } from "./ft8";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -83,6 +85,7 @@ function App() {
   const recording = useWavRecording();
   const [waterfallTheme,setWaterfallTheme]=useStoredState<WaterfallTheme>(WATERFALL_THEME_KEY,readWaterfallTheme(),validWaterfallTheme);
   const [waterfallDisplay,setWaterfallDisplay]=useStoredState("ur4mtn.waterfall-display.v1",DEFAULT_WATERFALL_DISPLAY,validWaterfallDisplay);
+  const ft8Decoder = useRef<Ft8Receiver | null>(null);
   const cwDecoder = useRef<CwDecoder | null>(null);
   const dx = useDxCluster();
   const [dxModePending,setDxModePending]=useState<{ reason:string } | null>(null);
@@ -542,6 +545,7 @@ function App() {
     const previous = settings.current;
     if (f !== previous.frequency || m !== previous.mode) {
       cwDecoder.current?.resetSignal();
+      ft8Decoder.current?.resetSignal();
       nr.current?.port.postMessage({ reset: true });
       notch.current?.port.postMessage({ reset: true });
     }
@@ -604,7 +608,10 @@ function App() {
     setView(next);
   }
   callbacks.current.state = (v) => {
-    if (v.phase !== "live") cwDecoder.current?.resetSignal();
+    if (v.phase !== "live") {
+      cwDecoder.current?.resetSignal();
+      ft8Decoder.current?.resetSignal();
+    }
     setWanted(manager.current?.desired ?? false);
     if (v.phase === "idle" || v.phase === "blocked") media.current?.pause();
     if (
@@ -627,6 +634,7 @@ function App() {
         const samples = new Float32Array((v.length - 1) / 2);
         for (let i = 0; i < samples.length; i++)
           samples[i] = dv.getInt16(1 + i * 2, false) / 32768;
+        if (settings.current.mode === "USB") ft8Decoder.current?.push(samples, rate.current);
         cwDecoder.current?.push(samples, rate.current);
         afInput.current?.(samples, rate.current);
         scanner.current?.audio(samples, rate.current, settings.current.lowCut, settings.current.highCut);
@@ -782,6 +790,7 @@ function App() {
       },
       onReset: () => {
         cwDecoder.current?.resetSignal();
+        ft8Decoder.current?.resetSignal();
         nr.current?.port.postMessage({ reset: true });
         notch.current?.port.postMessage({ reset: true });
         scanner.current?.reset();
@@ -1153,6 +1162,16 @@ function App() {
           }}
         >
           <CwDecoderPanel input={cwDecoder} />
+          <Ft8DecoderPanel
+            input={ft8Decoder}
+            mode={mode}
+            connected={connected}
+            range={dxRange}
+            onTune={f => {
+              tune(f, "USB", zoom, 2900, undefined, { lowCut: 100, highCut: 3000 });
+              manager.current?.flushTune();
+            }}
+          />
           <DxModePrompt pending={dxModePending} current={mode} onClose={()=>setDxModePending(null)} onSelect={m=>{
             tune(settings.current.frequency,m);
             manager.current?.flushTune();

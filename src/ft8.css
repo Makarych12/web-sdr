@@ -1,0 +1,69 @@
+.ft8-panel {
+  width: min(1000px, calc(100vw - 24px));
+  max-height: 90dvh;
+  box-sizing: border-box;
+  overflow: auto;
+  background: #07121b;
+  color: #d9efef;
+  border: 1px solid #246875;
+  border-radius: 14px;
+  padding: 16px;
+  font-size: 13px;
+}
+.ft8-panel::backdrop {
+  background: #01060bba;
+}
+.ft8-panel header,
+.ft8-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.ft8-panel header {
+  justify-content: space-between;
+}
+.ft8-panel button,
+.ft8-panel input,
+.ft8-panel select {
+  background: #10232d;
+  color: #d6f9f2;
+  border: 1px solid #285260;
+  border-radius: 6px;
+  padding: 8px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ft8-panel button:disabled {
+  opacity: 0.4;
+}
+.ft8-panel p {
+  color: #95c4cf;
+  line-height: 1.5;
+}
+.ft8-table {
+  overflow: auto;
+  max-height: 45dvh;
+  margin-top: 12px;
+}
+.ft8-panel table {
+  border-collapse: collapse;
+  width: 100%;
+  white-space: nowrap;
+  font-family: monospace;
+}
+.ft8-panel th,
+.ft8-panel td {
+  padding: 7px;
+  text-align: left;
+  border-bottom: 1px solid #193441;
+}
+.ft8-panel th {
+  position: sticky;
+  top: 0;
+  background: #10232d;
+}
+.ft8-panel input[type="number"] {
+  width: 85px;
+}
