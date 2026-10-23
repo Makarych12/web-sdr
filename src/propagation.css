@@ -1,0 +1,142 @@
+.radio-extras {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.radio-extras button {
+  min-height: 40px;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+.radio-appearance {
+  display: flex;
+  border: 1px solid #32516b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.radio-appearance button {
+  border: 0;
+  border-radius: 0;
+  padding: 8px 12px;
+}
+.radio-appearance button[aria-pressed="true"] {
+  color: #8affe0;
+  background: #1a4a47;
+  box-shadow: inset 0 -2px #60dcbf;
+}
+.propagation-panel {
+  box-sizing: border-box;
+  width: min(1120px, calc(100vw - 24px));
+  max-height: 94dvh;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #38697c;
+  border-radius: 12px;
+  background: #081b2b;
+  color: #daeaf5;
+}
+.propagation-panel::backdrop {
+  background: #020b16bb;
+}
+.propagation-panel header {
+  height: auto;
+  padding: 0 0 12px;
+  gap: 12px;
+  border: 0;
+}
+.propagation-panel h2 {
+  font-size: 20px;
+  margin: 5px 0 0;
+  color: #8bffe2;
+}
+.propagation-panel header small {
+  font-size: 10px;
+  color: #91acbd;
+  letter-spacing: 2px;
+}
+.propagation-tools {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.propagation-tools label:first-child {
+  display: grid;
+  gap: 4px;
+}
+.propagation-tools input:not([type="checkbox"]) {
+  width: 120px;
+  min-height: 40px;
+  background: #0c293b;
+  color: #dff5ff;
+  border: 1px solid #406174;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 16px;
+}
+.propagation-tools input[aria-invalid="true"] {
+  border-color: #ff927d;
+}
+.propagation-tools time {
+  margin-left: auto;
+  font: 11px monospace;
+  color: #a6c9da;
+}
+.propagation-map {
+  height: clamp(280px, 49dvh, 540px);
+  border-radius: 8px;
+  background: #a4c5d3;
+}
+.propagation-panel p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #9bb4c5;
+}
+.propagation-panel .leaflet-popup-content p {
+  color: #183041;
+  font-size: 12px;
+}
+.propagation-stations {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+}
+.propagation-stations button {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  min-height: 44px;
+  font-size: 11px;
+  padding: 8px;
+}
+@media (max-width: 640px) {
+  .radio-extras {
+    gap: 8px;
+  }
+  .radio-extras button {
+    font-size: 10px;
+  }
+  .propagation-panel {
+    padding: 10px;
+  }
+  .propagation-panel h2 {
+    font-size: 16px;
+  }
+  .propagation-tools {
+    gap: 10px;
+  }
+  .propagation-tools time {
+    margin-left: 0;
+    width: 100%;
+  }
+  .propagation-map {
+    height: 42dvh;
+  }
+}

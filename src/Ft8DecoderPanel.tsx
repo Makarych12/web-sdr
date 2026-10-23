@@ -53,6 +53,7 @@ function download(rows: MonitorRow[]) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function Ft8DecoderPanel({
+  historyRef,
   input,
   onOpenDx,
   mode,
@@ -62,6 +63,7 @@ export function Ft8DecoderPanel({
   frequency,
   receiverName,
 }: {
+  historyRef?: MutableRefObject<History>;
   input: MutableRefObject<Ft8Receiver | null>;
   onOpenDx: () => void;
   mode: string;
@@ -93,6 +95,7 @@ export function Ft8DecoderPanel({
     [notice, setNotice] = useState(""),
     [bandsExpanded, setBandsExpanded] = useState(false),
     [toolsExpanded, setToolsExpanded] = useState(false);
+  useEffect(() => { if (historyRef) historyRef.current = histories; }, [histories, historyRef]);
   const frequencyRef = useRef(frequency),
     limitRef = useRef(limit),
     sequence = useRef(0);

@@ -1,3 +1,7 @@
+import { PropagationLauncher } from "./PropagationLauncher";
+import { RadioAppearance } from "./RadioAppearance";
+import type { History } from "./ft8Monitor";
+import { DspLab, type DspLabSources } from "./DspLab";
 import { SignalHunterControls } from "./SignalHunter";
 import type { SignalHunter } from "./signalHunter";
 import { Ft8DecoderPanel } from "./Ft8DecoderPanel";
@@ -88,6 +92,7 @@ function App() {
   const [waterfallTheme,setWaterfallTheme]=useStoredState<WaterfallTheme>(WATERFALL_THEME_KEY,readWaterfallTheme(),validWaterfallTheme);
   const [waterfallDisplay,setWaterfallDisplay]=useStoredState("ur4mtn.waterfall-display.v1",DEFAULT_WATERFALL_DISPLAY,validWaterfallDisplay);
   const ft8Decoder = useRef<Ft8Receiver | null>(null);
+  const propagationHistory = useRef<History>({});
   const cwDecoder = useRef<CwDecoder | null>(null);
   const [largeDialStepHz, setLargeDialStepHz] = useStoredState("wave.largeDialStepHz", 100,
     (v): v is number => typeof v === "number" && [1,5,10,50,100,500,1000,5000,10000,100000,1000000,10000000].includes(v));
@@ -121,6 +126,7 @@ function App() {
   latestEq.current = eqSettings;
   useEffect(() => { audioEq.current?.update(eqSettings); }, [eqSettings]);
   const afAnalysers = useRef<{ before: AnalyserNode; after: AnalyserNode } | null>(null);
+  const dspLabSources = useRef<DspLabSources | null>(null);
   const afInput = useRef<AfInput>(null);
   const scanner = useRef<FrequencyScanner | null>(null);
   const nr = useRef<AudioWorkletNode | null>(null);
@@ -902,6 +908,7 @@ function App() {
         audioEq.current = new AudioEq(context.current, latestEq.current);
         notch.current.connect(audioEq.current.input);
         audioEq.current.output.connect(gain.current);
+        dspLabSources.current = { before: player.current, nr: nr.current, notch: notch.current, eq: audioEq.current.output };
         const before = context.current.createAnalyser(), after = context.current.createAnalyser();
         before.fftSize = after.fftSize = 2048;
         player.current.connect(before);
@@ -1112,6 +1119,7 @@ function App() {
           </div>
           <p>Выберите приёмник и найдите свою частоту.</p>
         </div>
+        <div className="radio-extras"><PropagationLauncher feed={dx} history={propagationHistory} /><RadioAppearance /></div>
         <section className="receiver panel">
           <ReceiverPicker
             receivers={receivers}
@@ -1196,6 +1204,7 @@ function App() {
             onBandOnly={setDxBandOnly} onTune={tuneDx} />
           <CwDecoderPanel input={cwDecoder} />
           <Ft8DecoderPanel
+            historyRef={propagationHistory}
             input={ft8Decoder}
             onOpenDx={() => dxPanel.current?.open()}
             frequency={frequency}
@@ -1214,6 +1223,7 @@ function App() {
             setDxModePending(null);
           }} />
 
+          <DspLab sources={dspLabSources} connected={connected} nr={nrEnabled} notch={notchEnabled} eq={eqSettings.enabled} />
           <AudioEqControls settings={eqSettings} onChange={setEqSettings} />
           <SwlLogbook frequencyHz={frequencyHz} mode={mode} onTune={(entry) => {
             tune(entry.frequencyHz / 1000, entry.mode);

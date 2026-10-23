@@ -1,0 +1,185 @@
+/* Appearance only. No filters on maps/canvases, geometry or dial transforms. */
+html[data-radio-theme="vintage"] {
+  color: #eadcc0;
+  background: #17130f;
+  --cyan: #e9b969;
+}
+html[data-radio-theme="vintage"] body {
+  background:
+    radial-gradient(ellipse at 50% 5%, #5b3f2677, transparent 60%),
+    repeating-linear-gradient(
+      92deg,
+      #21180f 0,
+      #291d13 3px,
+      #241a11 5px,
+      #1d160f 9px
+    );
+  color: #eadcc0;
+}
+html[data-radio-theme="vintage"] .site-header {
+  background: #191611f5;
+  border-color: #917341;
+  box-shadow: 0 3px 20px #0008;
+}
+html[data-radio-theme="vintage"] .brand span,
+html[data-radio-theme="vintage"] .hero-copy h1 {
+  color: #f4e7c5;
+  text-shadow:
+    0 2px 2px #000,
+    0 0 25px #ca94402b;
+}
+html[data-radio-theme="vintage"] .brand small,
+html[data-radio-theme="vintage"] .site-header nav a,
+html[data-radio-theme="vintage"] .site-header nav button {
+  color: #d4bc8f;
+}
+html[data-radio-theme="vintage"] .site-header nav [aria-current] {
+  background: #3c3021;
+  color: #ffe6a7;
+}
+html[data-radio-theme="vintage"] .header-right {
+  background: #211d15;
+  color: #d9c399;
+  border-color: #78603c;
+}
+html[data-radio-theme="vintage"] .landing-hero,
+html[data-radio-theme="vintage"] .hero-scene {
+  background-color: #211b14;
+}
+html[data-radio-theme="vintage"] .panel,
+html[data-radio-theme="vintage"] .fine-tune,
+html[data-radio-theme="vintage"] .control-panel.panel {
+  background: linear-gradient(115deg, #30271b, #171713 48%, #33291c);
+  border-color: #947548;
+  box-shadow:
+    inset 0 1px #f0cc803b,
+    inset 0 -2px 4px #0008,
+    0 8px 24px #0004;
+}
+html[data-radio-theme="vintage"] .control-panel button,
+html[data-radio-theme="vintage"] .receiver button,
+html[data-radio-theme="vintage"] .fine-tune button,
+html[data-radio-theme="vintage"] .radio-extras button {
+  background: linear-gradient(#4c422d, #29251c);
+  border-color: #8a724b;
+  color: #e8d4aa;
+  box-shadow:
+    inset 0 1px #ebd29633,
+    0 2px 3px #0005;
+}
+html[data-radio-theme="vintage"] .control-panel button[aria-pressed="true"],
+html[data-radio-theme="vintage"] .control-panel .selected,
+html[data-radio-theme="vintage"] .radio-extras button[aria-pressed="true"] {
+  color: #ffe7ac;
+  border-color: #f0c579;
+  background: linear-gradient(#635131, #3c3424);
+  box-shadow:
+    inset 0 0 12px #e6ac3d24,
+    0 0 9px #d4a24b20;
+}
+html[data-radio-theme="vintage"] .control-panel .frequency-digit {
+  color: #bd9e63;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+html[data-radio-theme="vintage"] .control-panel .frequency-digit.active {
+  color: #fff2bf;
+  border-color: #d7b269;
+  background: #9a703122;
+  box-shadow:
+    inset 0 -2px #f6d08b,
+    0 0 12px #e2a43d40;
+}
+html[data-radio-theme="vintage"] .digital-frequency {
+  color: #f5cf84;
+  text-shadow: 0 0 13px #f2ac5066;
+}
+html[data-radio-theme="vintage"] .control-panel input,
+html[data-radio-theme="vintage"] .control-panel select,
+html[data-radio-theme="vintage"] .fine-tune select {
+  background: #1c1b15;
+  color: #eddbb2;
+  border-color: #78613e;
+  accent-color: #d3ad60;
+}
+html[data-radio-theme="vintage"] .control-panel label,
+html[data-radio-theme="vintage"] .control-panel small,
+html[data-radio-theme="vintage"] .control-panel .frequency-dot,
+html[data-radio-theme="vintage"] .fine-tune small,
+html[data-radio-theme="vintage"] .eyebrow {
+  color: #bda77d;
+}
+html[data-radio-theme="vintage"] .control-panel .vfo-dial,
+html[data-radio-theme="vintage"] .fine-tune .vfo-dial {
+  background: repeating-conic-gradient(
+    from 0deg,
+    #c2a363 0deg 1deg,
+    #1a1915 1deg 6deg
+  );
+  border-color: #b3975c;
+  box-shadow:
+    inset 0 0 0 5px #29251d,
+    0 5px 14px #000b,
+    0 0 0 2px #56462e;
+}
+html[data-radio-theme="vintage"] .vfo-face {
+  background: radial-gradient(
+    circle at 34% 28%,
+    #625d50 0,
+    #33342e 27%,
+    #161916 66%,
+    #070b0a 100%
+  );
+  border-color: #a99565;
+  box-shadow:
+    inset 2px 3px 5px #e6d5a22c,
+    inset -5px -6px 12px #000b,
+    0 3px 7px #0009;
+}
+html[data-radio-theme="vintage"] .vfo-face i {
+  background: radial-gradient(circle at 30% 25%, #6e6650, #11150f 65%);
+  border-color: #998558;
+}
+html[data-radio-theme="vintage"] .smeter-track {
+  background: linear-gradient(#e7d5aa, #a8966a);
+  border-color: #a18b5c;
+  box-shadow:
+    inset 0 2px 6px #4937198a,
+    0 0 12px #dfaa3d19;
+}
+html[data-radio-theme="vintage"] .smeter-fill {
+  background: linear-gradient(90deg, #8f773e, #e9bd59, #c25835);
+}
+html[data-radio-theme="vintage"] .frequency-scale {
+  background: linear-gradient(#3f3420, #1f2118);
+  border-color: #8d754b;
+  box-shadow: inset 0 0 18px #e7bc4520;
+}
+html[data-radio-theme="vintage"] .frequency-scale span {
+  color: #e3cd98;
+}
+html[data-radio-theme="vintage"] .propagation-panel,
+html[data-radio-theme="vintage"] .dsp-lab-panel {
+  background: linear-gradient(125deg, #2d271b, #171c18);
+  border-color: #9f8350;
+}
+html[data-radio-theme="vintage"] .radio-appearance {
+  border-color: #9a7c48;
+}
+html[data-radio-theme="vintage"] .site-header nav [aria-current] {
+  box-shadow: inset 0 -2px #e6c07a;
+}
+html[data-radio-theme="vintage"] .hero-copy .hero-cta {
+  background: linear-gradient(135deg, #e7c98a, #a68145);
+  color: #211b12;
+  border-color: #d2af6b;
+  box-shadow:
+    inset 0 1px #fff1c5,
+    0 4px 18px #0006;
+}
+html[data-radio-theme="vintage"] .hero-scene {
+  background:
+    radial-gradient(ellipse at 55% 30%, #77552b55, transparent 60%),
+    linear-gradient(135deg, #29241a, #121914);
+}
