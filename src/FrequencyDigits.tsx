@@ -50,8 +50,7 @@ export function FrequencyDigits({
   const [open, setOpen] = useState(false),
     [showBands, setShowBands] = useState(false);
   const menuRef = useRef<HTMLElement>(null);
-  const touch = useRef(false),
-    latest = useRef({ hz, step, onTune });
+  const latest = useRef({ hz, step, onTune });
   latest.current = { hz, step, onTune };
   function select(p: number) {
     onSelectStep(p, 10 ** p);
@@ -168,18 +167,10 @@ export function FrequencyDigits({
                 aria-label={`Разряд ${stepLabel(10 ** p)}`}
                 aria-pressed={source === "digit" && power === p}
                 title={`Выбрать ${stepLabel(10 ** p)} · колесо изменяет выбранный разряд`}
-                onPointerDown={(e) => {
-                  touch.current =
-                    e.pointerType === "touch" || e.pointerType === "pen";
-                }}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   select(p);
-                  const menu =
-                    touch.current ||
-                    matchMedia("(pointer: coarse)").matches ||
-                    p >= 6;
-                  setOpen(menu);
-                  setShowBands(p >= 6);
+                  setOpen(false);
                 }}
                 onKeyDown={(e) => {
                   if (

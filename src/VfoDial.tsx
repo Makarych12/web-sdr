@@ -89,10 +89,20 @@ export function VfoDial({
   function nudge(ticks: number) {
     const v = latest.current;
     // Apply integer ticks to the shared VFO; App commits the result synchronously.
-    v.onTune(stepFrequency(v.frequencyHz, v.stepHz, ticks));
+    v.frequencyHz = stepFrequency(v.frequencyHz, v.stepHz, ticks);
+    v.onTune(v.frequencyHz);
   }
+  const drag = useRef<{ id: number; angle: number; carry: number } | null>(null);
   const pendingTicks = useRef(0),
     tuneFrame = useRef(0);
+  useLayoutEffect(() => {
+    // A queued movement belongs to the old step. Selecting a new step is not
+    // a tuning action and must not replay it using the new multiplier.
+    cancelAnimationFrame(tuneFrame.current);
+    tuneFrame.current = 0;
+    pendingTicks.current = 0;
+    drag.current = null;
+  }, [stepHz, stepSource]);
   function flushTicks() {
     cancelAnimationFrame(tuneFrame.current);
     tuneFrame.current = 0;
@@ -110,6 +120,7 @@ export function VfoDial({
     const wheel = (event: WheelEvent) => {
       if (document.activeElement !== element || event.deltaY === 0) return;
       event.preventDefault();
+      event.stopPropagation();
       const sign = event.deltaY < 0 ? 1 : -1;
       nudge(sign);
       latest.current.onEnd();
@@ -117,9 +128,6 @@ export function VfoDial({
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
   }, []);
-  const drag = useRef<{ id: number; angle: number; carry: number } | null>(
-    null,
-  );
   function angle(e: PointerEvent<HTMLDivElement>) {
     const r = e.currentTarget.getBoundingClientRect();
     return (
@@ -225,7 +233,13 @@ export function VfoDial({
           <select
             aria-label={`Шаг: ${label}`}
             value={stepSource === "digit" ? "digit" : String(stepHz)}
-            onChange={(e) => onStepChange(Number(e.target.value))}
+            onKeyDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (Number.isFinite(value) && value > 0) onStepChange(value);
+            }}
           >
             {stepSource === "digit" && (
               <option value="digit" disabled>

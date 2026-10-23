@@ -118,31 +118,44 @@ class DSPNotch extends AudioWorkletProcessor {
     for (let i = 0; i <= half; i++) this.power[i] = this.real[i] ** 2 + this.imag[i] ** 2;
     const first = Math.max(2, Math.floor(100 * n / sampleRate));
     const last = Math.min(half - 2, Math.ceil(4000 * n / sampleRate));
-    let peak = first, total = 0;
-    for (let i = first; i <= last; i++) {
-      total += this.power[i];
-      if (this.power[i] > this.power[peak]) peak = i;
+    let total = 0;
+    for (let i = first; i <= last; i++) total += this.power[i];
+    // Speech may be louder than the whistle. Search local tonal peaks rather
+    // than assuming that the strongest bin in the passband is interference.
+    let peak = -1, strongest = 0;
+    for (let bin = first; bin <= last; bin++) {
+      const centre = this.power[bin];
+      if (centre <= this.power[bin - 1] || centre < this.power[bin + 1]) continue;
+      let floor = 0, neighbours = 0;
+      for (let offset = -12; offset <= 12; offset++) {
+        const i = bin + offset;
+        if (Math.abs(offset) < 3 || i < 1 || i >= half) continue;
+        floor += this.power[i]; neighbours++;
+      }
+      floor /= Math.max(1, neighbours);
+      const narrowPower = this.power[bin - 1] + centre + this.power[bin + 1];
+      if (centre <= Math.max(1e-8, floor * 32) || narrowPower <= total * 0.02) continue;
+      // Reject voiced harmonics, including higher partials whose fundamental
+      // is stronger. A stable vowel must not be treated as a carrier.
+      let harmonics = 0;
+      for (let multiple = 2; multiple <= 4; multiple++) {
+        const harmonic = bin * multiple;
+        if (harmonic > last - 1) break;
+        if (Math.max(this.power[harmonic - 1], this.power[harmonic], this.power[harmonic + 1]) > Math.max(centre * 0.12, floor * 10)) harmonics++;
+      }
+      let partial = false;
+      for (let divisor = 2; divisor <= 4; divisor++) {
+        const fundamental = Math.round(bin / divisor);
+        if (fundamental < first) break;
+        for (let i = fundamental - 1; i <= fundamental + 1; i++) {
+          if (this.power[i] > centre * 0.5 && this.power[i] > this.power[i - 1] && this.power[i] >= this.power[i + 1]) partial = true;
+        }
+      }
+      if (harmonics >= 2 || partial) continue;
+      if (centre > strongest) { strongest = centre; peak = bin; }
     }
-    let floor = 0, neighbours = 0;
-    for (let offset = -12; offset <= 12; offset++) {
-      const i = peak + offset;
-      if (Math.abs(offset) < 3 || i < 1 || i >= half) continue;
-      floor += this.power[i]; neighbours++;
-    }
-    floor /= Math.max(1, neighbours);
-    const centre = this.power[peak];
-    const narrowPower = this.power[peak - 1] + centre + this.power[peak + 1];
-    // An audible narrow whistle can contain far less energy than broadband speech.
-    let tonal = centre > Math.max(1e-8, floor * 32) && narrowPower > total * 0.02;
-    // Reject a clear family of speech harmonics instead of notching its fundamental.
-    let harmonics = 0;
-    for (let multiple = 2; multiple <= 4; multiple++) {
-      const bin = peak * multiple;
-      if (bin > last - 1) break;
-      if (Math.max(this.power[bin - 1], this.power[bin], this.power[bin + 1]) > Math.max(centre * 0.12, floor * 10)) harmonics++;
-    }
-    if (harmonics >= 2) tonal = false;
-    if (tonal) {
+    if (peak >= 0) {
+      const centre = this.power[peak];
       const left = Math.log(Math.max(1e-20, this.power[peak - 1]));
       const mid = Math.log(Math.max(1e-20, centre));
       const right = Math.log(Math.max(1e-20, this.power[peak + 1]));
