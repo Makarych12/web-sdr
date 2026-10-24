@@ -1114,11 +1114,12 @@ function App() {
     ? [] : freshDx(dx.spots, dx.now, dxBandOnly ? dxBand(frequency) : null);
   const tuneDx = (spot: DxSpot) => {
     if (dxRange && spot.frequency >= dxRange.min && spot.frequency <= dxRange.max) {
-      const decision=dxMode(spot,settings.current.mode);
-      // One atomic tune applies frequency, mode and matching filter before one flush, centering on spot frequency.
-      tune(spot.frequency, decision.mode, undefined, widths[decision.mode], spot.frequency);
+      scanner.current?.stop();
+      const decision = dxMode(spot, settings.current.mode);
+      // VFO tunes accurately to spot frequency; panorama shifts only if spot is outside visible window (10%-90%).
+      tune(spot.frequency, decision.mode, undefined, widths[decision.mode]);
       manager.current?.flushTune();
-      setDxModePending(decision.uncertain?{reason:decision.reason}:null);
+      setDxModePending(decision.uncertain ? { reason: decision.reason } : null);
     }
   };
   return (

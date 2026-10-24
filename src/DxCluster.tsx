@@ -82,7 +82,10 @@ export function DxClusterPanel(props: Props) {
       {!range && <p>Диапазон приёмника пока неизвестен; переход по частоте недоступен.</p>}
       <div className="dx-list">{spots.map(spot => <article key={spot.id}>
         <button type="button" disabled={!dxAvailable(spot,range)} title={!dxAvailable(spot,range) ? "Частота недоступна выбранному приёмнику" : "Настроить VFO"}
-          onClick={() => { if (dxAvailable(spot,range)) { onTune(spot); dialog.current?.close(); } }}>
+          onPointerDown={e => e.stopPropagation()}
+          onPointerUp={e => e.stopPropagation()}
+          onDoubleClick={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); if (dxAvailable(spot,range)) { onTune(spot); dialog.current?.close(); } }}>
           <b>{spot.call}</b> · {spot.frequency} kHz
         </button><small>{utc(spot.time)} UTC · {spot.mode ?? "режим неизвестен"} · HamQTH / {spot.spotter}</small>
       </article>)}</div>
@@ -108,8 +111,10 @@ export function DxMarkers({ spots, view, range, onTune, waterfall = false }: { s
       <button type="button" style={{left:labelLeft,top:(waterfall ? 4 : 42)+lane*22}}
         data-dx-frequency={spot.frequency} data-dx-x={x} disabled={!dxAvailable(spot,range)}
         aria-label={`DX ${spot.call} ${spot.frequency} kHz`} title={`${spot.call} · ${spot.frequency} kHz · ${utc(spot.time)} UTC · HamQTH / ${spot.spotter}${!dxAvailable(spot,range) ? " · частота недоступна" : ""}`}
-        onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}
-        onClick={() => { if(dxAvailable(spot,range)) onTune(spot); }}>{spot.call}</button>
+        onPointerDown={e => e.stopPropagation()}
+        onPointerUp={e => e.stopPropagation()}
+        onDoubleClick={e => e.stopPropagation()}
+        onClick={e => { e.stopPropagation(); if(dxAvailable(spot,range)) onTune(spot); }}>{spot.call}</button>
     </div>)}
   </div>;
 }
