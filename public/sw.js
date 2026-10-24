@@ -1,4 +1,4 @@
-const CACHE = "ur4mtn-v13";
+const CACHE = "ur4mtn-v14";
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches
@@ -9,6 +9,7 @@ self.addEventListener("install", (e) => {
           "/icon-192.png",
           "/icon-512.png",
           "/manifest.webmanifest",
+          "/manifest.json",
           "/audio-worklet.js",
         ]),
       ),

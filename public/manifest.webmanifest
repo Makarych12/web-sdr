@@ -1,11 +1,13 @@
 {
   "id": "/",
   "name": "UR4MTN WEB SDR",
-  "short_name": "UR4MTN",
+  "short_name": "UR4MTN SDR",
+  "description": "UR4MTN WEB SDR — приём коротких волн через публичные KiwiSDR",
   "lang": "ru",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#041025",
   "theme_color": "#04152d",
   "icons": [
@@ -21,5 +23,6 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "categories": ["utilities", "entertainment", "news"]
 }

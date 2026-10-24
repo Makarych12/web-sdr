@@ -73,8 +73,18 @@ export class KiwiProtocol {
     this.resumeUntil = 0;
   }
   setBackground(hidden) {
-    if (this.background && !hidden) this.resume();
+    if (this.background === hidden) return;
     this.background = hidden;
+    if (!hidden) {
+      this.resume();
+      if (this.waterfallReady && this.sockets[1]?.readyState === 1) {
+        this.send(this.sockets[1], "SET wf_speed=3");
+      }
+    } else {
+      if (this.waterfallReady && this.sockets[1]?.readyState === 1) {
+        this.send(this.sockets[1], "SET wf_speed=0");
+      }
+    }
   }
   resume() {
     if (this.closed) return;

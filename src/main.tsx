@@ -47,6 +47,7 @@ import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
 
 import { QuickTune } from "./QuickTune";
+import { PwaInstallButton } from "./PwaInstallButton";
 import { ReceiverPicker, type Receiver } from "./ReceiverPicker";
 import {
   useStoredState,
@@ -600,6 +601,34 @@ function App() {
     const timer = setInterval(() => setRssi(signal.current), 100);
     return () => clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!wanted || typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let released = false;
+    const acquire = async () => {
+      try {
+        if (!document.hidden && !released) {
+          lock = await navigator.wakeLock.request("screen");
+        }
+      } catch {
+        // Ignored: wake lock not granted by system
+      }
+    };
+    void acquire();
+    const onVisibility = () => {
+      if (document.hidden) {
+        lock = null;
+      } else if (wanted) {
+        void acquire();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      released = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      void lock?.release().catch(() => {});
+    };
+  }, [wanted]);
   function tune(
     f = frequency,
     m = mode,
@@ -1122,17 +1151,20 @@ function App() {
             О проекте
           </a>
         </nav>
-        <div className="header-right" role="status">
-          <span className={"dot " + (connected ? "live" : "")} />
-          {offline
-            ? "Нет сети"
-            : retryAt
-              ? "Переподключение…"
-              : error && !wanted
-                ? "Ошибка"
-                : connected
-                  ? "ONLINE · В эфире"
-                  : status}
+        <div className="header-actions">
+          <PwaInstallButton />
+          <div className="header-right" role="status">
+            <span className={"dot " + (connected ? "live" : "")} />
+            {offline
+              ? "Нет сети"
+              : retryAt
+                ? "Переподключение…"
+                : error && !wanted
+                  ? "Ошибка"
+                  : connected
+                    ? "ONLINE · В эфире"
+                    : status}
+          </div>
         </div>
       </header>
       <main>
