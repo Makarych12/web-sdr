@@ -146,3 +146,34 @@
  .about-dialog .about-scroll { scroll-behavior:auto; }
  .about-dialog *, .about-dialog *::before,.about-dialog *::after { animation:none!important; transition:none!important; }
 }
+
+/* Let mobile copy wrap as words; keep icons and the close control rigid. */
+@media(max-width:540px) {
+ .about-dialog .about-content { padding-inline:clamp(16px,5vw,22px); }
+ .about-dialog .about-toolbar { padding-inline:clamp(14px,4.5vw,20px); gap:12px; }
+ .about-dialog .about-wordmark { min-width:0; line-height:1.5; letter-spacing:.04em; }
+ .about-wordmark svg { flex:none; }
+ .about-wordmark > span { min-width:0; white-space:normal; }
+ .about-dialog .about-kicker { font-size:11px; letter-spacing:.1em; flex-wrap:wrap; }
+ .about-kicker > span { flex:none; }
+ .about-dialog .about-block > div,
+ .about-tool-grid article > div,
+ .about-section-heading > div { min-width:0; }
+ .about-dialog h2,.about-dialog h3,.about-dialog p,.about-card-tag,
+ .about-tech-tags span { overflow-wrap:break-word; }
+ .about-dialog .about-headline { font-size:clamp(23px,6.6vw,28px); line-height:1.4; }
+ .about-dialog .about-explore { white-space:normal; min-width:0; line-height:1.6; }
+ .about-explore > span { flex:none; }
+ .about-scope-top { flex-wrap:wrap; row-gap:6px; font-size:9px; }
+ .about-scope-top > span { min-width:0; }
+ .about-scope-top > span:last-child { margin-left:auto; max-width:145px; }
+ .about-hero-caption { display:grid; grid-template-columns:minmax(0,1fr) auto; font-size:9px; line-height:1.7; gap:12px; }
+ .about-hero-caption > span:last-child { white-space:nowrap; }
+ .about-feature { padding:clamp(18px,5.6vw,24px); }
+ .about-card-tag { font-size:10px; letter-spacing:.04em; }
+ .about-signal-path { flex-wrap:wrap; gap:8px; }
+ .about-signal-path span { font-size:11px; }
+ .about-signal-path i { flex:0 0 auto; }
+ .about-dialog .about-finale button { gap:12px; text-align:left; }
+ .about-finale button > span { flex:none; }
+}

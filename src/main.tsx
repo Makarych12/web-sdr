@@ -18,6 +18,7 @@ import "./console.css";
 import "./features.css";
 import "./control-panel.css";
 import "./ocean-controls.css";
+import "./pwa-readability.css";
 import {
   parseFrequency,
   MODE_STEP,
@@ -231,11 +232,9 @@ function App() {
     [],
     savedFrequencies,
   );
-  const [receiver, setReceiver] = useStoredState(
-    "wave.receiver",
-    "niendorf",
-    (v): v is string => typeof v === "string",
-  );
+  // A fresh document starts at the existing Niendorf catalog entry. Manual
+  // choices belong to this session and must not override the next launch.
+  const [receiver, setReceiver] = useState("niendorf");
   const [receivers, setReceivers] = useState<Receiver[]>([]),
     [frequencyHz, setFrequencyHz] = useStoredState(
       "wave.frequencyHz",
@@ -449,14 +448,11 @@ function App() {
         if (disposed || controller.signal.aborted) return;
         attempt = 0;
         setReceivers(rows);
-        if (
-          !manager.current?.desired && rows.length &&
-          !rows.some((r) => r.id === receiverRef.current)
-        ) {
-          receiverRef.current = rows[0].id;
-          setReceiver(rows[0].id);
-        }
-        setError((current) => (current === catalogError ? "" : current));
+        const receiverMissing = !rows.some((r) => r.id === receiverRef.current);
+        const missingMessage = receiverRef.current === "niendorf"
+          ? "Niendorf (Germany) сейчас отсутствует в каталоге. Выберите другой сервер в списке приёмников."
+          : "Выбранный сервер сейчас отсутствует в каталоге. Выберите другой сервер в списке приёмников.";
+        setError((current) => receiverMissing ? missingMessage : current === catalogError ? "" : current);
       } catch {
         if (disposed || controller.signal.aborted) return;
         setError(catalogError);
@@ -747,7 +743,11 @@ function App() {
     setStatus(v.message);
     setRetryAt(v.retryAt);
     setRetryAttempt(v.attempt);
-    if (v.phase === "retrying" || v.phase === "blocked") setError(v.message);
+    if (v.phase === "retrying" || v.phase === "blocked") setError(
+      receiverRef.current === "niendorf"
+        ? `Niendorf (Germany): ${v.message} Можно выбрать другой сервер в списке приёмников.`
+        : v.message,
+    );
     else if (v.phase === "live") setError("");
   };
   callbacks.current.message = (v) => {

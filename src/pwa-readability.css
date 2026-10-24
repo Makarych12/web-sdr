@@ -1,0 +1,37 @@
+/* Installed mobile windows only: no viewport scaling and no canvas/dial rules. */
+@media (display-mode: standalone) and (max-width: 600px) {
+ html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+ .app .site-header nav a,.app .site-header nav button { font-size:14px; min-height:44px; }
+ .app .receiver .connect,.app .receiver-trigger { font-size:15px; min-height:46px; }
+ .app .receiver-status { font-size:13px; line-height:1.6; flex-wrap:wrap; }
+ .app .receiver-status small,.app .receiver-status span { font-size:12px; }
+ .app .frequency .frequency-digit-control .digital-frequency { font-size:clamp(24px,7.3vw,32px); }
+ .app .digit-step-caption { font-size:11px; line-height:1.5; flex-wrap:wrap; }
+ .app .frequency-digit-control .frequency-unit { font-size:13px; }
+ .app .control-panel label,.app .control-panel .filter-control small { font-size:12px; line-height:1.5; }
+ .app .mode > button,.app .filter-presets button { font-size:14px; min-height:42px; }
+ .app .precision-controls .fine-tune label,.app .step-control label { font-size:12px; line-height:1.5; }
+ dialog:not(.about-dialog) :is(p,label,small) { font-size:14px; line-height:1.6; }
+ dialog:not(.about-dialog) :is(button,input:not([type="checkbox"]):not([type="range"]),select) { font-size:14px; }
+ dialog:not(.about-dialog) :is(button,input:not([type="checkbox"]):not([type="range"]),select) { min-height:42px; }
+ .dx-panel .dx-list article { padding-block:12px; }
+ .dx-panel .dx-list article > button { font-size:15px; white-space:normal; overflow-wrap:anywhere; }
+ .dx-panel .dx-list article > small { font-size:13px; }
+ .dx-panel .dx-band-selector { gap:6px; }
+ .catalog-dialog .explorer-title { font-size:18px; line-height:1.4; min-width:0; }
+ .catalog-dialog .explorer-title-group { min-width:0; }
+ .catalog-dialog .catalog-item { white-space:normal; }
+ .catalog-dialog .server-title-text { font-size:16px; line-height:1.5; }
+ .catalog-dialog :is(.server-country,.server-city-pill,.server-callsign-badge,.server-status-text,.server-slots-badge,.server-latency) { font-size:13px; line-height:1.5; }
+ .catalog-dialog :is(.explorer-search-input,.explorer-select) { min-height:44px; font-size:15px; }
+ .catalog-dialog .explorer-tab-btn { min-height:44px; height:auto; font-size:14px; white-space:normal; flex:1 1 calc(50% - 6px); padding:8px; }
+ .catalog-dialog .explorer-toolbar { display:flex; min-width:0; padding-inline:12px; }
+ .catalog-dialog :is(.explorer-row-top,.explorer-row-bottom) { width:100%; min-width:0; flex-direction:column; align-items:stretch; }
+ .catalog-dialog :is(.explorer-search-wrapper,.explorer-tabs,.explorer-continents-chips,.explorer-selects) { min-width:0; width:100%; }
+ .catalog-dialog :is(.explorer-tabs,.explorer-continents-chips) { flex-wrap:wrap; overflow:visible; }
+ .catalog-dialog .explorer-selects { display:grid; grid-template-columns:minmax(0,1fr); }
+ .catalog-dialog .explorer-select { min-width:0; width:100%; }
+ .catalog-dialog .explorer-close-btn { flex:none; width:44px; }
+ .catalog-dialog .catalog-row .star { min-height:36px; width:36px; }
+ .waterfall-mode-panel .waterfall-settings-title { font-size:18px; }
+}
