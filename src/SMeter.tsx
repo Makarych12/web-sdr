@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { signalLabel } from "./radio";
-export function SMeter({ rssi }: { rssi: number | null }) {
-  const target = useRef(rssi),
+export function SMeter({ signal }: { signal: { current: number | null } }) {
+  // Read telemetry inside the existing meter timer. Signal packets must not
+  // rerender the entire receiver, DX markers and its open dialogs at 10 Hz.
+  const rssi = signal.current;
+  const target = signal,
     level = useRef(-127),
     peak = useRef(-127),
     hold = useRef(0);
-  target.current = rssi;
   const [display, setDisplay] = useState({ level: -127, peak: -127 });
   useEffect(() => {
     const id = setInterval(() => {

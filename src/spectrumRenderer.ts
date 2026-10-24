@@ -33,19 +33,25 @@ export function waterfallColor(
     0,
     Math.min(1, (Math.max(0, Math.min(255, Number.isFinite(bin) ? bin : 0)) - 255 + db - blackDb) / rangeDb),
   );
+  const color = [0, 0, 0, 255];
+  writeWaterfallColor(color, 0, power, colorStops);
+  return color;
+}
+/** Write directly into the cached LUT: no per-colour arrays or callbacks. */
+function writeWaterfallColor(
+  output: number[] | Uint8ClampedArray,
+  offset: number,
+  power: number,
+  stops: (typeof THEME_STOPS)[WaterfallTheme],
+) {
   const t = power ** 0.85;
-  const index = Math.max(
-    1,
-    colorStops.findIndex((stop) => stop[0] >= t),
-  );
-  const low = colorStops[index - 1],
-    high = colorStops[index];
+  let index = 1;
+  while (index < stops.length - 1 && stops[index][0] < t) index++;
+  const low = stops[index - 1], high = stops[index];
   const mix = (t - low[0]) / (high[0] - low[0]);
-  return [1, 2, 3]
-    .map((channel) =>
-      clampByte(low[channel] + (high[channel] - low[channel]) * mix),
-    )
-    .concat(255);
+  for (let channel = 1; channel <= 3; channel++)
+    output[offset + channel - 1] = clampByte(low[channel] + (high[channel] - low[channel]) * mix);
+  output[offset + 3] = 255;
 }
 /** The same robust noise estimate on every band, independent of its frequency.
  * A low percentile ignores isolated carriers; slow tracking avoids brightness
@@ -53,12 +59,14 @@ export function waterfallColor(
  */
 export class WaterfallLevels {
   private noise: number | undefined;
+  private histogram = new Uint16Array(256);
   readonly rangeDb = 75;
   reset() {
     this.noise = undefined;
   }
   update(bins: Uint8Array, calibration: number) {
-    const histogram = new Uint16Array(256);
+    const histogram = this.histogram;
+    histogram.fill(0);
     for (const value of bins) histogram[value]++;
     const rank = Math.ceil(bins.length * 0.3);
     let count = 0,
@@ -133,8 +141,9 @@ type HistoryRow = { bins:Uint8Array; blackDb:number; rangeDb:number; calibration
 export class SpectrumRenderer {
   private history = document.createElement("canvas");
   private strip!: ImageData;
+  private repeatedStrip?: ImageData;
   private envelope = new SpectrumEnvelope();
-  private traceBins: Float32Array | null = null;
+  private traceBins: Float32Array | Uint8Array | null = null;
   private last?: { bins: Uint8Array; view: SpectrumView };
   private view: SpectrumView;
   private frame = 0;
@@ -157,18 +166,18 @@ export class SpectrumRenderer {
     this.waterfall.dataset.mode=display.mode;
     this.repaintHistory();
   }
-  private paintHistoryRow(ctx:CanvasRenderingContext2D,row:HistoryRow,previous:HistoryRow|undefined,y:number) {
+  private paintHistoryRow(ctx:CanvasRenderingContext2D,row:HistoryRow,previous:HistoryRow|undefined,y:number,repeat=1) {
     if(this.display.mode==='CLASSIC') {
       const levels=displayLevels(row.blackDb+10,this.display.refLevel,this.display.levelRangeDb,this.display.autoLevel);
       const noiseDb=row.blackDb+10;
       const wfBlackDb=this.display.autoLevel!==false?noiseDb-1.5+(this.display.brightness??0)*0.2:levels.blackDb;
       const wfRangeDb=this.display.rangeDb??levels.rangeDb;
-      this.paintColorRow(ctx,row.bins,row.calibration,wfBlackDb,wfRangeDb,y);
+      this.paintColorRow(ctx,row.bins,row.calibration,wfBlackDb,wfRangeDb,y,repeat);
       return;
     }
     if(this.display.mode==='SDR PRO'){
       const pixels=sdrProRow(row.bins,row.pro,this.display.proContrast??1.1,this.display.proSensitivity??0);
-      this.paintColorRow(ctx,pixels,0,-255,255,y);
+      this.paintColorRow(ctx,pixels,0,-255,255,y,repeat);
       return;
     }
     const contiguous=previous&&sameView(row.view,previous.view);
@@ -176,7 +185,7 @@ export class SpectrumRenderer {
     const previousNoise=previous?previous.blackDb+10+255-previous.calibration:noise;
     const pixels=malahitRow(row.bins,contiguous?previous.bins:null,noise,previousNoise,this.display);
     // Existing theme LUT maps the enhanced measurements; it is not the algorithm.
-    this.paintColorRow(ctx,pixels,0,-255,255,y);
+    this.paintColorRow(ctx,pixels,0,-255,255,y,repeat);
   }
   private proScrollTimer:ReturnType<typeof setTimeout>|undefined;
   private proStepUntil=0;
@@ -210,9 +219,9 @@ export class SpectrumRenderer {
         const index=this.colorRows.indexOf(row);
         if(index>=0){
           const y=this.history.height-this.colorRows.length+index;
-          this.paintHistoryRow(ctx,row,previous,y);
-          for(let next=index+1;this.colorRows[next]===row;next++)
-            ctx.putImageData(this.strip,0,y+next-index);
+          let end=index+1;
+          while(this.colorRows[end]===row)end++;
+          this.paintHistoryRow(ctx,row,previous,y,end-index);
         }
         previous=row;
         do { i++; } while(rows[i]===row);
@@ -230,11 +239,18 @@ export class SpectrumRenderer {
     this.waterfall.dataset.theme=theme;
     this.schedule();
   }
-  private paintColorRow(ctx:CanvasRenderingContext2D,bins:Uint8Array,calibration:number,blackDb:number,rangeDb:number,y:number) {
+  private paintColorRow(ctx:CanvasRenderingContext2D,bins:Uint8Array,calibration:number,blackDb:number,rangeDb:number,y:number,repeat=1) {
     const key=`${calibration}/${blackDb.toFixed(2)}/${rangeDb}/${this.theme}`;
     if(key!==this.paletteKey) {
       this.paletteKey=key;
-      for(let i=0;i<1024;i++)this.palette.set(waterfallColor(i*255/1023,calibration,blackDb,rangeDb,this.theme),i*4);
+      const db = Math.max(-100, Math.min(100, Number.isFinite(calibration) ? calibration : -13));
+      const black = Number.isFinite(blackDb) ? blackDb : -115;
+      const range = Number.isFinite(rangeDb) && rangeDb > 0 ? rangeDb : 90;
+      const stops = THEME_STOPS[this.theme];
+      for (let i = 0; i < 1024; i++) {
+        const power = Math.max(0, Math.min(1, (i * 255 / 1023 - 255 + db - black) / range));
+        writeWaterfallColor(this.palette, i * 4, power, stops);
+      }
     }
     const width=this.history.width, samples=resampleWaterfall(bins,width);
     for(let x=0;x<width;x++){
@@ -243,7 +259,15 @@ export class SpectrumRenderer {
       this.strip.data[pixel]=this.palette[color];this.strip.data[pixel+1]=this.palette[color+1];
       this.strip.data[pixel+2]=this.palette[color+2];this.strip.data[pixel+3]=255;
     }
-    ctx.putImageData(this.strip,0,y);
+    // Upload one real packet's identical backing rows together. DPR 2 used
+    // to cause four synchronous CPU-to-canvas uploads for the same samples.
+    if (repeat > 1) {
+      if (!this.repeatedStrip || this.repeatedStrip.width !== width || this.repeatedStrip.height !== repeat)
+        this.repeatedStrip = ctx.createImageData(width, repeat);
+      for (let row = 0; row < repeat; row++)
+        this.repeatedStrip.data.set(this.strip.data, row * width * 4);
+      ctx.putImageData(this.repeatedStrip, 0, y);
+    } else ctx.putImageData(this.strip,0,y);
   }
   private levels = new WaterfallLevels();
   private pending: { bins: Uint8Array; view: SpectrumView }[] = [];
@@ -471,13 +495,11 @@ export class SpectrumRenderer {
         const preceding=previous&&sameView(previous.view,row.view)&&previous.calibration===this.calibration?previous.pro:undefined;
         const stored={bins:row.bins,calibration:this.calibration,blackDb:levels.blackDb,rangeDb:levels.rangeDb,view:row.view,pro:sdrProLevels(row.bins,preceding)};
         this.stepProScroll();
-        for(let i=0;i<this.rowHeight && y+i<height;i++)if(y+i>=0){
-          if(i===0)this.paintHistoryRow(ctx,stored,previous,y+i);
-          else ctx.putImageData(this.strip,0,y+i);
+        this.paintHistoryRow(ctx,stored,previous,y,Math.min(this.rowHeight,height-y));
+        for(let i=0;i<this.rowHeight && y+i<height;i++)if(y+i>=0)
           this.colorRows.push(stored);
-        }
         if(this.colorRows.length>height)this.colorRows.splice(0,this.colorRows.length-height);
-        this.traceBins = this.theme==='OCEAN BLUE' ? Float32Array.from(row.bins) : this.envelope.update(row.bins, performance.now());
+        this.traceBins = this.theme==='OCEAN BLUE' ? row.bins : this.envelope.update(row.bins, performance.now());
         this.last = row;
       }
       this.rowCount = Math.min(height, this.rowCount + shift);

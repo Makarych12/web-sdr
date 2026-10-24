@@ -11,13 +11,15 @@ test("new rows enter at the bottom, history moves up, bursts drain on RAF and id
     height = 8;
     dataset: Record<string, string> = {};
     buffer = new Uint8ClampedArray(8 * 8 * 4);
+    uploads = 0;
     context = {
       fillStyle: "", globalAlpha: 1, globalCompositeOperation: "", imageSmoothingEnabled: false,
       fillRect: () => { this.buffer = new Uint8ClampedArray(this.width * this.height * 4); },
       clearRect() {}, fillText() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {},
       createLinearGradient: () => ({ addColorStop() {} }),
-      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+      createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
       putImageData: (image: ImageData, x: number, y: number) => {
+        this.uploads++;
         this.buffer.set(image.data, (y * this.width + x) * 4);
       },
       drawImage: (source: Canvas, sx: number, sy: number, sw: number, sh: number,
@@ -51,7 +53,10 @@ test("new rows enter at the bottom, history moves up, bursts drain on RAF and id
     const first = waterfall.pixel(7);
     assert.notDeepEqual(first, [0, 0, 0, 0]);
     assert.deepEqual(waterfall.pixel(0), [0, 0, 0, 0]);
+    assert.equal((renderer as any).history.uploads, 1, "one canvas upload per packet, including repeated backing rows");
+    const repeatedStrip = (renderer as any).repeatedStrip;
     renderer.append(new Uint8Array(1024).fill(220), { ...view, sequence: 2 }); flush();
+    assert.equal((renderer as any).repeatedStrip, repeatedStrip, "reuse the packet upload buffer");
     assert.deepEqual(waterfall.pixel(5), first, "previous bottom row moves upward by two pixels");
     assert.notDeepEqual(waterfall.pixel(7), first, "new signal is at bottom");
     renderer.append(new Uint8Array(1024).fill(180), { ...view, sequence: 3 });
@@ -70,6 +75,19 @@ test("new rows enter at the bottom, history moves up, bursts drain on RAF and id
     assert.equal(waterfall.dataset.rows, "2");
     renderer.setView({ start: 7026, span: 50 }); flush();
     assert.equal(waterfall.dataset.rows, "2", "same-span pan keeps real history");
+    for (let sequence = 7; sequence < 87; sequence++) {
+      renderer.append(new Uint8Array(1024).fill(sequence), { start: 7026, span: 50, sequence });
+      flush();
+    }
+    assert.equal((renderer as any).colorRows.length, waterfall.height, "history is bounded by canvas height");
+    assert.equal((renderer as any).rowViews.length, waterfall.height);
+    renderer.setVisible(false);
+    assert.equal(frames.size, 0, "hidden waterfall has no RAF");
+    assert.equal(renderer.append(new Uint8Array(1024), { start: 7026, span: 50 }), false);
+    renderer.setVisible(true); flush();
+    renderer.clear(); flush();
+    assert.equal((renderer as any).colorRows.length, 0, "server reset releases stored rows");
+    assert.equal((renderer as any).pending.length, 0);
     renderer.dispose(); assert.equal(frames.size, 0, "dispose cancels rendering");
   } finally {
     for (const key of ["document", "requestAnimationFrame", "cancelAnimationFrame", "Path2D"]) {

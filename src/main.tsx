@@ -275,7 +275,6 @@ function App() {
     [audioPaused, setAudioPaused] = useState(false),
     [preparing, setPreparing] = useState(false),
     [error, setError] = useState(""),
-    [rssi, setRssi] = useState<number | null>(null),
     [counts, setCounts] = useState({ audio: 0, wf: 0 }),
     [view, setView] = useState<View>(() =>
       viewFor(
@@ -609,10 +608,6 @@ function App() {
       );
   }, [volume, muted]);
   useEffect(() => {
-    const timer = setInterval(() => setRssi(signal.current), 100);
-    return () => clearInterval(timer);
-  }, []);
-  useEffect(() => {
     if (!wanted || typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
     let lock: WakeLockSentinel | null = null;
     let released = false;
@@ -922,7 +917,6 @@ function App() {
         setWaterfallReady(false);
         player.current?.port.postMessage({ reset: true });
         signal.current = null;
-        setRssi(null);
       },
     });
   const chooseReceiver = useCallback(
@@ -1401,7 +1395,7 @@ function App() {
                   manager.current?.flushTune();
                 }}
               />
-            <SMeter rssi={rssi} />
+            <SMeter signal={signal} />
             <div
               className="signal-settings"
               role="group"

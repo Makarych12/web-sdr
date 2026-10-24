@@ -83,3 +83,15 @@
  .precision-controls .fine-buttons { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
  .precision-controls .fine-view { grid-column:1/-1; }
 }
+
+/* Keep the existing four tool launchers inside a narrow receiver panel. */
+@media(max-width:380px) {
+ .control-panel.panel .receiver-tool-launches > .dx-launch,
+ .control-panel.panel .receiver-tool-launches > .cw-dec-launch,
+ .control-panel.panel .receiver-tool-launches > .ft8-launch,
+ .control-panel.panel .receiver-tool-launches > .dsp-lab-launch { width:calc(25% - 4px); }
+ .control-panel.panel .receiver-tool-launches > .dx-launch { left:0; }
+ .control-panel.panel .receiver-tool-launches > .cw-dec-launch { left:25%; }
+ .control-panel.panel .receiver-tool-launches > .ft8-launch { left:50%; }
+ .control-panel.panel .receiver-tool-launches > .dsp-lab-launch { left:75%; }
+}
