@@ -182,6 +182,7 @@ test("returning from sleep preserves a fresh connection and reconnects a stale o
   });
   sockets[0].readyState = 3;
   c.recoverAfterSleep();
+  t.mock.timers.tick(1000);
   assert.equal(sockets.length, 2);
   sockets[1].open();
   assert.equal(JSON.parse(sockets[1].sent[0]).frequency, 14200);
@@ -329,5 +330,22 @@ test("resume waits for queued audio on an open socket, then retries only if stil
   sockets[1].open();
   assert.equal(JSON.parse(sockets[1].sent[0]).receiver, "france");
   assert.equal(JSON.parse(sockets[1].sent[0]).highCut, 2100);
+  c.stop();
+});
+
+
+test("hidden silence and delayed watchdog do not discard an open transport", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1000 });
+  const { c, sockets, states } = setup();
+  c.start(); sockets[0].open(); c.setBackground(true);
+  t.mock.timers.tick(120000);
+  assert.equal(sockets[0].readyState, 1);
+  assert.equal(states.at(-1).phase, "connecting");
+  c.setBackground(false);
+  sockets[0].onmessage({ data: Uint8Array.of(1).buffer });
+  sockets[0].onmessage({ data: Uint8Array.of(2).buffer });
+  t.mock.timers.setTime(601000);
+  t.mock.timers.tick(1000);
+  assert.equal(sockets[0].readyState, 1, "overdue timer must allow queued packets");
   c.stop();
 });

@@ -286,3 +286,22 @@ test("direct Kiwi protocol has no five-minute session expiry; background PCM doe
   assert.equal(s.closed, false);
   s.close();
 });
+
+
+test("background silence preserves native sockets; foreground silence is a stream timeout", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1000 });
+  const events = [], sockets = [];
+  const session = new KiwiProtocol("https://example.org", v => events.push(v), () => {
+    const socket = { readyState: 1, send() {}, close() { this.readyState = 3; }, on() {} };
+    sockets.push(socket); return socket;
+  });
+  session.start({ frequency: 14200, mode: "USB", zoom: 6 });
+  session.setBackground(true);
+  t.mock.timers.tick(120000);
+  assert.equal(session.closed, false);
+  assert.equal(sockets.length, 2);
+  session.setBackground(false);
+  for (let i = 0; i < 6; i++) t.mock.timers.tick(1000);
+  assert.equal(events.find(v => v.type === "error")?.code, "stream_timeout");
+  assert.equal(session.closed, true);
+});

@@ -805,6 +805,7 @@ function App() {
           event.type === "upstream_error" &&
           event.code === "connection" &&
           event.failures === 2 &&
+          event.fallbackEligible === true &&
           manager.current?.socket instanceof DirectKiwiSocket &&
           !manager.current.socket.receivedAudio
         ) {
@@ -919,8 +920,13 @@ function App() {
           setAudioPaused(
             context.current?.state !== "running" || !!media.current?.audio.paused,
           );
+          console.info("WebSDR audio lifecycle", {
+            state: context.current?.state, hidden: document.hidden,
+            desired: manager.current?.desired,
+          });
           if (context.current?.state !== "running")
             media.current?.setState("paused");
+          else if (manager.current?.desired) void resumeAudio();
         };
       }
       await resumeAudio();

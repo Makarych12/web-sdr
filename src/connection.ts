@@ -46,13 +46,21 @@ export class StreamConnection {
   private startedAt = 0;
   private background = false;
   private resumeUntil = 0;
+  private lastTick = 0;
+  private fallbackEligible = true;
+  private receivedSessionAudio = false;
   setBackground(hidden: boolean) {
-    if (this.background && !hidden) this.resumeUntil = Date.now() + 5000;
+    if (this.background && !hidden) {
+      this.lastTick = Date.now();
+      this.resumeUntil = Date.now() + 5000;
+    }
+    if (hidden) this.fallbackEligible = false;
     this.background = hidden;
     this.socket?.setBackground?.(hidden);
   }
   recoverAfterSleep() {
     if (!this.desired || this.timer !== undefined) return;
+    this.lastTick = Date.now();
     const age = Date.now() - (this.lastAudioAt || this.startedAt);
     if (!this.socket || this.socket.readyState > 1) this.retry("Соединение прервано после сна. Восстанавливаем текущий Kiwi.");
     else {
@@ -65,6 +73,8 @@ export class StreamConnection {
   }
   start() {
     this.desired = true;
+    this.receivedSessionAudio = false;
+    this.fallbackEligible = !this.background;
     this.attempts = 0;
     this.failures = 0;
     this.reconnects = 0;
@@ -76,6 +86,8 @@ export class StreamConnection {
     this.options.onState({ phase: "idle", message: "Отключён", attempt: 0 });
   }
   switchReceiver() {
+    this.receivedSessionAudio = false;
+    this.fallbackEligible = !this.background;
     if (this.desired) {
       this.attempts = 0;
       this.failures = 0;
@@ -195,6 +207,8 @@ export class StreamConnection {
               code: v.code,
               reason,
               failures: this.failures,
+              fallbackEligible: this.fallbackEligible && !this.receivedSessionAudio &&
+                !this.background && Date.now() - this.lastTick <= 5000,
             });
             if (v.retryable === false) {
               this.desired = false;
@@ -212,6 +226,7 @@ export class StreamConnection {
           const bytes = new Uint8Array(e.data);
           if (bytes[0] === 1) {
             audio++;
+            this.receivedSessionAudio = true;
             lastAudio = Date.now();
             this.lastAudioAt = lastAudio;
           }
@@ -255,9 +270,17 @@ export class StreamConnection {
         `Соединение закрыто (${event.code}${event.reason ? ": " + event.reason : ""}). Восстанавливаем текущий Kiwi.`,
       );
     };
+    this.lastTick = Date.now();
     this.watchdog = setInterval(() => {
+      const now = Date.now();
+      if (now - this.lastTick > 5000) {
+        this.fallbackEligible = false;
+        this.resumeUntil = this.background ? 0 : now + 5000;
+      }
+      this.lastTick = now;
       if (
         current() &&
+        (!this.background || this.resumeUntil > 0) &&
         Date.now() >= this.resumeUntil &&
         Date.now() -
           (this.background ? lastAudio : Math.min(lastAudio, lastWaterfall)) >

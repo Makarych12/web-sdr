@@ -79,9 +79,9 @@ export class KiwiProtocol {
   resume() {
     if (this.closed) return;
     // Let queued network events run after Android unfreezes the page.
+    this.lastTick = Date.now();
     this.resumeUntil = Date.now() + 5000;
     clearTimeout(this.timeout);
-    this.sockets.forEach((w) => this.send(w, "SET keepalive"));
   }
   send(ws, s) {
     if (ws?.readyState === 1) ws.send(s);
@@ -107,9 +107,16 @@ export class KiwiProtocol {
           );
       });
     }
+    this.lastTick = Date.now();
     this.timer = setInterval(() => {
+      const now = Date.now();
+      // A delayed task is evidence of suspension, not a failed WSS handshake.
+      if (now - this.lastTick > 5000)
+        this.resumeUntil = this.background ? 0 : now + 5000;
+      this.lastTick = now;
       this.sockets.forEach((w) => this.send(w, "SET keepalive"));
       if (
+        (!this.background || this.resumeUntil > 0) &&
         Date.now() >= this.resumeUntil &&
         Date.now() -
           (this.background
@@ -117,10 +124,13 @@ export class KiwiProtocol {
             : Math.min(this.lastAudio, this.lastWaterfall)) >
           20000
       )
-        this.fail("Поток звука или waterfall прерван");
+        this.fail("Поток звука или waterfall прерван", "stream_timeout");
     }, 1000);
     this.timeout = setTimeout(
-      () => this.fail("Нет данных от приёмника за 20 секунд"),
+      () => {
+        if (this.background || Date.now() - this.lastTick > 5000 || Date.now() < this.resumeUntil) return;
+        this.fail("Нет данных от приёмника за 20 секунд", "stream_timeout");
+      },
       20000,
     );
   }
