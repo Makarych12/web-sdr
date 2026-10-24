@@ -14,3 +14,8 @@
 .waterfall-mode-panel input { display:block; width:100%; margin-top:8px; }
 .waterfall-mode-panel p,.waterfall-mode-panel > small { font-size:11px; line-height:1.5; color:#adc0d1; }
 @media(max-width:600px) { .waterfall-mode { left:8px; } .waterfall-mode-launch { min-width:144px; } }
+
+.scope-levels legend { color:#8ec5d9; font:10px ui-monospace,monospace; letter-spacing:.08em; }
+.waterfall-mode-panel .scope-auto { display:flex; align-items:center; gap:8px; }
+.waterfall-mode-panel .scope-auto input { width:16px; height:16px; margin:0; accent-color:#56c5dd; }
+.scope-levels > small { color:#8fa8bb; font-size:10px; line-height:1.5; }

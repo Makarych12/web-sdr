@@ -1613,12 +1613,6 @@ function App() {
               tabIndex={0}
               aria-label="Спектр: касание и перетаскивание для настройки"
             />
-            <div className="power-axis" aria-hidden="true">
-              <span>−25</span>
-              <span>−55</span>
-              <span>−85</span>
-              <span>−115 dBm</span>
-            </div>
             <div className="scope-vfo" aria-live="off">
               <b>VFO A</b> {frequencyLabel(frequency, view.span)}{" "}
               <small>

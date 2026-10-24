@@ -1,9 +1,9 @@
 export type WaterfallMode = 'CLASSIC' | 'MALAHIT DSP' | 'SDR PRO';
-export type WaterfallDisplay = { mode:WaterfallMode; contrast:number; brightness:number; rangeDb:number; proContrast?:number; proSensitivity?:number };
+export type WaterfallDisplay = { mode:WaterfallMode; contrast:number; brightness:number; rangeDb:number; proContrast?:number; proSensitivity?:number; refLevel?:number; levelRangeDb?:number; autoLevel?:boolean };
 export const DEFAULT_WATERFALL_DISPLAY:WaterfallDisplay={mode:'CLASSIC',contrast:1.2,brightness:-6,rangeDb:45};
 export function validWaterfallDisplay(value:unknown):value is WaterfallDisplay {
  const v=value as WaterfallDisplay;
- return !!v && (v.mode==='CLASSIC'||v.mode==='MALAHIT DSP'||v.mode==='SDR PRO') && Number.isFinite(v.contrast)&&v.contrast>=.5&&v.contrast<=2.5 && Number.isFinite(v.brightness)&&v.brightness>=-30&&v.brightness<=30 && Number.isFinite(v.rangeDb)&&v.rangeDb>=25&&v.rangeDb<=100 && (v.proContrast===undefined||(Number.isFinite(v.proContrast)&&v.proContrast>=.5&&v.proContrast<=2.5)) && (v.proSensitivity===undefined||(Number.isFinite(v.proSensitivity)&&v.proSensitivity>=-12&&v.proSensitivity<=18));
+ return !!v && (v.mode==='CLASSIC'||v.mode==='MALAHIT DSP'||v.mode==='SDR PRO') && Number.isFinite(v.contrast)&&v.contrast>=.5&&v.contrast<=2.5 && Number.isFinite(v.brightness)&&v.brightness>=-30&&v.brightness<=30 && Number.isFinite(v.rangeDb)&&v.rangeDb>=25&&v.rangeDb<=100 && (v.proContrast===undefined||(Number.isFinite(v.proContrast)&&v.proContrast>=.5&&v.proContrast<=2.5)) && (v.proSensitivity===undefined||(Number.isFinite(v.proSensitivity)&&v.proSensitivity>=-12&&v.proSensitivity<=18)) && (v.refLevel===undefined||(Number.isFinite(v.refLevel)&&v.refLevel>=-140&&v.refLevel<=10)) && (v.levelRangeDb===undefined||(Number.isFinite(v.levelRangeDb)&&v.levelRangeDb>=30&&v.levelRangeDb<=100)) && (v.autoLevel===undefined||typeof v.autoLevel==='boolean');
 }
 /** Sliding low percentile estimates local background, never relocates a bin. */
 function localFloor(bins:Uint8Array) {

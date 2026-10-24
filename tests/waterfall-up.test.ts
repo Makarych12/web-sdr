@@ -14,7 +14,7 @@ test("new rows enter at the bottom, history moves up, bursts drain on RAF and id
     context = {
       fillStyle: "", globalAlpha: 1, globalCompositeOperation: "", imageSmoothingEnabled: false,
       fillRect: () => { this.buffer = new Uint8ClampedArray(this.width * this.height * 4); },
-      clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {},
+      clearRect() {}, fillText() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {},
       createLinearGradient: () => ({ addColorStop() {} }),
       createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
       putImageData: (image: ImageData, x: number, y: number) => {

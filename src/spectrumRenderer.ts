@@ -1,3 +1,4 @@
+import { displayLevels, resampleFft, spectrumCanvasSize } from "./spectrumLevels";
 import { sdrProLevels, sdrProRow, type SdrProLevels } from "./sdrPro";
 import { DEFAULT_WATERFALL_DISPLAY, validWaterfallDisplay, malahitRow, type WaterfallDisplay } from "./waterfallMode";
 import { THEME_STOPS, validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
@@ -30,7 +31,7 @@ export function waterfallColor(
   );
   const power = Math.max(
     0,
-    Math.min(1, (clampByte(bin) - 255 + db - blackDb) / rangeDb),
+    Math.min(1, (Math.max(0, Math.min(255, Number.isFinite(bin) ? bin : 0)) - 255 + db - blackDb) / rangeDb),
   );
   const t = power ** 0.85;
   const index = Math.max(
@@ -133,7 +134,14 @@ export class SpectrumRenderer {
   private last?: { bins: Uint8Array; view: SpectrumView };
   private view: SpectrumView;
   private frame = 0;
-  private palette = new Uint8ClampedArray(256 * 4);
+  private palette = new Uint8ClampedArray(1024 * 4);
+  private paletteKey = "";
+  private pixelRatio = 1;
+  private observer?: ResizeObserver;
+  private noiseDb = -105;
+  private scopeLevels() {
+    return displayLevels(this.noiseDb, this.display.refLevel, this.display.levelRangeDb, this.display.autoLevel);
+  }
   private calibration = -13;
   private theme: WaterfallTheme = 'CLASSIC';
   private display:WaterfallDisplay={...DEFAULT_WATERFALL_DISPLAY};
@@ -147,7 +155,8 @@ export class SpectrumRenderer {
   }
   private paintHistoryRow(ctx:CanvasRenderingContext2D,row:HistoryRow,previous:HistoryRow|undefined,y:number) {
     if(this.display.mode==='CLASSIC') {
-      this.paintColorRow(ctx,row.bins,row.calibration,row.blackDb,row.rangeDb,y);
+      const levels=displayLevels(row.blackDb+10,this.display.refLevel,this.display.levelRangeDb,this.display.autoLevel);
+      this.paintColorRow(ctx,row.bins,row.calibration,levels.blackDb,levels.rangeDb,y);
       return;
     }
     if(this.display.mode==='SDR PRO'){
@@ -174,7 +183,7 @@ export class SpectrumRenderer {
     const now=performance.now();
     if(this.proLastRowTime)this.proPeriod+=.2*(Math.max(32,Math.min(500,now-this.proLastRowTime))-this.proPeriod);
     this.proLastRowTime=now;
-    if(this.display.mode!=='SDR PRO')return;
+    if(this.display.mode!=='SDR PRO' && !(this.display.mode==='CLASSIC' && this.theme==='OCEAN BLUE'))return;
     this.stopProScroll();
     const delay=Math.max(16,Math.min(80,this.proPeriod/2));
     this.proStepUntil=now+delay;
@@ -182,7 +191,10 @@ export class SpectrumRenderer {
   }
   private repaintFrame=0;
   private repainting=false;
+  private repaintOnVisible=false;
   private repaintHistory() {
+    if(!this.visible){this.repaintOnVisible=true;return;}
+    this.repaintOnVisible=false;
     cancelAnimationFrame(this.repaintFrame);
     const ctx=this.history.getContext('2d')!,rows=this.colorRows.slice();
     let i=0,previous:HistoryRow|undefined;
@@ -199,7 +211,8 @@ export class SpectrumRenderer {
         if(index>=0){
           const y=this.history.height-this.colorRows.length+index;
           this.paintHistoryRow(ctx,row,previous,y);
-          if(this.colorRows[index+1]===row)ctx.putImageData(this.strip,0,y+1);
+          for(let next=index+1;this.colorRows[next]===row;next++)
+            ctx.putImageData(this.strip,0,y+next-index);
         }
         previous=row;
         do { i++; } while(rows[i]===row);
@@ -218,10 +231,14 @@ export class SpectrumRenderer {
     this.schedule();
   }
   private paintColorRow(ctx:CanvasRenderingContext2D,bins:Uint8Array,calibration:number,blackDb:number,rangeDb:number,y:number) {
-    for(let i=0;i<256;i++)this.palette.set(waterfallColor(i,calibration,blackDb,rangeDb,this.theme),i*4);
-    const width=this.history.width;
+    const key=`${calibration}/${blackDb.toFixed(2)}/${rangeDb}/${this.theme}`;
+    if(key!==this.paletteKey) {
+      this.paletteKey=key;
+      for(let i=0;i<1024;i++)this.palette.set(waterfallColor(i*255/1023,calibration,blackDb,rangeDb,this.theme),i*4);
+    }
+    const width=this.history.width, samples=resampleFft(bins,width);
     for(let x=0;x<width;x++){
-      const color=clampByte(bins[Math.min(1023,Math.floor(x*1024/width))])*4;
+      const color=Math.max(0,Math.min(1023,Math.round(samples[x]*1023/255)))*4;
       const pixel=x*4;
       this.strip.data[pixel]=this.palette[color];this.strip.data[pixel+1]=this.palette[color+1];
       this.strip.data[pixel+2]=this.palette[color+2];this.strip.data[pixel+3]=255;
@@ -238,11 +255,20 @@ export class SpectrumRenderer {
   setVisible(visible: boolean) {
     if (visible === this.visible) return;
     this.visible = visible;
-    if(!visible)this.stopProScroll();
+    if(!visible) {
+      this.stopProScroll();
+      this.repaintOnVisible ||= this.repainting;
+      cancelAnimationFrame(this.repaintFrame);
+      this.repaintFrame=0;
+      this.repainting=false;
+    }
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     this.pending = [];
-    if (visible) this.schedule();
+    if (visible) {
+      if(this.repaintOnVisible)this.repaintHistory();
+      this.schedule();
+    }
   }
   frames = 0;
   constructor(
@@ -253,6 +279,12 @@ export class SpectrumRenderer {
     this.view = view;
     this.waterfall.getContext("2d", { alpha: false });
     this.history.getContext("2d", { alpha: false });
+    if (typeof ResizeObserver !== "undefined") {
+      this.fitCanvases();
+      this.observer = new ResizeObserver(() => { if(this.fitCanvases()) this.schedule(); });
+      this.observer.observe(spectrum);
+      this.observer.observe(waterfall);
+    }
     this.resize();
     this.setCalibration(-13);
     this.clear();
@@ -262,8 +294,7 @@ export class SpectrumRenderer {
     const next = Math.max(-100, Math.min(100, value));
     const changed = next !== this.calibration;
     this.calibration = next;
-    for (let i = 0; i < 256; i++)
-      this.palette.set(waterfallColor(i, this.calibration, -115, 90, this.theme), i * 4);
+    this.paletteKey = "";
     if (changed) this.clear(false);
   }
   setView(view: SpectrumView) {
@@ -277,6 +308,21 @@ export class SpectrumRenderer {
       this.traceBins = null;
       this.schedule();
     }
+  }
+  private fitCanvases() {
+    const bounds=this.waterfall.getBoundingClientRect();
+    if(bounds.width<1 || bounds.height<1)return false;
+    const size=spectrumCanvasSize(bounds.width,bounds.height,window.devicePixelRatio||1);
+    this.pixelRatio=size.ratio;
+    this.rowHeight=Math.max(2,Math.round(2*size.ratio));
+    let changed=false;
+    for(const canvas of [this.spectrum,this.waterfall]) {
+      const height=canvas===this.waterfall?size.height:Math.max(1,Math.round(canvas.getBoundingClientRect().height*size.ratio));
+      if(canvas.width!==size.width || canvas.height!==height){
+        canvas.width=size.width;canvas.height=height;changed=true;
+      }
+    }
+    return changed;
   }
   private resize() {
     if (this.waterfall.width < 1 || this.waterfall.height < 1) {
@@ -297,7 +343,14 @@ export class SpectrumRenderer {
     this.strip = this.history
       .getContext("2d")!
       .createImageData(this.history.width, 1);
-    this.clear(false);
+    const ctx=this.history.getContext("2d")!;
+    ctx.fillStyle="#020818";
+    ctx.fillRect(0,0,this.history.width,this.history.height);
+    this.colorRows=this.colorRows.slice(-this.history.height);
+    this.rowViews=this.colorRows.map(row=>row.view);
+    this.rowCount=this.colorRows.length;
+    this.waterfall.dataset.rows=String(this.rowCount);
+    if(this.colorRows.length)this.repaintHistory();
     return true;
   }
   append(bins: Uint8Array, view: SpectrumView) {
@@ -347,7 +400,7 @@ export class SpectrumRenderer {
     if (resetSequence) this.sequence = undefined;
     for (const canvas of [this.history, this.waterfall]) {
       const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#03060b";
+      ctx.fillStyle = "#020818";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     this.waterfall.dataset.rows = "0";
@@ -395,8 +448,9 @@ export class SpectrumRenderer {
       for (let n = 0; n < queue.length; n++) {
         const row = queue[n];
         const levels = this.levels.update(row.bins, this.calibration);
+        this.noiseDb=levels.noiseDb;
         this.waterfall.dataset.noiseDb = levels.noiseDb.toFixed(2);
-        this.waterfall.dataset.blackDb = levels.blackDb.toFixed(2);
+        this.waterfall.dataset.blackDb = this.scopeLevels().blackDb.toFixed(2);
         const y = height - (queue.length - n) * this.rowHeight;
         const previous=this.colorRows.at(-1);
         const preceding=previous&&sameView(previous.view,row.view)&&previous.calibration===this.calibration?previous.pro:undefined;
@@ -408,7 +462,7 @@ export class SpectrumRenderer {
           this.colorRows.push(stored);
         }
         if(this.colorRows.length>height)this.colorRows.splice(0,this.colorRows.length-height);
-        this.traceBins = this.envelope.update(row.bins, performance.now());
+        this.traceBins = this.theme==='OCEAN BLUE' ? Float32Array.from(row.bins) : this.envelope.update(row.bins, performance.now());
         this.last = row;
       }
       this.rowCount = Math.min(height, this.rowCount + shift);
@@ -418,10 +472,10 @@ export class SpectrumRenderer {
     const wc = this.waterfall.getContext("2d")!;
     wc.globalAlpha = 1;
     wc.globalCompositeOperation = "source-over";
-    wc.fillStyle = "#03060b";
+    wc.fillStyle = "#020818";
     wc.fillRect(0, 0, this.waterfall.width, this.waterfall.height);
-    wc.imageSmoothingEnabled = false;
-    const scrollOffset=this.display.mode==='SDR PRO'&&performance.now()<this.proStepUntil?1:0;
+    wc.imageSmoothingEnabled = true;
+    const scrollOffset=performance.now()<this.proStepUntil?Math.max(1,Math.floor(this.rowHeight/2)):0;
     // Most rows share a range. Project contiguous runs with one draw call,
     // keeping pan history without hundreds of canvas calls on every packet.
     for (let y = 0; y < this.rowViews.length;) {
@@ -450,48 +504,56 @@ export class SpectrumRenderer {
     sc.clearRect(0, 0, this.spectrum.width, this.spectrum.height);
     const sw = this.spectrum.width,
       sh = this.spectrum.height;
-    sc.fillStyle = "#03070c";
+    sc.fillStyle = "#040d1d";
     sc.fillRect(0, 0, sw, sh);
     // A frequency grid, not signal data. Quarter ticks match the HTML frequency scale.
-    sc.lineWidth = 1;
+    sc.lineWidth = Math.max(1,this.pixelRatio*.6);
     for (let i = 1; i < 32; i++) {
-      sc.strokeStyle = i % 8 === 0 ? "#21313d" : "#101e29";
+      sc.strokeStyle = i % 8 === 0 ? "#1b344e" : "#0e1e33";
       sc.beginPath();
       sc.moveTo((sw * i) / 32, 0);
       sc.lineTo((sw * i) / 32, sh);
       sc.stroke();
     }
-    sc.strokeStyle = "#15242e";
-    for (let i = 1; i < 6; i++) {
-      sc.beginPath();
-      sc.moveTo(0, (sh * i) / 6);
-      sc.lineTo(sw, (sh * i) / 6);
-      sc.stroke();
+    const levels=this.scopeLevels();
+    this.spectrum.dataset.refDb=levels.topDb.toFixed(2);
+    this.spectrum.dataset.rangeDb=String(levels.rangeDb);
+    this.waterfall.dataset.blackDb=levels.blackDb.toFixed(2);
+    this.waterfall.dataset.rangeDb=String(levels.rangeDb);
+    this.waterfall.dataset.refDb=levels.topDb.toFixed(2);
+    sc.strokeStyle = "#1b2e46";
+    for (let i = 1; i < 4; i++) {
+      sc.beginPath();sc.moveTo(0,sh*i/4);sc.lineTo(sw,sh*i/4);sc.stroke();
+    }
+    // Tick labels use exactly the dB transform of both real FFT displays.
+    const labelSize=9*this.pixelRatio;
+    sc.font=`${labelSize}px ui-monospace, monospace`;
+    sc.fillStyle="#8aa6be";
+    for(let i=0;i<=4;i++) {
+      const y=Math.max(labelSize+3,Math.min(sh-4,sh*i/4));
+      sc.fillText(`${(levels.topDb-levels.rangeDb*i/4).toFixed(0)}${i===4?' dBm':''}`,6*this.pixelRatio,y);
     }
     if (!this.last) return;
     const { view } = this.last;
     const bins = this.traceBins ?? this.last.bins;
     const p = projectView(view, this.view, this.spectrum.width);
+    // Use the same pixel footprints and interpolation as the waterfall row.
+    const samples=resampleFft(bins,this.spectrum.width);
     const trace = new Path2D();
-    for (let i = 0; i < bins.length; i++) {
-      const t = Math.max(
-        0,
-        Math.min(1, (bins[i] - 255 + this.calibration + 115) / 90),
-      );
-      const x = p.x + (i / bins.length) * p.width,
-        y = this.spectrum.height * (1 - t);
-      if (!i) trace.moveTo(x, y);
-      else trace.lineTo(x, y);
+    for (let x = 0; x < samples.length; x++) {
+      const t=Math.max(0,Math.min(1,(samples[x]-255+this.calibration-levels.blackDb)/levels.rangeDb));
+      const px=p.x+x/this.spectrum.width*p.width, y=sh*(1-t);
+      if (!x) trace.moveTo(px,y); else trace.lineTo(px,y);
     }
     const area = new Path2D(trace);
-    area.lineTo(p.x + ((bins.length - 1) / bins.length) * p.width, sh);
+    area.lineTo(p.x + ((samples.length - 1) / samples.length) * p.width, sh);
     area.lineTo(p.x, sh);
     area.closePath();
     const fill = sc.createLinearGradient(0, 0, 0, sh);
-    fill.addColorStop(0, "#ffbd5966");
-    fill.addColorStop(0.35, "#60efa949");
-    fill.addColorStop(0.65, "#1cb5e538");
-    fill.addColorStop(1, "#50369913");
+    fill.addColorStop(0, "#12b9d55c");
+    fill.addColorStop(0.35, "#1370ad45");
+    fill.addColorStop(0.65, "#133c7630");
+    fill.addColorStop(1, "#0b1b3910");
     sc.fillStyle = fill;
     sc.fill(area);
     const line = sc.createLinearGradient(0, 0, 0, sh);
@@ -500,11 +562,12 @@ export class SpectrumRenderer {
     line.addColorStop(0.6, "#47f5ed");
     line.addColorStop(1, "#5387ed");
     sc.strokeStyle = line;
-    sc.lineWidth = 1.8;
+    sc.lineWidth = Math.max(1,this.pixelRatio);
     sc.stroke(trace);
     sc.shadowBlur = 0;
   }
   dispose() {
+    this.observer?.disconnect();
     this.stopProScroll();
     cancelAnimationFrame(this.repaintFrame);
     this.repaintFrame=0;this.repainting=false;

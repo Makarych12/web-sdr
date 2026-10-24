@@ -137,3 +137,37 @@ test("waterfall contrast ignores sparse carriers, tracks slowly and resets immed
   assert.equal(levels.update(shifted, -13).noiseDb, 200 - 255 - 13);
   assert.ok(waterfallColor(200, NaN, NaN, 0).every(Number.isFinite));
 });
+
+import { resampleFft, displayLevels, spectrumCanvasSize } from "../src/spectrumLevels.ts";
+import { validWaterfallDisplay, DEFAULT_WATERFALL_DISPLAY } from "../src/waterfallMode.ts";
+test("FFT interpolation preserves measured bin positions and never overshoots", () => {
+  const bins = new Uint8Array([20, 100, 40, 20]);
+  const samples = resampleFft(bins, 8);
+  assert.deepEqual([...samples], [20, 60, 100, 70, 40, 30, 20, 20]);
+  assert.equal(samples.indexOf(Math.max(...samples)), 2);
+  assert.equal(bins[1], 100);
+  const narrow = new Uint8Array(1024).fill(20); narrow[501] = 220;
+  const reduced = resampleFft(narrow, 320);
+  assert.equal(Math.max(...reduced), 220, "a subpixel carrier survives Android downsampling");
+  assert.equal(reduced.indexOf(220), Math.floor(501 * 320 / 1024));
+});
+test("reference and range share calibrated dB coordinates with optional floor tracking", () => {
+  assert.deepEqual(displayLevels(-105, -40, 60, true), { topDb: -53, blackDb: -113, rangeDb: 60 });
+  assert.deepEqual(displayLevels(-80, -40, 60, false), { topDb: -40, blackDb: -100, rangeDb: 60 });
+  assert.deepEqual(displayLevels(-105, -40, 40, false), { topDb: -40, blackDb: -80, rangeDb: 40 });
+  assert.ok(validWaterfallDisplay(DEFAULT_WATERFALL_DISPLAY), "legacy preferences remain valid");
+  for (const invalid of [{ refLevel: NaN }, { levelRangeDb: 0 }, { autoLevel: "on" }])
+    assert.equal(validWaterfallDisplay({ ...DEFAULT_WATERFALL_DISPLAY, ...invalid }), false);
+});
+test("canvas resolution is bounded on desktop and high-DPR Android", () => {
+  assert.deepEqual(spectrumCanvasSize(390, 300, 4), { width: 780, height: 600, ratio: 2 });
+  assert.equal(spectrumCanvasSize(1800, 400, 2).width, 2048);
+});
+test("Ocean palette exposes weak cyan through strong red without white saturation", () => {
+  const color = (t: number) => waterfallColor(255 * t ** (1 / .85), 0, -255, 255, 'OCEAN BLUE');
+  assert.deepEqual(color(0), [2,8,24,255]);
+  const weak=color(.43), medium=color(.7), strong=color(1);
+  assert.ok(weak[1]>150 && weak[2]>180 && weak[0]<40);
+  assert.ok(medium[0]>180 && medium[1]>200 && medium[2]<80);
+  assert.ok(strong[0]>200 && strong[1]<50 && strong[2]<50);
+});

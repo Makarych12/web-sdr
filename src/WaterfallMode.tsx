@@ -8,7 +8,14 @@ export function WaterfallMode({settings,onChange}:{settings:WaterfallDisplay;onC
   <dialog ref={dialog} className="waterfall-mode-panel" aria-label="WATERFALL MODE" onKeyDown={e=>e.stopPropagation()}>
    <header><strong>WATERFALL MODE</strong><button type="button" aria-label="Закрыть WATERFALL MODE" onClick={()=>dialog.current?.close()}>×</button></header>
    <div className="waterfall-mode-options">{(['CLASSIC','MALAHIT DSP','SDR PRO'] as Mode[]).map(mode=><button type="button" key={mode} aria-pressed={settings.mode===mode} onClick={()=>onChange({...settings,mode})}>{mode}</button>)}</div>
-   <p>{pro?'Адаптивная экспозиция всей FFT-строки и мягкое сжатие сильных сигналов. Без сглаживания по частоте.':enhanced?'Локальный фон + подавление некоррелированного зерна по соседним FFT-строкам. Частоты следов сохраняются.':'Исходная отрисовка. COLOR выбирает палитру.'}</p>
+   <p>{pro?'Адаптивная экспозиция всей FFT-строки и мягкое сжатие сильных сигналов. Без сглаживания по частоте.':enhanced?'Локальный фон + подавление некоррелированного зерна по соседним FFT-строкам. Частоты следов сохраняются.':'Калиброванный FFT: общие уровни спектра и водопада, интерполяция по частоте. COLOR выбирает палитру.'}</p>
+   <fieldset className="scope-levels">
+    <legend>SPECTRUM / WATERFALL · dB</legend>
+    <label className="scope-auto"><input aria-label="Автоуровень по шумовому полу" type="checkbox" checked={settings.autoLevel??true} onChange={e=>onChange({...settings,autoLevel:e.target.checked})}/> AUTO · шумовой пол</label>
+    <label>REF LEVEL · {(settings.autoLevel??true)?'AUTO':`${settings.refLevel??-40} dBm`}<input aria-label="REF LEVEL" type="range" min="-140" max="10" step="1" disabled={settings.autoLevel??true} value={settings.refLevel??-40} onChange={e=>onChange({...settings,refLevel:Number(e.target.value)})}/></label>
+    <label>RANGE · {settings.levelRangeDb??60} dB<input aria-label="RANGE" type="range" min="30" max="100" step="5" value={settings.levelRangeDb??60} onChange={e=>onChange({...settings,levelRangeDb:Number(e.target.value)})}/></label>
+    <small>Шкала dBm использует калибровку Kiwi. AUTO плавно отслеживает фон; REF LEVEL задаёт верхний уровень вручную.</small>
+   </fieldset>
    {pro?<fieldset>
     <label>Контраст SDR PRO · {(settings.proContrast??1.1).toFixed(1)}<input aria-label="Контраст SDR PRO" type="range" min="0.5" max="2.5" step="0.1" value={settings.proContrast??1.1} onChange={e=>onChange({...settings,proContrast:Number(e.target.value)})}/></label>
     <label>Чувствительность SDR PRO · {settings.proSensitivity??0} dB<input aria-label="Чувствительность SDR PRO" type="range" min="-12" max="18" step="1" value={settings.proSensitivity??0} onChange={e=>onChange({...settings,proSensitivity:Number(e.target.value)})}/></label>
