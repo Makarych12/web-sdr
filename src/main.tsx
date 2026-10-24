@@ -645,7 +645,7 @@ function App() {
   function tune(
     f = frequency,
     m = mode,
-    z = zoom,
+    z = settings.current.zoom,
     width = widths[m],
     center?: number,
     customCuts?: Cuts,
@@ -679,6 +679,7 @@ function App() {
       f <= currentView.start + currentView.span * 0.9
         ? settings.current.viewCenter
         : f;
+    z = Math.max(0, Math.min(maxZoom, Math.round(z)));
     const nextView = viewFor(center, z, viewRef.current.bandwidth ?? 30000);
     const viewChanged = !matchesRequest(currentView, nextView);
     if (viewChanged) awaitingTune.current = wanted;
@@ -1330,7 +1331,7 @@ function App() {
                 selection={frequencyStep}
                 onSelectStep={selectFrequencyStep}
                 range={dxRange}
-                onBand={(f,m) => { tune(f,m,Math.min(6,maxZoom),widths[m],f); manager.current?.flushTune(); }}
+                onBand={(f,m) => { tune(f,m,settings.current.zoom,widths[m],f); manager.current?.flushTune(); }}
                 onTune={(hz) => {
                   tune(hz / 1000);
                   manager.current?.flushTune();
@@ -1804,7 +1805,7 @@ function App() {
           </FineTune>
         </div>
         <BandSelector
-          tune={(f, m) => tune(f, m, Math.min(6, maxZoom), widths[m], f)}
+          tune={(f, m) => tune(f, m, settings.current.zoom, widths[m], f)}
         />
         <section className="bottom quick-only">
           <QuickTune

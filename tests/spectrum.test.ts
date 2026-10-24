@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  resampleWaterfall,
   waterfallColor,
   clampByte,
   limitWaterfallSpikes,
@@ -170,4 +171,16 @@ test("Ocean palette exposes weak cyan through strong red without white saturatio
   assert.ok(weak[1]>150 && weak[2]>180 && weak[0]<40);
   assert.ok(medium[0]>180 && medium[1]>200 && medium[2]<80);
   assert.ok(strong[0]>200 && strong[1]<50 && strong[2]<50);
+});
+
+test("waterfall interpolation stays between measured bins and preserves the frequency grid", () => {
+  const bins = new Uint8Array([20, 20, 220, 20, 20, 200, 20, 20]);
+  const samples = resampleWaterfall(bins, 32);
+  for (let x = 0; x < samples.length; x++) {
+    const i = Math.floor(x / 4), next = Math.min(i + 1, bins.length - 1);
+    assert.ok(samples[x] >= Math.min(bins[i], bins[next]));
+    assert.ok(samples[x] <= Math.max(bins[i], bins[next]));
+    if (x % 4 === 0) assert.equal(samples[x], bins[i]);
+  }
+  assert.deepEqual(Array.from(resampleWaterfall(bins, 4)), [20, 220, 200, 20]);
 });

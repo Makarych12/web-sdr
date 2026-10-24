@@ -112,38 +112,9 @@ export class SpectrumEnvelope {
     return this.values;
   }
 }
-function resampleWaterfall(bins: ArrayLike<number>, width: number): Float32Array {
-  const result = new Float32Array(width);
-  const n = bins.length;
-  const scale = n / width;
-  if (scale >= 1) {
-    for (let x = 0; x < width; x++) {
-      const start = Math.floor(x * scale);
-      const end = Math.min(n, Math.ceil((x + 1) * scale));
-      let maxVal = bins[start];
-      for (let i = start + 1; i < end; i++) {
-        if (bins[i] > maxVal) maxVal = bins[i];
-      }
-      result[x] = maxVal;
-    }
-  } else {
-    for (let x = 0; x < width; x++) {
-      const pos = x * scale;
-      const i1 = Math.floor(pos);
-      const t = pos - i1;
-      const i0 = i1 > 0 ? i1 - 1 : 0;
-      const i2 = i1 + 1 < n ? i1 + 1 : n - 1;
-      const i3 = i1 + 2 < n ? i1 + 2 : n - 1;
-      const b0 = bins[i0], b1 = bins[i1], b2 = bins[i2], b3 = bins[i3];
-      const c0 = b1;
-      const c1 = 0.5 * (b2 - b0);
-      const c2 = b0 - 2.5 * b1 + 2 * b2 - 0.5 * b3;
-      const c3 = 0.5 * (b3 - b0) + 1.5 * (b1 - b2);
-      const val = c0 + t * (c1 + t * (c2 + t * c3));
-      result[x] = Math.max(0, Math.min(255, val));
-    }
-  }
-  return result;
+/** Display real bins on the frequency grid, without spline overshoot. */
+export function resampleWaterfall(bins: ArrayLike<number>, width: number): Float32Array {
+  return resampleFft(bins, width);
 }
 function validView(view: SpectrumView) {
   return (
@@ -329,6 +300,21 @@ export class SpectrumRenderer {
   setView(view: SpectrumView) {
     if (!validView(view)) return;
     if (!sameView(view, this.view)) {
+      // A wider overview cannot supply the detail of a newly requested zoom.
+      // Drop only waterfall history on span changes instead of enlarging its
+      // already rasterized pixels. Same-span pans keep frequency-aligned history.
+      if (Math.abs(view.span - this.view.span) > 0.00001) {
+        cancelAnimationFrame(this.repaintFrame);
+        this.repaintFrame = 0;
+        this.repainting = false;
+        this.colorRows = [];
+        this.rowViews = [];
+        this.rowCount = 0;
+        this.waterfall.dataset.rows = "0";
+        const ctx = this.history.getContext("2d")!;
+        ctx.fillStyle = "#020612";
+        ctx.fillRect(0, 0, this.history.width, this.history.height);
+      }
       this.view = { ...view };
       this.pending = [];
       // Restore 7f3a7f2 normalization for the newly received range, while keeping history.

@@ -60,7 +60,16 @@ test("new rows enter at the bottom, history moves up, bursts drain on RAF and id
     assert.equal(frames.size, 1, "burst schedules its next row");
     flush(); assert.equal(waterfall.dataset.rows, "8");
     assert.equal(frames.size, 0, "no idle animation consumes CPU");
-    renderer.append(new Uint8Array(1024).fill(200), { ...view, sequence: 5 });
+    const zoomed = { start: 7025, span: 50 };
+    renderer.setView(zoomed); flush();
+    assert.equal(waterfall.dataset.rows, "0", "zoom discards coarse raster history");
+    assert.equal(renderer.append(new Uint8Array(1024).fill(200), { ...view, sequence: 5 }), false,
+      "old span cannot paint under the new frequency scale");
+    assert.equal(renderer.append(new Uint8Array(1024).fill(200), { ...zoomed, sequence: 6 }), true);
+    flush();
+    assert.equal(waterfall.dataset.rows, "2");
+    renderer.setView({ start: 7026, span: 50 }); flush();
+    assert.equal(waterfall.dataset.rows, "2", "same-span pan keeps real history");
     renderer.dispose(); assert.equal(frames.size, 0, "dispose cancels rendering");
   } finally {
     for (const key of ["document", "requestAnimationFrame", "cancelAnimationFrame", "Path2D"]) {
