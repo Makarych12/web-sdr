@@ -52,14 +52,14 @@
   display: none;
 }
 
-/* Modal styles for iOS / Desktop instructions */
+/* Modal styles for browser instructions (Ocean Blue theme) */
 .pwa-dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 10, 22, 0.78);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  z-index: 1000;
+  background: rgba(2, 8, 18, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 99999;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -71,10 +71,10 @@
   background: linear-gradient(180deg, #071f3d 0%, #041429 100%);
   border: 1px solid #1c5594;
   border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(0, 229, 255, 0.15);
-  max-width: 440px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 30px rgba(0, 229, 255, 0.2);
+  max-width: 460px;
   width: 100%;
-  padding: 24px;
+  padding: 22px 24px;
   color: #dbeafe;
   position: relative;
   animation: pwaSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -82,17 +82,32 @@
 
 .pwa-dialog-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid #143860;
+  gap: 12px;
+}
+
+.pwa-dialog-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  border-radius: 10px;
+  margin-bottom: 6px;
 }
 
 .pwa-dialog-title {
   font-size: 17px;
   font-weight: 600;
-  color: #00e5ff;
+  color: #ffffff;
   display: flex;
   align-items: center;
   gap: 8px;
