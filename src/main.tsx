@@ -1,3 +1,4 @@
+import { About } from './About';
 import { radioDiagnostics as radioLog, observeRadioSocket } from "./radioDiagnostics";
 import { RadioDiagnosticsPanel } from "./RadioDiagnosticsPanel";
 import { PropagationLauncher } from "./PropagationLauncher";
@@ -43,7 +44,7 @@ import { FrequencyNudges } from "./FrequencyNudges";
 import { VfoDial } from "./VfoDial";
 import { FineTune } from "./FineTune";
 import { StepControl } from "./StepControl";
-import { Antenna, Landing, BandSelector, QslCard } from "./Landing";
+import { Antenna, Landing, BandSelector } from "./Landing";
 import { gateway, gatewayConfigured } from "./gateway";
 
 import { QuickTune } from "./QuickTune";
@@ -169,6 +170,16 @@ function App() {
     targetMs: number;
     underflowFrames: number;
   } | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(location.hash === "#about");
+  useEffect(() => {
+    const openAboutAnchor = () => { if (location.hash === "#about") setAboutOpen(true); };
+    window.addEventListener("hashchange", openAboutAnchor);
+    return () => window.removeEventListener("hashchange", openAboutAnchor);
+  }, []);
+  function closeAbout() {
+    setAboutOpen(false);
+    if (location.hash === "#about") history.replaceState(null, "", location.pathname + location.search);
+  }
   const [activeSection, setActiveSection] = useState("home");
   useEffect(() => {
     const update = () => {
@@ -1164,7 +1175,9 @@ function App() {
           </a>
           <a
             href="#about"
-            aria-current={activeSection === "about" ? "location" : undefined}
+            aria-haspopup="dialog"
+            onClick={event => { event.preventDefault(); setAboutOpen(true); }}
+            aria-current={aboutOpen ? "location" : undefined}
           >
             О проекте
           </a>
@@ -1875,26 +1888,7 @@ function App() {
             </div>
           </section>
         </section>
-        <section id="about" className="about-section panel">
-          <QslCard full />
-          <div>
-            <span className="eyebrow">О ПРОЕКТЕ</span>
-            <h2>UR4MTN WEB SDR</h2>
-            <p>
-              UR4MTN — радиолюбительский WebSDR-проект Максима Попкова из города
-              Попасная.
-            </p>
-            <p>
-              Проект объединяет публичные KiwiSDR, реальный звук, spectrum и
-              waterfall. Слушайте эфир с телефона, планшета и компьютера.
-            </p>
-            <p>
-              Установите приложение через меню браузера, чтобы открыть эфир с
-              главного экрана. Для приёма нужен интернет; звук включается
-              кнопкой «Слушать эфир».
-            </p>
-          </div>
-        </section>
+        {aboutOpen && <About onClose={closeAbout} />}
         <footer>
           <span>UR4MTN WEB SDR / KiwiSDR</span>
           <span hidden={!new URLSearchParams(location.search).has("debug")}>
