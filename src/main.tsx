@@ -1,3 +1,5 @@
+import { radioDiagnostics as radioLog, observeRadioSocket } from "./radioDiagnostics";
+import { RadioDiagnosticsPanel } from "./RadioDiagnosticsPanel";
 import { PropagationLauncher } from "./PropagationLauncher";
 import { RadioAppearance } from "./RadioAppearance";
 import type { History } from "./ft8Monitor";
@@ -481,6 +483,29 @@ function App() {
     };
   }, []);
   useEffect(() => {
+    radioLog.snapshot = () => ({
+      ...manager.current?.diagnosticState,
+      receiver: receiverRef.current,
+      nativeWss: manager.current?.socket instanceof DirectKiwiSocket ? manager.current.socket.diagnosticState : undefined,
+      context: context.current?.state ?? "absent",
+      audioPaused: media.current?.audio.paused ?? null,
+      audioTime: media.current?.audio.currentTime ?? null,
+      hidden: document.hidden, online: navigator.onLine,
+    });
+    radioLog.record("page_loaded", { userAgent: navigator.userAgent });
+    const capture = (event: Event) => radioLog.record(event.type, {
+      persisted: event instanceof PageTransitionEvent ? event.persisted : undefined,
+    });
+    for (const type of ["visibilitychange", "freeze", "resume"]) document.addEventListener(type, capture, true);
+    for (const type of ["pagehide", "pageshow", "online", "offline"]) window.addEventListener(type, capture, true);
+    return () => {
+      radioLog.record("app_cleanup");
+      for (const type of ["visibilitychange", "freeze", "resume"]) document.removeEventListener(type, capture, true);
+      for (const type of ["pagehide", "pageshow", "online", "offline"]) window.removeEventListener(type, capture, true);
+      radioLog.snapshot = () => ({});
+    };
+  }, []);
+  useEffect(() => {
     let recovering: Promise<void> | null = null;
     const recover = () => {
       if (!manager.current?.desired) return;
@@ -520,6 +545,7 @@ function App() {
   const mediaActions = useRef({ play: () => {}, pause: () => {} });
   mediaActions.current = {
     play: () => {
+      radioLog.record("media_action_play");
       if (!manager.current?.desired) void connect();
       else {
         manager.current.recoverAfterSleep();
@@ -527,17 +553,23 @@ function App() {
       }
     },
     pause: () => {
+      radioLog.record("media_action_pause_or_stop");
       ++startGeneration.current;
       manager.current?.stop();
     },
   };
   useEffect(() => {
     media.current = new RadioMedia();
+    const audio = media.current.audio;
+    const capture = (event: Event) => radioLog.record("audio_" + event.type);
+    const events = ["playing", "pause", "waiting", "stalled", "ended", "error", "emptied"];
+    events.forEach(type => audio.addEventListener(type, capture));
     media.current.actions(
       () => mediaActions.current.play(),
       () => mediaActions.current.pause(),
     );
     return () => {
+      events.forEach(type => audio.removeEventListener(type, capture));
       media.current?.dispose();
       media.current = null;
     };
@@ -642,6 +674,7 @@ function App() {
     setView(next);
   }
   callbacks.current.state = (v) => {
+    radioLog.record("connection_state", v);
     if (v.phase !== "live") {
       hunter.current?.reset();
       cwDecoder.current?.resetSignal();
@@ -664,6 +697,7 @@ function App() {
   callbacks.current.message = (v) => {
     if (v instanceof Uint8Array) {
       if (v[0] === 1) {
+        radioLog.pcm();
         recording.append(v.subarray(1), rate.current);
         const dv = new DataView(v.buffer, v.byteOffset, v.byteLength);
         const samples = new Float32Array((v.length - 1) / 2);
@@ -796,11 +830,13 @@ function App() {
           receiver?.directUrl,
           gatewayFallbackRef.current.has(receiverRef.current),
         );
-        return direct
-          ? (new DirectKiwiSocket(direct) as unknown as WebSocket)
-          : new WebSocket(url);
+        if (direct) return new DirectKiwiSocket(direct, observeRadioSocket) as unknown as WebSocket;
+        const socket = new WebSocket(url);
+        observeRadioSocket(socket);
+        return socket;
       },
       onDiagnostic: (event) => {
+        radioLog.record(String(event.type), event);
         if (
           event.type === "upstream_error" &&
           event.code === "connection" &&
@@ -858,6 +894,7 @@ function App() {
     [setReceiver],
   );
   async function connect() {
+    radioLog.record(manager.current?.desired ? "user_disconnect" : "user_connect");
     if (!gatewayConfigured) return;
     if (manager.current?.desired) {
       ++startGeneration.current;
@@ -917,6 +954,7 @@ function App() {
         afAnalysers.current = { before, after };
         media.current!.attach(context.current, gain.current);
         context.current.onstatechange = () => {
+          radioLog.record("context_statechange");
           setAudioPaused(
             context.current?.state !== "running" || !!media.current?.audio.paused,
           );
@@ -965,7 +1003,8 @@ function App() {
       setAudioPaused(
         context.current.state !== "running" || media.current.audio.paused,
       );
-    } catch {
+    } catch (error) {
+      radioLog.record("audio_resume_failed", { reason: error instanceof Error ? error.message : String(error) });
       setAudioPaused(true);
     }
   }
@@ -1161,6 +1200,7 @@ function App() {
           </span>
           {receiverChange && <small>{receiverChange}</small>}
         </div>
+        <RadioDiagnosticsPanel />
         {wanted && retryAt && (
           <div className="reconnect-banner" role="status">
             <span>

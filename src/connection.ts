@@ -127,6 +127,10 @@ export class StreamConnection {
       this.lastTune = Date.now();
     }
   }
+  get diagnosticState() {
+    return { desired: this.desired, wssState: this.socket?.readyState ?? null,
+      lastTransportPcmAt: this.lastAudioAt || null, background: this.background };
+  }
   private disposeSocket() {
     ++this.generation;
     clearTimeout(this.tuneTimer);
@@ -138,6 +142,7 @@ export class StreamConnection {
     const old = this.socket;
     this.socket = null;
     if (old) {
+      this.options.onDiagnostic?.({ type: "client_socket_close", state: old.readyState });
       try {
         old.close();
       } catch {}
@@ -298,6 +303,7 @@ export class StreamConnection {
   }
   private retry(reason: string, minDelay = 0) {
     if (!this.desired) return;
+    this.options.onDiagnostic?.({ type: "retry_requested", reason });
     this.disposeSocket();
     if(this.reconnects>=5){
       this.desired=false;

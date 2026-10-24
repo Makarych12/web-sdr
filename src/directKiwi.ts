@@ -11,7 +11,9 @@ export class DirectKiwiSocket {
     | null = null;
   onerror: ((event: unknown) => void) | null = null;
   private session: KiwiProtocol;
-  constructor(url: string) {
+  private nativeSockets: WebSocket[] = [];
+  get diagnosticState() { return this.nativeSockets.map(s => ({ channel: new URL(s.url).pathname.split("/").slice(-1)[0], state: s.readyState })); }
+  constructor(url: string, observe?: (socket: WebSocket) => void) {
     this.session = new KiwiProtocol(
       url,
       (value) => {
@@ -30,6 +32,8 @@ export class DirectKiwiSocket {
           throw Error("Для прямого приёма требуется защищённый WSS");
         const socket = new WebSocket(target);
         socket.binaryType = "arraybuffer";
+        this.nativeSockets.push(socket);
+        observe?.(socket);
         return {
           get readyState() {
             return socket.readyState;
