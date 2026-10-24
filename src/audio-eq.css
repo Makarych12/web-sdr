@@ -1,8 +1,8 @@
-.control-panel > .eq-launch {
+.control-panel .eq-launch {
   position: absolute; top: -14px; right: 244px; z-index: 20;
   min-height: 28px; padding: 3px 8px; font-size: 11px; background: #0b1726;
 }
-.control-panel > .eq-launch[aria-pressed="true"] { color: #76e4ff; border-color: #76e4ff; }
+.control-panel .eq-launch[aria-pressed="true"] { color: #76e4ff; border-color: #76e4ff; }
 .audio-eq-panel {
   width: min(330px, calc(100vw - 24px)); max-height: 84dvh; overflow: auto;
   box-sizing: border-box; padding: 14px; color: #dcecff; background: #0b1726;

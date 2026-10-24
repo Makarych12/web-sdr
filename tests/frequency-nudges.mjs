@@ -38,7 +38,10 @@ try {
       () => +document.querySelector(".receiver-choice")?.dataset.count > 0,
     );
     const input = page.locator("#frequency");
-    const buttons = page.locator(".frequency-nudges button");
+    const nudgeSets = page.locator(".frequency-nudges");
+    const buttons = nudgeSets.first().locator("button");
+    assert.equal(await nudgeSets.count(), 2);
+    assert.equal(await nudgeSets.last().locator("button").count(), 6);
     await input.fill("14200.251");
     await input.press("Enter");
     await page.getByRole("button", { name: "USB", exact: true }).click();

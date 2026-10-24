@@ -1,7 +1,7 @@
 import { radioDiagnostics as radioLog, observeRadioSocket } from "./radioDiagnostics";
 import { RadioDiagnosticsPanel } from "./RadioDiagnosticsPanel";
 import { PropagationLauncher } from "./PropagationLauncher";
-import { RadioAppearance } from "./RadioAppearance";
+import { retireLegacyAppearance } from "./appearanceMigration";
 import type { History } from "./ft8Monitor";
 import { DspLab, type DspLabSources } from "./DspLab";
 import { SignalHunterControls } from "./SignalHunter";
@@ -89,9 +89,12 @@ type View = {
   zoom?: number;
   sequence?: number;
 };
+retireLegacyAppearance();
+
 function App() {
   const recording = useWavRecording();
   const originalControls = useRef<HTMLElement>(null);
+  const lowerNudges = useRef<HTMLDivElement>(null);
   function launchExistingControl(selector: string) {
     originalControls.current?.querySelector<HTMLButtonElement>(selector)?.click();
   }
@@ -1151,7 +1154,7 @@ function App() {
           </div>
           <p>Выберите приёмник и найдите свою частоту.</p>
         </div>
-        <div className="radio-extras"><PropagationLauncher feed={dx} history={propagationHistory} /><RadioAppearance /></div>
+        <div className="radio-extras"><PropagationLauncher feed={dx} history={propagationHistory} /></div>
         <section className="receiver panel">
           <ReceiverPicker
             receivers={receivers}
@@ -1234,6 +1237,7 @@ function App() {
             }
           }}
         >
+          <div className="receiver-tool-launches">
           <DxClusterPanel openRef={dxPanel} feed={dx} frequency={frequency} range={dxRange} currentBandOnly={dxBandOnly}
             onBandOnly={setDxBandOnly} onTune={tuneDx} />
           <CwDecoderPanel input={cwDecoder} />
@@ -1268,6 +1272,7 @@ function App() {
           <NotchControls enabled={notchEnabled} auto={notchAuto} frequency={notchFrequency}
             width={notchWidth} detected={notchDetected} autoDepth={notchAutoDepth} onEnabled={setNotchEnabled}
             onAuto={setNotchAuto} onFrequency={setNotchFrequency} onWidth={setNotchWidth} onAutoDepth={setNotchAutoDepth} />
+          </div>
           <div className="tuner">
             <div className="frequency">
               <label htmlFor="frequency">ЧАСТОТА · VFO A</label>
@@ -1327,7 +1332,7 @@ function App() {
               onTune={(hz) => tune(hz / 1000)}
               onEnd={() => manager.current?.flushTune()}
             />
-              <FrequencyNudges
+              <FrequencyNudges mirror={lowerNudges}
                 onNudge={(deltaHz) => {
                   tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
                   manager.current?.flushTune();
@@ -1746,6 +1751,7 @@ function App() {
               }}>FILTER <small>ON · {cuts.highCut-cuts.lowCut} Hz</small></button>
               <button type="button" className="ocean-log" aria-label="LOG возле малого валкодера" onClick={()=>launchExistingControl('.log-launch')}>LOG <small>↗ Журнал</small></button>
             </div>
+            <div className="fine-nudge-copy" ref={lowerNudges} />
           </FineTune>
         </div>
         <BandSelector

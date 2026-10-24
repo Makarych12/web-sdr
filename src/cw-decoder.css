@@ -1,4 +1,4 @@
-.control-panel > .cw-dec-launch { position:absolute; bottom:-14px; left:106px; width:96px; white-space:nowrap; z-index:20; min-height:28px; padding:3px 7px; font-size:11px; background:#0b1726; }
+.control-panel .cw-dec-launch { position:absolute; bottom:-14px; left:106px; width:96px; white-space:nowrap; z-index:20; min-height:28px; padding:3px 7px; font-size:11px; background:#0b1726; }
 .cw-dec-panel { width:min(410px,calc(100vw - 24px)); max-height:84dvh; overflow:auto; box-sizing:border-box; padding:14px; color:#dcecff; background:#0b1726; border:1px solid #26466b; border-radius:10px; }
 .cw-dec-panel::backdrop { background:#0008; }
 .cw-dec-panel header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
