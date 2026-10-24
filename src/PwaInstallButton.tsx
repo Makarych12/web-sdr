@@ -42,7 +42,24 @@ function detectBrowser(): BrowserType {
 
   if (isIos) return "safari_ios";
 
-  if (/DuckDuckGo/i.test(ua)) {
+  // DuckDuckGo detection:
+  // 1. Explicit token in User-Agent (e.g. DuckDuckGo/5 or ddg_android)
+  // 2. Client hints brands array
+  // 3. Android WebView with Global Privacy Control enabled (standard in DDG)
+  const hasDdgToken = /DuckDuckGo|ddg_android|duckduckgo/i.test(ua);
+  const hasDdgBrand = (
+    (navigator as unknown as { userAgentData?: { brands?: { brand: string }[] } })
+      .userAgentData?.brands || []
+  ).some((b) => /DuckDuckGo/i.test(b.brand));
+  const isGpc =
+    (navigator as unknown as { globalPrivacyControl?: boolean })
+      .globalPrivacyControl === true;
+  const isWebView =
+    /Version\/[0-9.]+\s+(?:Mobile\s+)?(?:Safari\/[0-9.]+\s+)?Chrome|; wv\b/i.test(
+      ua,
+    );
+
+  if (hasDdgToken || hasDdgBrand || (isAndroid && isGpc)) {
     return isAndroid ? "duckduckgo_android" : "generic";
   }
 
@@ -58,12 +75,19 @@ function detectBrowser(): BrowserType {
     return isAndroid ? "firefox_android" : "generic";
   }
 
-  if (/Chrome|CriOS/i.test(ua)) {
-    return isAndroid ? "chrome_android" : "chrome_desktop";
+  // On Android, if it's a generic WebView or not confirmed Chrome, do NOT assume Chrome
+  if (isAndroid) {
+    if (isWebView) {
+      return "generic_android";
+    }
+    if (/Chrome/i.test(ua)) {
+      return "chrome_android";
+    }
+    return "generic_android";
   }
 
-  if (isAndroid) {
-    return "generic_android";
+  if (/Chrome|CriOS/i.test(ua)) {
+    return "chrome_desktop";
   }
 
   return "generic";
@@ -72,40 +96,47 @@ function detectBrowser(): BrowserType {
 interface InstructionConfig {
   badge: string;
   title: string;
+  note?: string;
   steps: string[];
+  supportsPwa: boolean;
 }
 
 const INSTRUCTIONS: Record<BrowserType, InstructionConfig> = {
   duckduckgo_android: {
     badge: "DuckDuckGo · Android",
-    title: "Установка в DuckDuckGo",
+    title: "Установка из DuckDuckGo",
+    note: "Браузер DuckDuckGo ориентирован на приватность и не поддерживает прямую установку PWA на рабочий стол Android.",
+    supportsPwa: false,
     steps: [
-      "В браузере DuckDuckGo нажмите кнопку меню ⋮ (три точки) в правом углу адресной строки.",
-      "В открывшемся меню выберите пункт «На главный экран» (Add to Home).",
-      "В системном окне Android нажмите «Добавить». Приложение появится на рабочем столе телефона.",
+      "В браузере DuckDuckGo в правом нижнем углу нажмите кнопку меню ☰ (или ⋮).",
+      "В открывшемся меню нажмите «Поделиться…» (Share) и выберите Google Chrome, чтобы открыть сайт.",
+      "В браузере Chrome нажмите кнопку «Установить приложение» для добавления ярлыка на рабочий стол.",
     ],
   },
   chrome_android: {
     badge: "Google Chrome · Android",
     title: "Установка в Google Chrome",
+    supportsPwa: true,
     steps: [
-      "Нажмите кнопку меню ⋮ (три точки) в правом верхнем углу браузера.",
-      "Выберите пункт «Установить приложение» (или «Добавить на главный экран»).",
+      "В правом верхнем углу браузера нажмите меню ⋮ (три точки).",
+      "В списке действий выберите «Установить приложение» (или «Добавить на главный экран»).",
       "Подтвердите установку кнопкой «Установить».",
     ],
   },
   samsung_internet: {
     badge: "Samsung Internet",
     title: "Установка в Samsung Internet",
+    supportsPwa: true,
     steps: [
-      "Нажмите значок меню ☰ (три полоски) в правом нижнем углу браузера (или ⋮ вверху).",
+      "В правом нижнем углу нажмите меню ☰ (или значок загрузки в строке адреса).",
       "Выберите пункт «Добавить страницу в» → «Главный экран» (или «Установить веб-приложение»).",
-      "Нажмите «Добавить» для размещения иконки на главном экране.",
+      "Подтвердите добавление кнопкой «Добавить».",
     ],
   },
   safari_ios: {
     badge: "iOS / iPadOS · Safari",
     title: "Установка на iPhone / iPad",
+    supportsPwa: true,
     steps: [
       "В нижней панели Safari нажмите кнопку «Поделиться» (значок квадрата со стрелкой вверх ⎋).",
       "Прокрутите меню действий вниз и выберите «На экран „Домой“» (Add to Home Screen).",
@@ -115,15 +146,17 @@ const INSTRUCTIONS: Record<BrowserType, InstructionConfig> = {
   edge: {
     badge: "Microsoft Edge",
     title: "Установка в Microsoft Edge",
+    supportsPwa: true,
     steps: [
-      "На телефоне: нажмите меню ⋯ внизу и выберите «Добавить на главный экран».",
-      "На компьютере: нажмите значок ⊕ («Установить») в адресной строке или меню ⋯ → «Приложения» → «Установить этот сайт как приложение».",
+      "На телефоне: нажмите меню ⋯ внизу экрана и выберите «Добавить на главный экран».",
+      "На компьютере: нажмите значок ⊕ («Установить») в правой части строки адреса.",
       "Подтвердите установку кнопкой «Установить».",
     ],
   },
   chrome_desktop: {
     badge: "Chrome / Chromium · Desktop",
     title: "Установка на компьютер",
+    supportsPwa: true,
     steps: [
       "В адресной строке браузера (справа) нажмите значок ⊕ («Установить UR4MTN WEB SDR») или иконку монитора.",
       "Либо откройте меню браузера ⋮ (три точки) → «Сохранить и поделиться» → «Установить страницу как приложение».",
@@ -133,8 +166,9 @@ const INSTRUCTIONS: Record<BrowserType, InstructionConfig> = {
   firefox_android: {
     badge: "Firefox · Android",
     title: "Установка в Firefox",
+    supportsPwa: true,
     steps: [
-      "Нажмите кнопку меню ⋮ (три точки) возле адресной строки браузера.",
+      "Возле адресной строки нажмите меню ⋮ (три точки).",
       "Выберите пункт «Установить» (или «Добавить на главный экран»).",
       "Подтвердите добавление кнопкой «Добавить».",
     ],
@@ -142,15 +176,18 @@ const INSTRUCTIONS: Record<BrowserType, InstructionConfig> = {
   generic_android: {
     badge: "Android Browser",
     title: "Установка веб-приложения",
+    note: "Если ваш браузер не поддерживает установку PWA, откройте сайт в Google Chrome.",
+    supportsPwa: true,
     steps: [
-      "Откройте главное меню вашего браузера (кнопка ⋮ или ☰).",
-      "Выберите пункт «Установить приложение», «На главный экран» или «Добавить на главный экран».",
-      "Подтвердите размещение иконки приложения на главном экране телефона.",
+      "Откройте меню браузера (кнопка ☰ внизу или ⋮ вверху).",
+      "Найдите пункт «Установить приложение», «На главный экран» или «Добавить на главный экран».",
+      "Либо нажмите «Поделиться…» и откройте сайт через Google Chrome для полноценной установки.",
     ],
   },
   generic: {
     badge: "Web App (PWA)",
     title: "Установка приложения",
+    supportsPwa: true,
     steps: [
       "Откройте меню вашего браузера (⋮, ☰ или ⋯).",
       "Выберите «Установить приложение» или «Добавить на главный экран».",
@@ -164,6 +201,7 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [modalBrowser, setModalBrowser] = useState<BrowserType | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setIsStandalone(checkIsStandalone());
@@ -224,10 +262,35 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
       }
     }
 
-    // 2. If beforeinstallprompt is unavailable (DuckDuckGo, Safari, already dismissed, etc.)
-    // ALWAYS open the instructional modal for the detected browser
+    // 2. If beforeinstallprompt is unavailable, ALWAYS open the instructional modal
     const detected = detectBrowser();
     setModalBrowser(detected);
+  };
+
+  const handleShare = async () => {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: "UR4MTN WEB SDR",
+          text: "UR4MTN WEB SDR — Приёмник коротких волн",
+          url: window.location.href,
+        });
+      } catch {
+        // User cancelled share dialog
+      }
+    } else {
+      handleCopy();
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback
+    }
   };
 
   const instruction = modalBrowser ? INSTRUCTIONS[modalBrowser] : null;
@@ -271,6 +334,66 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
                 </button>
               </div>
 
+              {/* Quick browser switcher tabs */}
+              <div className="pwa-browser-tabs" role="tablist" aria-label="Выбор браузера">
+                <button
+                  type="button"
+                  className={
+                    "pwa-tab-btn " +
+                    (modalBrowser === "duckduckgo_android" ? "active" : "")
+                  }
+                  onClick={() => setModalBrowser("duckduckgo_android")}
+                >
+                  DuckDuckGo
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "pwa-tab-btn " +
+                    (modalBrowser === "chrome_android" ||
+                    modalBrowser === "chrome_desktop"
+                      ? "active"
+                      : "")
+                  }
+                  onClick={() => setModalBrowser("chrome_android")}
+                >
+                  Chrome
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "pwa-tab-btn " +
+                    (modalBrowser === "safari_ios" ? "active" : "")
+                  }
+                  onClick={() => setModalBrowser("safari_ios")}
+                >
+                  Safari
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "pwa-tab-btn " +
+                    (modalBrowser === "generic_android" ||
+                    modalBrowser === "generic" ||
+                    modalBrowser === "samsung_internet" ||
+                    modalBrowser === "edge" ||
+                    modalBrowser === "firefox_android"
+                      ? "active"
+                      : "")
+                  }
+                  onClick={() => setModalBrowser("generic_android")}
+                >
+                  Другие
+                </button>
+              </div>
+
+              {instruction.note && (
+                <div className="pwa-dialog-alert">
+                  <span className="pwa-alert-icon" aria-hidden="true">ℹ</span>
+                  <span>{instruction.note}</span>
+                </div>
+              )}
+
               <ol className="pwa-dialog-steps">
                 {instruction.steps.map((step, idx) => (
                   <li key={idx} className="pwa-dialog-step">
@@ -279,6 +402,60 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
                   </li>
                 ))}
               </ol>
+
+              {/* Action buttons for copying or sharing link to Chrome */}
+              <div className="pwa-action-row">
+                {typeof navigator !== "undefined" &&
+                  typeof navigator.share === "function" && (
+                    <button
+                      type="button"
+                      className="pwa-action-btn secondary"
+                      onClick={handleShare}
+                      title="Поделиться ссылкой с другим браузером"
+                    >
+                      <svg
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <circle cx="18" cy="5" r="3" />
+                        <circle cx="6" cy="12" r="3" />
+                        <circle cx="18" cy="19" r="3" />
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                      </svg>
+                      Поделиться сайтом
+                    </button>
+                  )}
+                <button
+                  type="button"
+                  className="pwa-action-btn secondary"
+                  onClick={handleCopy}
+                  title="Скопировать ссылку для открытия в Chrome"
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  {copied ? "✓ Ссылка скопирована!" : "Скопировать ссылку"}
+                </button>
+              </div>
 
               <button
                 type="button"
