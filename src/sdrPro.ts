@@ -6,7 +6,7 @@ export function sdrProLevels(bins:Uint8Array,previous?:SdrProLevels):SdrProLevel
  const histogram=new Uint16Array(256);
  for(const bin of bins)histogram[bin]++;
  const percentile=(fraction:number)=>{let count=0;const rank=Math.ceil(bins.length*fraction);for(let i=0;i<256;i++){count+=histogram[i];if(count>=rank)return i;}return 255;};
- const floor=percentile(.2),range=Math.max(32,Math.min(96,percentile(.995)-floor+8));
+ const floor=percentile(.34),range=Math.max(36,Math.min(96,percentile(.995)-floor+10));
  if(!previous)return {floor,range};
  return {floor:previous.floor+.08*(floor-previous.floor),range:previous.range+(range>previous.range?.35:.04)*(range-previous.range)};
 }

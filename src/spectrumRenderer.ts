@@ -112,6 +112,39 @@ export class SpectrumEnvelope {
     return this.values;
   }
 }
+function resampleWaterfall(bins: ArrayLike<number>, width: number): Float32Array {
+  const result = new Float32Array(width);
+  const n = bins.length;
+  const scale = n / width;
+  if (scale >= 1) {
+    for (let x = 0; x < width; x++) {
+      const start = Math.floor(x * scale);
+      const end = Math.min(n, Math.ceil((x + 1) * scale));
+      let maxVal = bins[start];
+      for (let i = start + 1; i < end; i++) {
+        if (bins[i] > maxVal) maxVal = bins[i];
+      }
+      result[x] = maxVal;
+    }
+  } else {
+    for (let x = 0; x < width; x++) {
+      const pos = x * scale;
+      const i1 = Math.floor(pos);
+      const t = pos - i1;
+      const i0 = i1 > 0 ? i1 - 1 : 0;
+      const i2 = i1 + 1 < n ? i1 + 1 : n - 1;
+      const i3 = i1 + 2 < n ? i1 + 2 : n - 1;
+      const b0 = bins[i0], b1 = bins[i1], b2 = bins[i2], b3 = bins[i3];
+      const c0 = b1;
+      const c1 = 0.5 * (b2 - b0);
+      const c2 = b0 - 2.5 * b1 + 2 * b2 - 0.5 * b3;
+      const c3 = 0.5 * (b3 - b0) + 1.5 * (b1 - b2);
+      const val = c0 + t * (c1 + t * (c2 + t * c3));
+      result[x] = Math.max(0, Math.min(255, val));
+    }
+  }
+  return result;
+}
 function validView(view: SpectrumView) {
   return (
     Number.isFinite(view.start) &&
@@ -156,7 +189,10 @@ export class SpectrumRenderer {
   private paintHistoryRow(ctx:CanvasRenderingContext2D,row:HistoryRow,previous:HistoryRow|undefined,y:number) {
     if(this.display.mode==='CLASSIC') {
       const levels=displayLevels(row.blackDb+10,this.display.refLevel,this.display.levelRangeDb,this.display.autoLevel);
-      this.paintColorRow(ctx,row.bins,row.calibration,levels.blackDb,levels.rangeDb,y);
+      const noiseDb=row.blackDb+10;
+      const wfBlackDb=this.display.autoLevel!==false?noiseDb-1.5+(this.display.brightness??0)*0.2:levels.blackDb;
+      const wfRangeDb=this.display.rangeDb??levels.rangeDb;
+      this.paintColorRow(ctx,row.bins,row.calibration,wfBlackDb,wfRangeDb,y);
       return;
     }
     if(this.display.mode==='SDR PRO'){
@@ -180,14 +216,7 @@ export class SpectrumRenderer {
     this.proScrollTimer=undefined;this.proStepUntil=0;
   }
   private stepProScroll() {
-    const now=performance.now();
-    if(this.proLastRowTime)this.proPeriod+=.2*(Math.max(32,Math.min(500,now-this.proLastRowTime))-this.proPeriod);
-    this.proLastRowTime=now;
-    if(this.display.mode!=='SDR PRO' && !(this.display.mode==='CLASSIC' && this.theme==='OCEAN BLUE'))return;
     this.stopProScroll();
-    const delay=Math.max(16,Math.min(80,this.proPeriod/2));
-    this.proStepUntil=now+delay;
-    this.proScrollTimer=setTimeout(()=>{this.proScrollTimer=undefined;this.proStepUntil=0;this.schedule();},delay);
   }
   private repaintFrame=0;
   private repainting=false;
@@ -236,7 +265,7 @@ export class SpectrumRenderer {
       this.paletteKey=key;
       for(let i=0;i<1024;i++)this.palette.set(waterfallColor(i*255/1023,calibration,blackDb,rangeDb,this.theme),i*4);
     }
-    const width=this.history.width, samples=resampleFft(bins,width);
+    const width=this.history.width, samples=resampleWaterfall(bins,width);
     for(let x=0;x<width;x++){
       const color=Math.max(0,Math.min(1023,Math.round(samples[x]*1023/255)))*4;
       const pixel=x*4;
@@ -344,7 +373,7 @@ export class SpectrumRenderer {
       .getContext("2d")!
       .createImageData(this.history.width, 1);
     const ctx=this.history.getContext("2d")!;
-    ctx.fillStyle="#020818";
+    ctx.fillStyle="#020612";
     ctx.fillRect(0,0,this.history.width,this.history.height);
     this.colorRows=this.colorRows.slice(-this.history.height);
     this.rowViews=this.colorRows.map(row=>row.view);
@@ -400,7 +429,7 @@ export class SpectrumRenderer {
     if (resetSequence) this.sequence = undefined;
     for (const canvas of [this.history, this.waterfall]) {
       const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#020818";
+      ctx.fillStyle = "#020612";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     this.waterfall.dataset.rows = "0";
@@ -472,10 +501,10 @@ export class SpectrumRenderer {
     const wc = this.waterfall.getContext("2d")!;
     wc.globalAlpha = 1;
     wc.globalCompositeOperation = "source-over";
-    wc.fillStyle = "#020818";
+    wc.fillStyle = "#020612";
     wc.fillRect(0, 0, this.waterfall.width, this.waterfall.height);
-    wc.imageSmoothingEnabled = true;
-    const scrollOffset=performance.now()<this.proStepUntil?Math.max(1,Math.floor(this.rowHeight/2)):0;
+    wc.imageSmoothingEnabled = false;
+    const scrollOffset=0;
     // Most rows share a range. Project contiguous runs with one draw call,
     // keeping pan history without hundreds of canvas calls on every packet.
     for (let y = 0; y < this.rowViews.length;) {
@@ -492,7 +521,7 @@ export class SpectrumRenderer {
         this.history.width,
         end - y,
         p.x,
-        rowY+scrollOffset,
+        rowY,
         p.width,
         end - y,
       );
