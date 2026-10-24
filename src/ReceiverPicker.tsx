@@ -32,11 +32,13 @@ type Props = {
 };
 
 type CheckRecord = {
-  reachable: boolean;
+  reachable?: boolean;
   responseMs?: number;
   users?: number;
   maxUsers?: number;
   timestamp: number;
+  failed?: boolean;
+  statusText?: string;
 };
 
 type QuickTab = "all" | "available" | "free" | "favorites";
@@ -44,6 +46,7 @@ type SortOption = "free" | "country" | "name" | "latency";
 
 const CHECK_TTL_MS = 60_000;
 const MAX_CONCURRENT_CHECKS = 2;
+const REQUEST_TIMEOUT_MS = 6_500;
 const PAGE_SIZE = 60;
 
 export const ReceiverPicker = memo(function ReceiverPicker({
@@ -58,6 +61,9 @@ export const ReceiverPicker = memo(function ReceiverPicker({
 
   // Filter & Search states
   const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
+  openRef.current = open;
+
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<QuickTab>("all");
   const [selectedContinent, setSelectedContinent] = useState<ContinentName>("Все");
@@ -67,7 +73,13 @@ export const ReceiverPicker = memo(function ReceiverPicker({
 
   // Check state and in-flight tracking
   const [checks, setChecks] = useState<Record<string, CheckRecord>>({});
-  const [checkingIds, setCheckingIds] = useState<Set<string>>(new Set());
+  const checksRef = useRef<Record<string, CheckRecord>>(checks);
+  checksRef.current = checks;
+
+  // Active checking map: only true while an HTTP request is actively running
+  const [checkingMap, setCheckingMap] = useState<Record<string, boolean>>({});
+  const inFlightRef = useRef<Set<string>>(new Set());
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   // Cached geo metadata for all receivers
   const geoMap = useMemo(() => {
@@ -95,10 +107,12 @@ export const ReceiverPicker = memo(function ReceiverPicker({
       .sort((a, b) => b.count - a.count || a.country.localeCompare(b.country, "ru"));
   }, [receivers, geoMap, selectedContinent]);
 
-  // Selected receiver single-check on mount or selection change
+  // Selected receiver single-check on mount or selection change (with finite timeout)
   useEffect(() => {
     if (!receivers.some((r) => r.id === selected)) return;
     const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     fetch(
       `${gateway.http}/api/receivers/${encodeURIComponent(selected)}/check`,
       { signal: controller.signal },
@@ -106,17 +120,33 @@ export const ReceiverPicker = memo(function ReceiverPicker({
       .then((r) => (r.ok ? r.json() : null))
       .then((value) => {
         if (value && !controller.signal.aborted) {
-          setChecks((old) => ({
-            ...old,
-            [selected]: { ...value, timestamp: Date.now() },
-          }));
+          setChecks((old) => {
+            const next = {
+              ...old,
+              [selected]: {
+                reachable: Boolean(value.reachable),
+                responseMs: typeof value.responseMs === "number" ? value.responseMs : undefined,
+                users: typeof value.users === "number" ? value.users : undefined,
+                maxUsers: typeof value.maxUsers === "number" ? value.maxUsers : undefined,
+                timestamp: Date.now(),
+                failed: false,
+              },
+            };
+            checksRef.current = next;
+            return next;
+          });
         }
       })
-      .catch(() => {});
-    return () => controller.abort();
+      .catch(() => {})
+      .finally(() => clearTimeout(timeoutId));
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [selected, receivers]);
 
-  // Filtered and sorted rows
+  // Filtered rows
   const filteredRows = useMemo(() => {
     const q = search.trim().toLocaleLowerCase();
 
@@ -133,7 +163,7 @@ export const ReceiverPicker = memo(function ReceiverPicker({
       }
       if (tab === "available") {
         const check = checks[r.id];
-        if (check && !check.reachable) return false;
+        if (check && check.reachable === false) return false;
       }
 
       // Continent filter
@@ -241,75 +271,143 @@ export const ReceiverPicker = memo(function ReceiverPicker({
     });
   }, [filteredRows, selected, favorites, tab, sortOption, checks, geoMap]);
 
-  // Progressive live status checking queue
+  // Queue runner function decoupled from render state loops
+  const runNextCheck = useCallback(() => {
+    if (!openRef.current) return;
+    if (inFlightRef.current.size >= MAX_CONCURRENT_CHECKS) return;
+
+    // Determine visible candidates (up to first 24 cards of current visible slice)
+    const visibleBatch = sortedRows.slice(0, Math.min(visibleCount, 24));
+    const now = Date.now();
+
+    const candidate = visibleBatch.find((r) => {
+      const existing = checksRef.current[r.id];
+      const isFresh = existing && now - existing.timestamp < CHECK_TTL_MS;
+      const isInFlight = inFlightRef.current.has(r.id);
+      return !isFresh && !isInFlight;
+    });
+
+    if (!candidate) return;
+
+    const id = candidate.id;
+    inFlightRef.current.add(id);
+    setCheckingMap((prev) => ({ ...prev, [id]: true }));
+
+    const controller = new AbortController();
+    abortControllersRef.current.set(id, controller);
+
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
+    fetch(
+      `${gateway.http}/api/receivers/${encodeURIComponent(id)}/check`,
+      { signal: controller.signal },
+    )
+      .then(async (res) => {
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          const record: CheckRecord = {
+            reachable: Boolean(data.reachable),
+            responseMs:
+              typeof data.responseMs === "number" ? data.responseMs : undefined,
+            users: typeof data.users === "number" ? data.users : undefined,
+            maxUsers:
+              typeof data.maxUsers === "number" ? data.maxUsers : undefined,
+            timestamp: Date.now(),
+            failed: false,
+          };
+          setChecks((prev) => {
+            const next = { ...prev, [id]: record };
+            checksRef.current = next;
+            return next;
+          });
+        } else {
+          // HTTP 429 (rate-limit) or server error - Kiwi is NOT marked offline!
+          const is429 = res.status === 429;
+          const record: CheckRecord = {
+            timestamp: Date.now() - CHECK_TTL_MS + (is429 ? 15_000 : 25_000),
+            failed: true,
+            statusText: is429 ? "Шлюз занят (429)" : `Ошибка HTTP ${res.status}`,
+          };
+          setChecks((prev) => {
+            const next = { ...prev, [id]: record };
+            checksRef.current = next;
+            return next;
+          });
+        }
+      })
+      .catch((err: any) => {
+        clearTimeout(timeoutId);
+        if (!openRef.current || err?.name === "AbortError") {
+          // Normal close or timeout cancellation
+          const isTimeout = err?.name === "AbortError" && openRef.current;
+          if (isTimeout) {
+            const record: CheckRecord = {
+              timestamp: Date.now() - CHECK_TTL_MS + 20_000,
+              failed: true,
+              statusText: "Тайм-аут запроса",
+            };
+            setChecks((prev) => {
+              const next = { ...prev, [id]: record };
+              checksRef.current = next;
+              return next;
+            });
+          }
+          return;
+        }
+        // General network error: Kiwi is NOT marked offline
+        const record: CheckRecord = {
+          timestamp: Date.now() - CHECK_TTL_MS + 20_000,
+          failed: true,
+          statusText: "Сбой сети",
+        };
+        setChecks((prev) => {
+          const next = { ...prev, [id]: record };
+          checksRef.current = next;
+          return next;
+        });
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        abortControllersRef.current.delete(id);
+        inFlightRef.current.delete(id);
+        setCheckingMap((prev) => {
+          if (!prev[id]) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        // Immediately try next candidate if dialog is still open
+        if (openRef.current) {
+          setTimeout(runNextCheck, 50);
+        }
+      });
+  }, [sortedRows, visibleCount]);
+
+  // Trigger queue check when visible batch or dialog opens
   useEffect(() => {
     if (!open) return;
 
-    const controller = new AbortController();
-    let cancelled = false;
-
-    async function runQueue() {
-      // Look at visible slice of sorted rows (up to first 24 cards)
-      const visibleBatch = sortedRows.slice(0, Math.min(visibleCount, 24));
-      const now = Date.now();
-
-      // Find candidates that need refresh
-      const candidates = visibleBatch.filter((r) => {
-        const existing = checks[r.id];
-        const isFresh = existing && now - existing.timestamp < CHECK_TTL_MS;
-        const inProgress = checkingIds.has(r.id);
-        return !isFresh && !inProgress;
-      });
-
-      if (!candidates.length || cancelled) return;
-
-      // Process up to MAX_CONCURRENT_CHECKS
-      const toCheck = candidates.slice(0, MAX_CONCURRENT_CHECKS);
-
-      setCheckingIds((prev) => {
-        const next = new Set(prev);
-        toCheck.forEach((c) => next.add(c.id));
-        return next;
-      });
-
-      await Promise.all(
-        toCheck.map(async (r) => {
-          if (cancelled) return;
-          try {
-            const res = await fetch(
-              `${gateway.http}/api/receivers/${encodeURIComponent(r.id)}/check`,
-              { signal: controller.signal },
-            );
-            if (res.ok && !cancelled) {
-              const data = await res.json();
-              setChecks((prev) => ({
-                ...prev,
-                [r.id]: { ...data, timestamp: Date.now() },
-              }));
-            }
-          } catch {
-            // Handled or aborted
-          } finally {
-            if (!cancelled) {
-              setCheckingIds((prev) => {
-                const next = new Set(prev);
-                next.delete(r.id);
-                return next;
-              });
-            }
-          }
-        }),
-      );
-    }
-
-    const timer = setTimeout(runQueue, 150);
+    // Launch up to MAX_CONCURRENT_CHECKS workers
+    runNextCheck();
+    const timer = setTimeout(runNextCheck, 100);
 
     return () => {
-      cancelled = true;
       clearTimeout(timer);
-      controller.abort();
     };
-  }, [open, sortedRows, visibleCount, checks, checkingIds]);
+  }, [open, runNextCheck]);
+
+  // Clean shutdown when dialog closes or unmounts
+  useEffect(() => {
+    if (!open) {
+      abortControllersRef.current.forEach((c) => c.abort());
+      abortControllersRef.current.clear();
+      inFlightRef.current.clear();
+      setCheckingMap({});
+    }
+  }, [open]);
 
   const showCatalog = useCallback(() => {
     setOpen(true);
@@ -332,6 +430,7 @@ export const ReceiverPicker = memo(function ReceiverPicker({
   }, []);
 
   const current = receivers.find((r) => r.id === selected);
+  const activeCheckingCount = Object.keys(checkingMap).length;
 
   return (
     <div className="receiver-choice" data-count={receivers.length}>
@@ -573,10 +672,14 @@ export const ReceiverPicker = memo(function ReceiverPicker({
               </button>
             )}
           </div>
-          {checkingIds.size > 0 && (
+          {activeCheckingCount > 0 ? (
             <div className="explorer-checking-indicator">
               <span className="explorer-pulse-dot" aria-hidden="true" />
               <span>Проверка доступности…</span>
+            </div>
+          ) : (
+            <div className="explorer-counter-info" style={{ color: "#64748b" }}>
+              <span>✓ Статусы обновлены</span>
             </div>
           )}
         </div>
@@ -587,7 +690,7 @@ export const ReceiverPicker = memo(function ReceiverPicker({
             sortedRows.slice(0, visibleCount).map((r) => {
               const geo = geoMap.get(r.id) || getReceiverGeo(r);
               const check = checks[r.id];
-              const isChecking = checkingIds.has(r.id);
+              const isChecking = Boolean(checkingMap[r.id]);
               const isCurrent = r.id === selected;
               const isFavorite = favorites.includes(r.id);
 
@@ -601,22 +704,32 @@ export const ReceiverPicker = memo(function ReceiverPicker({
                 statusLabel = "Проверка…";
                 statusTooltip = "Проверяется доступность узла через шлюз";
               } else if (check) {
-                if (!check.reachable) {
+                if (check.failed) {
+                  // Network error, 429 rate limit or gateway timeout - DO NOT mark offline!
+                  statusClass = "gray";
+                  statusLabel = "Не проверен";
+                  statusTooltip = check.statusText
+                    ? `Проверка шлюза не удалась (${check.statusText})`
+                    : "Не удалось проверить доступность";
+                } else if (check.reachable === false) {
+                  // Confirmed offline by Kiwi /status check
                   statusClass = "red";
                   statusLabel = "Не работает";
                   statusTooltip =
-                    "Сервер не отвечает на HTTP/WSS запрос (недоступен)";
-                } else {
+                    "Сервер подтверждённо недоступен (HTTP/WSS оффлайн)";
+                } else if (check.reachable === true) {
                   const effectiveUsers = check.users ?? r.users ?? 0;
                   const effectiveMax = check.maxUsers ?? r.maxUsers;
                   if (
                     effectiveMax !== undefined &&
                     effectiveUsers >= effectiveMax
                   ) {
+                    // Confirmed busy: all slots full
                     statusClass = "red";
                     statusLabel = `Занят (${effectiveUsers}/${effectiveMax})`;
-                    statusTooltip = `Все слоты KiwiSDR заняты (${effectiveUsers}/${effectiveMax})`;
+                    statusTooltip = `Сервер доступен, но все слоты заняты (${effectiveUsers}/${effectiveMax})`;
                   } else {
+                    // Confirmed available with free slot
                     const free =
                       effectiveMax !== undefined
                         ? Math.max(0, effectiveMax - effectiveUsers)
@@ -626,20 +739,17 @@ export const ReceiverPicker = memo(function ReceiverPicker({
                       free !== undefined ? `Свободен (${free})` : "Доступен";
                     statusTooltip = `Сервер проверен и доступен${
                       check.responseMs ? ` (${check.responseMs} мс)` : ""
-                    }${free !== undefined ? ` · свободно ${free} мест` : ""}`;
+                    }${free !== undefined ? ` · свободно мест: ${free}` : ""}`;
                   }
                 }
               } else if (r.maxUsers !== undefined) {
                 const free = Math.max(0, r.maxUsers - (r.users ?? 0));
-                if (free === 0) {
-                  statusClass = "red";
-                  statusLabel = `Занят (${r.users}/${r.maxUsers})`;
-                  statusTooltip = `По снимку каталога заняты все слоты (${r.users}/${r.maxUsers})`;
-                } else {
-                  statusClass = "gray";
-                  statusLabel = `По каталогу (${free})`;
-                  statusTooltip = `По снимку каталога свободно ${free} мест (узел не проверен)`;
-                }
+                statusClass = "gray";
+                statusLabel =
+                  free === 0
+                    ? `Занят (${r.users}/${r.maxUsers})`
+                    : `По каталогу (${free})`;
+                statusTooltip = `По каталогу: ${r.users}/${r.maxUsers} слушателей (узел не проверен)`;
               }
 
               const slotsText =
