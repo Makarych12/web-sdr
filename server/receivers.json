@@ -27,5 +27,13 @@
     "minFrequency": 1600,
     "maxFrequency": 10000,
     "apiAvailable": true
+  },
+  {
+    "id": "nevyansk",
+    "name": "Nev'yansk · Екатеринбург, Россия",
+    "location": "Russia, Yekaterinburg",
+    "url": "http://188.226.41.179:8075",
+    "minFrequency": 0,
+    "maxFrequency": 30000
   }
 ]
