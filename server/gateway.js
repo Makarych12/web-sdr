@@ -141,6 +141,23 @@ wss.on("connection", async (client) => {
   );
   let session;
   let generation = 0;
+  // Graceful refresh before Vercel 300s serverless timeout abruptly kills the container
+  const maxLifetimeMs = 270000;
+  const lifetimeTimer = setTimeout(() => {
+    if (client.readyState === WebSocket.OPEN) {
+      console.info(
+        JSON.stringify({
+          event: "gateway_graceful_refresh",
+          connection: client.id,
+          receiver: client.receiver,
+          seconds: (Date.now() - client.openedAt) / 1000,
+        }),
+      );
+      session?.close();
+      client.close(1000, "gateway_refresh");
+    }
+  }, maxLifetimeMs);
+  lifetimeTimer.unref?.();
   const emit = (v) => {
     if (v.type === "error")
       console.warn(
@@ -208,6 +225,7 @@ wss.on("connection", async (client) => {
     }
   });
   client.on("close", (code, reason) => {
+    clearTimeout(lifetimeTimer);
     ++generation;
     console.info(
       JSON.stringify({

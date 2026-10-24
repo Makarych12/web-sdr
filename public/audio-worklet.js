@@ -55,7 +55,8 @@ class PCMPlayer extends AudioWorkletProcessor {
     };
   }
   process(_, outputs) {
-    const out = outputs[0][0];
+    const out = outputs[0]?.[0];
+    if (!out) return true;
     this.telemetryFrames += out.length;
     if (this.telemetryFrames >= sampleRate) {
       this.telemetryFrames = 0;
@@ -74,6 +75,7 @@ class PCMPlayer extends AudioWorkletProcessor {
     }
     if (!this.started) {
       if (this.everStarted) this.underflowFrames += out.length;
+      out.fill(0);
       return true;
     }
     const step = this.rate / sampleRate;
@@ -82,25 +84,42 @@ class PCMPlayer extends AudioWorkletProcessor {
       if (!q) {
         // Fade the final sample into silence instead of a hard discontinuity.
         const fadeFrames = Math.min(64, out.length - i);
-        for (let j = 0; j < fadeFrames; j++)
-          out[i + j] = this.lastSample * (1 - (j + 1) / fadeFrames);
+        for (let j = 0; j < fadeFrames; j++) {
+          const s = Number.isFinite(this.lastSample) ? this.lastSample * (1 - (j + 1) / fadeFrames) : 0;
+          out[i + j] = Number.isFinite(s) ? s : 0;
+        }
+        for (let j = i + fadeFrames; j < out.length; j++) {
+          out[j] = 0;
+        }
         this.lastSample = 0;
         this.started = false;
+        this.pos = 0;
+        this.buffered = 0;
+        this.queue = [];
         this.underflowFrames += out.length - i;
         this.targetSeconds = Math.min(0.3, this.targetSeconds + 0.04);
         this.stableFrames = 0;
         this.fade = 128;
         break;
       }
-      const p = Math.floor(this.pos),
-        next = p + 1 < q.length ? q[p + 1] : (this.queue[1]?.[0] ?? q[p]);
-      out[i] = q[p] + (next - q[p]) * (this.pos - p);
+      const p = Math.floor(this.pos);
+      if (p >= q.length) {
+        this.pos -= q.length;
+        this.queue.shift();
+        i--;
+        continue;
+      }
+      const s0 = q[p];
+      const s1 = p + 1 < q.length ? q[p + 1] : (this.queue[1]?.[0] ?? s0);
+      let sample = s0 + (s1 - s0) * (this.pos - p);
+      if (!Number.isFinite(sample)) sample = 0;
+
       if (this.fade > 0) {
-        out[i] =
-          this.lastSample + (out[i] - this.lastSample) * (1 - this.fade / 128);
+        sample = this.lastSample + (sample - this.lastSample) * (1 - this.fade / 128);
         this.fade--;
       }
-      this.lastSample = out[i];
+      this.lastSample = Number.isFinite(sample) ? sample : 0;
+      out[i] = this.lastSample;
       this.stableFrames++;
       if (this.stableFrames > sampleRate * 60) {
         this.targetSeconds = Math.max(0.12, this.targetSeconds - 0.01);
@@ -108,10 +127,14 @@ class PCMPlayer extends AudioWorkletProcessor {
       }
       this.playedFrames++;
       this.pos += step;
-      this.buffered -= step;
+      this.buffered = Math.max(0, this.buffered - step);
       while (this.queue[0] && this.pos >= this.queue[0].length) {
         this.pos -= this.queue[0].length;
         this.queue.shift();
+      }
+      if (!this.queue.length) {
+        this.pos = 0;
+        this.buffered = 0;
       }
     }
     return true;

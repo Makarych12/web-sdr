@@ -178,9 +178,11 @@ export class KiwiProtocol {
               ? "Все каналы приёмника заняты. Выберите другой приёмник или повторите позже."
               : key === "badp"
                 ? "Приёмник требует пароль или ограничивает доступ."
-                : `Приёмник остановил сеанс: ${key}=${val}`,
+                : key === "ip_limit"
+                  ? "Лимит подключений с IP. Освобождаем слот приёмника."
+                  : `Приёмник остановил сеанс: ${key}=${val}`,
             key,
-            !["badp", "ip_limit", "tlimit", "inactivity_timeout"].includes(key),
+            !["badp", "tlimit"].includes(key),
           );
         if (key === "audio_rate")
           this.send(ws, `SET AR OK in=${Number(val)} out=44100`);

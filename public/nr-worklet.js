@@ -165,7 +165,8 @@ class WienerNR extends AudioWorkletProcessor {
     }
     if (!this.working) { this.clear(); this.working = true; this.amount = this.strength; }
     for (let i = 0; i < output.length; i++) {
-      const dry = source ? source[i] : 0;
+      let dry = source ? source[i] : 0;
+      if (!Number.isFinite(dry)) dry = 0;
       if (!wanted && this.mix === 0) { output[i] = dry; continue; }
       this.input[this.write] = dry;
       this.write = (this.write + 1) & this.mask;
@@ -176,7 +177,8 @@ class WienerNR extends AudioWorkletProcessor {
       if (++this.pending === this.hop) { this.pending = 0; this.frame(); }
       const targetMix = wanted && this.samples > this.size ? 1 : 0;
       this.mix += Math.max(-this.fadeStep, Math.min(this.fadeStep, targetMix - this.mix));
-      output[i] = this.mix === 0 ? dry : dry + this.mix * (wet - dry);
+      const sample = this.mix === 0 ? dry : dry + this.mix * (wet - dry);
+      output[i] = Number.isFinite(sample) ? sample : 0;
     }
     return true;
   }

@@ -620,11 +620,24 @@ function App() {
         lock = null;
       } else if (wanted) {
         void acquire();
+        if (context.current?.state === "suspended") void context.current.resume();
+        if (media.current?.audio?.paused && context.current?.state === "running") void media.current.play().catch(() => {});
       }
     };
+    const audioWatchdog = setInterval(() => {
+      if (wanted && context.current) {
+        if (context.current.state === "suspended") {
+          void context.current.resume();
+        }
+        if (media.current?.audio?.paused && context.current.state === "running") {
+          void media.current.play().catch(() => {});
+        }
+      }
+    }, 2500);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       released = true;
+      clearInterval(audioWatchdog);
       document.removeEventListener("visibilitychange", onVisibility);
       void lock?.release().catch(() => {});
     };
@@ -739,10 +752,12 @@ function App() {
         const samples = new Float32Array((v.length - 1) / 2);
         for (let i = 0; i < samples.length; i++)
           samples[i] = dv.getInt16(1 + i * 2, false) / 32768;
-        if (settings.current.mode === "USB") ft8Decoder.current?.push(samples, rate.current);
-        cwDecoder.current?.push(samples, rate.current);
-        afInput.current?.(samples, rate.current);
-        scanner.current?.audio(samples, rate.current, settings.current.lowCut, settings.current.highCut);
+        if (settings.current.mode === "USB") {
+          try { ft8Decoder.current?.push(samples, rate.current); } catch {}
+        }
+        try { cwDecoder.current?.push(samples, rate.current); } catch {}
+        try { afInput.current?.(samples, rate.current); } catch {}
+        try { scanner.current?.audio(samples, rate.current, settings.current.lowCut, settings.current.highCut); } catch {}
         player.current?.port.postMessage({ samples, rate: rate.current }, [
           samples.buffer,
         ]);
@@ -981,9 +996,10 @@ function App() {
             state: context.current?.state, hidden: document.hidden,
             desired: manager.current?.desired,
           });
-          if (context.current?.state !== "running")
+          if (context.current?.state !== "running") {
             media.current?.setState("paused");
-          else if (manager.current?.desired) void resumeAudio();
+            if (manager.current?.desired) void resumeAudio();
+          } else if (manager.current?.desired) void resumeAudio();
         };
       }
       await resumeAudio();

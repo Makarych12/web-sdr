@@ -241,7 +241,7 @@ export class StreamConnection {
                 message: reason,
                 attempt: this.attempts,
               });
-            } else this.retry(reason, v.code === "too_busy" ? 15000 : 0);
+            } else this.retry(reason, v.code === "too_busy" || v.code === "ip_limit" ? 12000 : 0);
             return;
           }
           this.options.onMessage(v);

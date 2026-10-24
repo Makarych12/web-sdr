@@ -78,6 +78,7 @@ class DSPNotch extends AudioWorkletProcessor {
     this.bankWidth[index] = width;
   }
   filter(bank, input) {
+    if (!Number.isFinite(input)) input = 0;
     const output = bank[0] * input + bank[5];
     bank[5] = bank[1] * input - bank[3] * output + bank[6];
     bank[6] = bank[2] * input - bank[4] * output;
@@ -85,6 +86,10 @@ class DSPNotch extends AudioWorkletProcessor {
     const second = bank[0] * output + bank[7];
     bank[7] = bank[1] * output - bank[3] * second + bank[8];
     bank[8] = bank[2] * output - bank[4] * second;
+    if (!Number.isFinite(second)) {
+      bank[5] = bank[6] = bank[7] = bank[8] = 0;
+      return input;
+    }
     return second;
   }
   beginAnalysis() {
@@ -203,7 +208,8 @@ class DSPNotch extends AudioWorkletProcessor {
     }
     const targetMix = wanted ? (this.auto ? 1 - 10 ** (-this.autoDepth / 20) : 1) : 0;
     for (let i = 0; i < output.length; i++) {
-      const dry = source ? source[i] : 0;
+      let dry = source ? source[i] : 0;
+      if (!Number.isFinite(dry)) dry = 0;
       if (analyse) {
         this.ring[this.write] = dry;
         this.write = (this.write + 1) & this.mask;
@@ -219,7 +225,8 @@ class DSPNotch extends AudioWorkletProcessor {
         if (this.bankMix === 1) { this.active = 1 - this.active; this.switching = false; }
       }
       this.mix += Math.max(-this.fadeStep, Math.min(this.fadeStep, targetMix - this.mix));
-      output[i] = this.mix === 0 ? dry : dry + this.mix * (wet - dry);
+      const sample = this.mix === 0 ? dry : dry + this.mix * (wet - dry);
+      output[i] = Number.isFinite(sample) ? sample : 0;
     }
     if (analyse) {
       if (this.analysisLength) this.analysisStep();
