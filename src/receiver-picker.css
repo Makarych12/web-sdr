@@ -2,11 +2,18 @@
    OCEAN BLUE / ICOM SDR SERVER EXPLORER STYLES
    ========================================================================== */
 
-.catalog-dialog {
+.catalog-dialog:not([open]) {
+  display: none !important;
+}
+
+.catalog-dialog[open] {
   width: min(1180px, calc(100vw - 20px));
   max-height: 90dvh;
   height: min(90dvh, 880px);
   margin: auto;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
   border: 1px solid #1a3c61;
   border-radius: 16px;
   background: radial-gradient(circle at 50% 0%, #0d223a 0%, #071220 100%);
@@ -655,12 +662,20 @@
 
 /* Mobile Responsiveness */
 @media (max-width: 640px) {
-  .catalog-dialog {
+  .catalog-dialog:not([open]) {
+    display: none !important;
+  }
+
+  .catalog-dialog[open] {
+    position: fixed;
+    inset: 0;
     width: 100vw;
     height: 100dvh;
     max-height: 100dvh;
     border-radius: 0;
     border: 0;
+    margin: 0;
+    z-index: 99999;
   }
 
   .explorer-head {

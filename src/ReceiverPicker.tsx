@@ -416,7 +416,11 @@ export const ReceiverPicker = memo(function ReceiverPicker({
   }, []);
 
   const closeCatalog = useCallback(() => {
-    dialog.current?.close();
+    try {
+      if (dialog.current?.open) {
+        dialog.current.close();
+      }
+    } catch {}
     setOpen(false);
   }, []);
 
@@ -483,15 +487,7 @@ export const ReceiverPicker = memo(function ReceiverPicker({
         onCancel={() => setOpen(false)}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
-            const r = e.currentTarget.getBoundingClientRect();
-            if (
-              e.clientX < r.left ||
-              e.clientX > r.right ||
-              e.clientY < r.top ||
-              e.clientY > r.bottom
-            ) {
-              closeCatalog();
-            }
+            closeCatalog();
           }
         }}
       >
@@ -509,6 +505,7 @@ export const ReceiverPicker = memo(function ReceiverPicker({
             </h2>
           </div>
           <button
+            type="button"
             className="explorer-close-btn"
             aria-label="Закрыть список серверов"
             onClick={closeCatalog}
