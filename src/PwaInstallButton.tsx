@@ -42,6 +42,9 @@ function detectBrowser(): BrowserType {
 
   if (isIos) return "safari_ios";
 
+  // Explicit browser identity takes priority over privacy/GPC heuristics.
+  if (/SamsungBrowser/i.test(ua)) return "samsung_internet";
+
   // DuckDuckGo detection:
   // 1. Explicit token in User-Agent (e.g. DuckDuckGo/5 or ddg_android)
   // 2. Client hints brands array
@@ -61,10 +64,6 @@ function detectBrowser(): BrowserType {
 
   if (hasDdgToken || hasDdgBrand || (isAndroid && isGpc)) {
     return isAndroid ? "duckduckgo_android" : "generic";
-  }
-
-  if (/SamsungBrowser/i.test(ua)) {
-    return "samsung_internet";
   }
 
   if (/EdgA?|Edge/i.test(ua)) {
@@ -124,13 +123,15 @@ const INSTRUCTIONS: Record<BrowserType, InstructionConfig> = {
     ],
   },
   samsung_internet: {
-    badge: "Samsung Internet",
-    title: "Установка в Samsung Internet",
-    supportsPwa: true,
+    badge: "Samsung Internet · Android",
+    title: "Установка через Google Chrome",
+    note: "Для установки приложения рекомендуем открыть UR4MTN WEB SDR в Google Chrome",
+    supportsPwa: false,
     steps: [
-      "В правом нижнем углу нажмите меню ☰ (или значок загрузки в строке адреса).",
-      "Выберите пункт «Добавить страницу в» → «Главный экран» (или «Установить веб-приложение»).",
-      "Подтвердите добавление кнопкой «Добавить».",
+      "Нажмите «Скопировать ссылку» ниже.",
+      "Откройте Google Chrome и вставьте ссылку в адресную строку.",
+      "В Chrome откройте меню ⋮ и выберите «Установить приложение» или «Добавить на главный экран», если этот пункт доступен.",
+      "Если Samsung Internet показывает предупреждение о старой версии Android или блокирует установку, продолжите в Chrome. Обходить предупреждение не нужно.",
     ],
   },
   safari_ios: {
@@ -202,6 +203,12 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
     useState<BeforeInstallPromptEvent | null>(null);
   const [modalBrowser, setModalBrowser] = useState<BrowserType | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2500);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   useEffect(() => {
     setIsStandalone(checkIsStandalone());
@@ -248,6 +255,14 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
   }
 
   const handleClick = async () => {
+    setCopied(false);
+    setCopyFailed(false);
+    const detected = detectBrowser();
+    // Samsung's WebAPK install may be blocked even when it exposes a prompt.
+    if (detected === "samsung_internet") {
+      setModalBrowser(detected);
+      return;
+    }
     // 1. If native install prompt is available, trigger it
     if (deferredPrompt) {
       try {
@@ -263,7 +278,6 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
     }
 
     // 2. If beforeinstallprompt is unavailable, ALWAYS open the instructional modal
-    const detected = detectBrowser();
     setModalBrowser(detected);
   };
 
@@ -287,9 +301,10 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      setCopyFailed(false);
     } catch {
-      // Fallback
+      setCopied(false);
+      setCopyFailed(true);
     }
   };
 
@@ -381,7 +396,7 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
                       ? "active"
                       : "")
                   }
-                  onClick={() => setModalBrowser("generic_android")}
+                  onClick={() => setModalBrowser(detectBrowser() === "samsung_internet" ? "samsung_internet" : "generic_android")}
                 >
                   Другие
                 </button>
@@ -453,10 +468,14 @@ export const PwaInstallButton = memo(function PwaInstallButton() {
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>
-                  {copied ? "✓ Ссылка скопирована!" : "Скопировать ссылку"}
+                  <span role="status">{copied ? "✓ Ссылка скопирована!" : "Скопировать ссылку"}</span>
                 </button>
               </div>
 
+              {copyFailed && <label className="pwa-copy-fallback">
+                <span role="status">Не удалось скопировать автоматически. Нажмите на адрес и скопируйте его вручную.</span>
+                <input aria-label="Адрес сайта для копирования" readOnly value={window.location.href} onFocus={event => event.currentTarget.select()} />
+              </label>}
               <button
                 type="button"
                 className="pwa-dialog-btn"

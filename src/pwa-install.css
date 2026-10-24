@@ -332,3 +332,12 @@
   }
 }
 
+
+/* The longer Samsung guidance remains reachable on small Android screens. */
+.pwa-dialog-backdrop { overflow-y:auto; }
+.pwa-dialog { min-width:0; max-height:calc(100dvh - 32px); overflow-y:auto; box-sizing:border-box; }
+.pwa-dialog-header > div { min-width:0; }
+.pwa-dialog-title { line-height:1.4; overflow-wrap:break-word; }
+.pwa-dialog-title .pwa-install-icon,.pwa-dialog-close { flex-shrink:0; }
+.pwa-copy-fallback { display:grid; gap:8px; margin:12px 0; font-size:13px; line-height:1.5; }
+.pwa-copy-fallback input { min-width:0; width:100%; box-sizing:border-box; padding:10px; border:1px solid #1c5594; border-radius:6px; background:#061e3b; color:#dbeafe; font:inherit; }
