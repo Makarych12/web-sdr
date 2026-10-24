@@ -26,7 +26,6 @@ import {
 } from "./tuning";
 import { WaterfallMode } from "./WaterfallMode";
 import { DEFAULT_WATERFALL_DISPLAY, validWaterfallDisplay } from "./waterfallMode";
-import { WaterfallColor } from "./WaterfallColor";
 import { readWaterfallTheme, WATERFALL_THEME_KEY, waterfallThemeGradient, validWaterfallTheme, type WaterfallTheme } from "./waterfallThemes";
 import { CwDecoderPanel } from "./CwDecoderPanel";
 import type { CwDecoder } from "./cwDecoder";
@@ -1660,6 +1659,7 @@ function App() {
             <BandPlan view={view} />
           </div>
           <div className="fall">
+            <WaterfallMode settings={waterfallDisplay} onChange={setWaterfallDisplay} theme={waterfallTheme} onThemeChange={setWaterfallTheme} />
             <DxMarkers spots={dxSpots} view={view} range={dxRange} onTune={tuneDx} waterfall />
             {filterBand && (
               <div
@@ -1700,8 +1700,6 @@ function App() {
             )}
           </div>
           <div className="visual-foot">
-            <WaterfallMode settings={waterfallDisplay} onChange={setWaterfallDisplay} />
-            <WaterfallColor theme={waterfallTheme} onChange={setWaterfallTheme} />
             <span>Касание — частота · два пальца — масштаб</span>
             <span>
               Шум · авто <i style={{background:waterfallThemeGradient(waterfallTheme)}} /> Сильный сигнал

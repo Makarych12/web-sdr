@@ -1,21 +1,35 @@
-.waterfall-mode { position:absolute; left:10px; bottom:calc(100% + 64px); z-index:5; }
-.waterfall-mode-launch { min-width:160px; min-height:44px; padding:6px 10px; border:1px solid #62b8dc; border-radius:7px; background:#102b3b; color:#e5fcff; text-align:left; font:11px monospace; box-shadow:0 2px 10px #0009; }
-.waterfall-mode-launch b,.waterfall-mode-launch small { display:block; }
-.waterfall-mode-launch small { margin-top:3px; color:#b7e6ee; font-size:10px; }
-.waterfall-mode-panel { box-sizing:border-box; width:min(360px,calc(100vw - 24px)); max-height:calc(100dvh - 32px); overflow:auto; padding:14px; border:1px solid #468194; border-radius:10px; background:#0b1726; color:#dcecff; }
-.waterfall-mode-panel::backdrop { background:#0008; }
-.waterfall-mode-panel header { display:flex; justify-content:space-between; align-items:center; padding:0; min-height:40px; gap:8px; font:12px monospace; }
-.waterfall-mode-panel header button { min-height:36px; min-width:36px; }
-.waterfall-mode-options { display:flex; gap:8px; margin:12px 0; }
-.waterfall-mode-options button { flex:1; padding:10px 6px; font:11px monospace; }
-.waterfall-mode-options button[aria-pressed="true"] { border-color:#76e4ff; color:#aff2ff; background:#153747; }
-.waterfall-mode-panel fieldset { margin:10px 0; padding:10px; border:1px solid #29455a; }
-.waterfall-mode-panel label { display:block; margin:6px 0 12px; font-size:12px; }
-.waterfall-mode-panel input { display:block; width:100%; margin-top:8px; }
-.waterfall-mode-panel p,.waterfall-mode-panel > small { font-size:11px; line-height:1.5; color:#adc0d1; }
-@media(max-width:600px) { .waterfall-mode { left:8px; } .waterfall-mode-launch { min-width:144px; } }
-
-.scope-levels legend { color:#8ec5d9; font:10px ui-monospace,monospace; letter-spacing:.08em; }
+.waterfall-settings { position:absolute; left:10px; bottom:10px; z-index:5; }
+.malachite .waterfall-settings-launch { display:grid; place-items:center; width:40px; height:40px; min-width:40px; min-height:40px; padding:0; border:1px solid #52778a99; border-radius:9px; color:#a6ccd9; background:#0c2031eF; box-shadow:0 2px 8px #0005; touch-action:manipulation; }
+.malachite .waterfall-settings-launch:hover { color:#c7f3f6; background:#183b4b; border-color:#6ebbc9; }
+.waterfall-settings-launch:focus-visible,.waterfall-mode-panel :focus-visible { outline:2px solid #7dd8e5; outline-offset:3px; }
+.waterfall-mode-panel { box-sizing:border-box; position:fixed; inset:auto; left:calc(var(--wf-viewport-left,0px) + var(--wf-viewport-width,100vw)/2); top:calc(var(--wf-viewport-top,0px) + var(--wf-viewport-height,100dvh)/2); transform:translate(-50%,-50%); margin:0; width:min(380px,calc(var(--wf-viewport-width,100vw) - 24px)); max-width:calc(var(--wf-viewport-width,100vw) - 24px); max-height:calc(var(--wf-viewport-height,100dvh) - 24px); overflow:auto; overscroll-behavior:contain; padding:16px; border:1px solid #36576b; border-radius:14px; background:linear-gradient(145deg,#102337,#0b1829 65%); color:#dcecf6; box-shadow:0 24px 80px #0008,inset 0 1px #ffffff09; scrollbar-width:thin; scrollbar-color:#36576b transparent; }
+.waterfall-mode-panel * { box-sizing:border-box; }
+.waterfall-mode-panel::backdrop { background:#02091399; }
+.waterfall-mode-panel header { position:static; display:flex; justify-content:space-between; align-items:center; padding:0 0 12px; min-height:42px; gap:8px; border-bottom:1px solid #294155; background:transparent; }
+.waterfall-mode-panel header strong { display:block; font:600 14px system-ui,sans-serif; color:#dfedf5; }
+.waterfall-mode-panel header small { display:block; margin-bottom:4px; color:#6f9aaa; font:8px ui-monospace,monospace; letter-spacing:.16em; }
+.waterfall-mode-panel header button { display:grid; place-items:center; width:36px; height:36px; min-height:36px; min-width:36px; padding:0; font:22px system-ui,sans-serif; color:#93b3c3; }
+.waterfall-settings-group { margin:14px 0; }
+.waterfall-settings-group h4 { margin:0 0 8px; color:#819fb5; font:9px ui-monospace,monospace; letter-spacing:.13em; }
+.waterfall-mode-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.waterfall-mode-options button { min-width:0; min-height:40px; padding:8px 3px; font:10px ui-monospace,monospace; white-space:nowrap; }
+.waterfall-theme-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.waterfall-theme-options button { position:relative; display:flex; align-items:center; gap:8px; min-width:0; min-height:44px; padding:8px; color:#b4c9d9; text-align:left; font:9px ui-monospace,monospace; }
+.waterfall-theme-preview { display:block; flex:0 0 23px; height:23px; border:1px solid #ffffff25; border-radius:4px; }
+.waterfall-theme-options button > span:nth-child(2) { min-width:0; line-height:1.5; }
+.waterfall-choice-check { margin-left:auto; color:#96e2e9; font-size:11px; }
+.waterfall-mode-panel button[aria-pressed="true"] { border-color:#508d9e; color:#afe5ec; background:#153b49; box-shadow:inset 0 0 12px #5cceea08; }
+.waterfall-adjustments { border-top:1px solid #294155; padding-top:4px; }
+.waterfall-adjustments > summary { min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:8px; color:#9dbbce; font-size:11px; cursor:pointer; list-style:none; }
+.waterfall-adjustments > summary::after { content:'＋'; color:#74a3b6; font-size:15px; }
+.waterfall-adjustments[open] > summary::after { content:'−'; }
+.waterfall-adjustments > summary::-webkit-details-marker { display:none; }
+.waterfall-mode-panel fieldset { min-width:0; margin:10px 0; padding:10px; border:1px solid #29455a; border-radius:6px; }
+.waterfall-mode-panel label { display:block; margin:6px 0 12px; color:#9eb7c9; font-size:11px; }
+.waterfall-mode-panel input { display:block; width:100%; margin-top:8px; accent-color:#65c1d2; }
+.waterfall-mode-panel p { margin:8px 0; color:#8fa7bb; font-size:11px; line-height:1.5; }
+.scope-levels legend { color:#8ec5d9; font:9px ui-monospace,monospace; letter-spacing:.04em; }
 .waterfall-mode-panel .scope-auto { display:flex; align-items:center; gap:8px; }
-.waterfall-mode-panel .scope-auto input { width:16px; height:16px; margin:0; accent-color:#56c5dd; }
+.waterfall-mode-panel .scope-auto input { width:16px; height:16px; margin:0; }
 .scope-levels > small { color:#8fa8bb; font-size:10px; line-height:1.5; }
+@media(max-width:600px) { .waterfall-settings { left:8px; bottom:8px; } .waterfall-mode-panel { padding:14px; border-radius:12px; } }
