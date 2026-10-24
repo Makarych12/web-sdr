@@ -76,7 +76,8 @@ test("stop cancels pending retries; access restrictions do not reconnect", (t) =
   sockets[0].open();
   sockets[0].message({ type: "error", retryable: false, message: "Limit" });
   assert.equal(states.at(-1).phase, "blocked");
-  assert.equal(c.desired, false);
+  assert.equal(c.desired, true);
+  c.recoverAfterSleep();
   t.mock.timers.tick(60000);
   assert.equal(sockets.length, 1);
 });
@@ -107,20 +108,45 @@ test("remote refusal never retries or switches the selected receiver", (t) => {
   c.start();sockets[0].open();
   sockets[0].message({type:'error',code:'badp',retryable:false,message:'Access refused'});
   t.mock.timers.tick(120000);c.recoverAfterSleep();
-  assert.equal(switched,0);assert.equal(sockets.length,1);assert.equal(c.desired,false);assert.equal(states.at(-1).phase,'blocked');
+  assert.equal(switched,0);assert.equal(sockets.length,1);assert.equal(c.desired,true);assert.equal(states.at(-1).phase,'blocked');
 });
-test("bounded recovery survives short healthy runs and wake events without endless retries", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
-  const { c,sockets,states }=setup();c.start();
-  for(let n=0;n<6;n++){
-    const socket=sockets[n];socket.open();t.mock.timers.tick(6000);
-    for(let k=0;k<6;k++)for(const type of[1,2])socket.onmessage({data:Uint8Array.of(type).buffer});
-    socket.close();c.recoverAfterSleep();
-    if(n<5)t.mock.timers.tick(1000);
+test("transport recovery continues beyond five failures with bounded backoff until STOP", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1000 });
+  const { c, sockets, states } = setup(); c.start(); c.setBackground(true);
+  for (let n = 0; n < 12; n++) {
+    const socket = sockets[n]; socket.open(); socket.close();
+    assert.equal(c.desired, true);
+    assert.equal(states.at(-1).phase, "retrying");
+    const delay = states.at(-1).retryAt - Date.now();
+    assert.equal(delay, Math.min(30000, 1000 * 2 ** Math.min(5, n)));
+    t.mock.timers.tick(delay - 1);
+    assert.equal(sockets.length, n + 1, "no early or duplicate connection");
+    t.mock.timers.tick(1);
+    assert.equal(sockets.length, n + 2);
+    assert.equal(sockets.filter(s => s.readyState < 2).length, 1);
   }
-  assert.equal(sockets.length,6);assert.equal(c.desired,false);assert.equal(states.at(-1).phase,'blocked');
-  t.mock.timers.tick(120000);c.recoverAfterSleep();assert.equal(sockets.length,6);
-  c.start();assert.equal(sockets.length,7);c.stop();
+  c.stop(); t.mock.timers.tick(120000); c.recoverAfterSleep();
+  assert.equal(c.desired, false); assert.equal(sockets.length, 13);
+});
+
+test("foreground wake bypasses pending retry once, cancels old timer and preserves backoff", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1000 });
+  const { c, sockets, states } = setup(); c.start(); c.setBackground(true);
+  for (let n = 0; n < 7; n++) {
+    sockets[n].open(); sockets[n].close();
+    if (n < 6) t.mock.timers.tick(Math.min(30000, 1000 * 2 ** n));
+  }
+  assert.equal(states.at(-1).retryAt - Date.now(), 30000);
+  c.setBackground(false); c.recoverAfterSleep();
+  assert.equal(sockets.length, 8, "wake immediately connects the lost stream");
+  for (let n = 0; n < 10; n++) c.recoverAfterSleep();
+  assert.equal(sockets.length, 8);
+  sockets[7].open(); sockets[7].close(); c.recoverAfterSleep();
+  assert.equal(sockets.length, 8, "repeated wake within 5 seconds respects backoff");
+  assert.equal(states.at(-1).retryAt - Date.now(), 30000);
+  t.mock.timers.tick(29999); assert.equal(sockets.length, 8);
+  t.mock.timers.tick(1); assert.equal(sockets.length, 9);
+  c.stop();
 });
 
 test("gateway disconnect and stream timeout retry the same Kiwi without failover", (t) => {
@@ -347,5 +373,22 @@ test("hidden silence and delayed watchdog do not discard an open transport", (t)
   t.mock.timers.setTime(601000);
   t.mock.timers.tick(1000);
   assert.equal(sockets[0].readyState, 1, "overdue timer must allow queued packets");
+  c.stop();
+});
+
+
+test("repeated foreground lifecycle events cannot postpone a stale PCM recovery", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1000 });
+  const { c, sockets } = setup();
+  c.start(); c.start();
+  assert.equal(sockets.length, 1, "START is idempotent while desired");
+  sockets[0].open(); c.setBackground(true);
+  t.mock.timers.setTime(301000);
+  c.setBackground(false);
+  for (let i = 0; i < 8; i++) {
+    c.recoverAfterSleep(); t.mock.timers.tick(1000);
+  }
+  assert.equal(sockets.length, 2);
+  assert.equal(sockets[0].readyState, 3);
   c.stop();
 });

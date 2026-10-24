@@ -837,26 +837,9 @@ function App() {
       },
       onDiagnostic: (event) => {
         radioLog.record(String(event.type), event);
-        if (
-          event.type === "upstream_error" &&
-          event.code === "connection" &&
-          event.failures === 2 &&
-          event.fallbackEligible === true &&
-          manager.current?.socket instanceof DirectKiwiSocket &&
-          !manager.current.socket.receivedAudio
-        ) {
-          const id = receiverRef.current;
-          if (
-            availableReceivers.current.find((r) => r.id === id)?.directUrl &&
-            !gatewayFallbackRef.current.has(id)
-          ) {
-            gatewayFallbackRef.current.add(id);
-            setGatewayFallback([...gatewayFallbackRef.current]);
-            setReceiverChange(
-              "Прямой WSS недоступен. Повторяем этот сервер через шлюз.",
-            );
-          }
-        }
+        // A generic connection error (including Android sleep / code 1006)
+        // does not establish that the direct endpoint requires a gateway.
+        // Keep the selected transport on automatic recovery.
         console.info("WebSDR lifecycle", {
           ...event,
           at: new Date().toISOString(),

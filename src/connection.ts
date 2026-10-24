@@ -38,7 +38,8 @@ export class StreamConnection {
   private generation = 0;
   private attempts = 0;
   private failures = 0;
-  private reconnects = 0;
+  private accessBlocked = false;
+  private lastWakeReconnectAt = -Infinity;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private watchdog: ReturnType<typeof setInterval> | undefined;
   private options: Options;
@@ -59,25 +60,40 @@ export class StreamConnection {
     this.socket?.setBackground?.(hidden);
   }
   recoverAfterSleep() {
-    if (!this.desired || this.timer !== undefined) return;
-    this.lastTick = Date.now();
-    const age = Date.now() - (this.lastAudioAt || this.startedAt);
-    if (!this.socket || this.socket.readyState > 1) this.retry("Соединение прервано после сна. Восстанавливаем текущий Kiwi.");
-    else {
-      if (age >= 22000) this.resumeUntil = Date.now() + 5000;
-      this.socket.resume?.();
+    if (!this.desired || this.accessBlocked) return;
+    const now = Date.now();
+    this.lastTick = now;
+    const age = now - (this.lastAudioAt || this.startedAt);
+    const lost = !this.socket || this.socket.readyState > 1;
+    this.options.onDiagnostic?.({ type: "wake_check", pcmAgeMs: age, lost, retryPending: this.timer !== undefined });
+    if (lost) {
+      // Foreground wake may bypass a pending backoff once, without resetting it.
+      // Repeated lifecycle events cannot create a rapid reconnect loop.
+      if (!this.background && now - this.lastWakeReconnectAt >= 5000 &&
+          (typeof navigator === "undefined" || navigator.onLine !== false)) {
+        this.lastWakeReconnectAt = now;
+        this.connect();
+      } else if (this.timer === undefined) {
+        this.retry("Соединение прервано после сна. Восстанавливаем текущий Kiwi.");
+      }
+    } else if (this.timer === undefined) {
+      // Do not let repeated pageshow/resume events postpone the PCM deadline.
+      if (age >= 22000 && this.resumeUntil === 0) this.resumeUntil = now + 5000;
+      if (age < 22000 || now < this.resumeUntil) this.socket?.resume?.();
     }
   }
   constructor(options: Options) {
     this.options = options;
   }
   start() {
+    if (this.desired) return;
     this.desired = true;
     this.receivedSessionAudio = false;
     this.fallbackEligible = !this.background;
     this.attempts = 0;
     this.failures = 0;
-    this.reconnects = 0;
+    this.accessBlocked = false;
+    this.lastWakeReconnectAt = -Infinity;
     this.connect();
   }
   stop() {
@@ -91,7 +107,8 @@ export class StreamConnection {
     if (this.desired) {
       this.attempts = 0;
       this.failures = 0;
-      this.reconnects = 0;
+      this.accessBlocked = false;
+      this.lastWakeReconnectAt = -Infinity;
       this.connect();
     }
   }
@@ -99,7 +116,8 @@ export class StreamConnection {
     if (this.desired) {
       this.attempts = 0;
       this.failures = 0;
-      this.reconnects = 0;
+      this.accessBlocked = false;
+      this.lastWakeReconnectAt = -Infinity;
       this.connect();
     }
   }
@@ -216,7 +234,7 @@ export class StreamConnection {
                 !this.background && Date.now() - this.lastTick <= 5000,
             });
             if (v.retryable === false) {
-              this.desired = false;
+              this.accessBlocked = true;
               this.disposeSocket();
               this.options.onState({
                 phase: "blocked",
@@ -305,12 +323,6 @@ export class StreamConnection {
     if (!this.desired) return;
     this.options.onDiagnostic?.({ type: "retry_requested", reason });
     this.disposeSocket();
-    if(this.reconnects>=5){
-      this.desired=false;
-      this.options.onState({phase:'blocked',message:`${reason} Автовосстановление остановлено после 5 попыток. Нажмите подключение для нового сеанса.`,attempt:this.attempts});
-      return;
-    }
-    this.reconnects++;
     const delay = Math.max(
       minDelay,
       Math.round(
