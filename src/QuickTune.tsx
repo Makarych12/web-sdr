@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MODES, type Mode } from "./radio";
+import { dxBand } from "./dxCluster";
 import { useStoredState } from "./storage";
 import {
   defaultQuickFrequencies,
@@ -73,44 +74,37 @@ export function QuickTune({
     setNotice(`Сохранено: ${entry.name} · ${entry.mode}`);
     return true;
   }
-  function card(entry: QuickFrequency, pinned: boolean) {
+  function card(entry: QuickFrequency, pinned: boolean, index: number) {
     const active =
       Math.abs(entry.frequency - frequency) < 0.0005 && entry.mode === mode;
     return (
-      <div
-        className={"quick-card" + (active ? " active" : "")}
-        key={quickKey(entry)}
-      >
+      <div className={"quick-card" + (active ? " active" : "")} key={quickKey(entry)}>
         <button
           className="quick-station"
           aria-label={`Настроить ${entry.name}, ${entry.frequency} кГц, ${entry.mode}`}
           aria-pressed={active}
           onClick={() => onTune(entry.frequency, entry.mode, entry.width)}
         >
-          <span>{entry.name}</span>
-          <strong>{quickLabel(entry.frequency)}</strong>
-          <small>
-            {entry.mode}
-            {active ? (connected ? " · В эфире" : " · Выбрана") : ""}
-          </small>
+          {pinned && <span className="quick-channel">CH {String(index + 1).padStart(2, "0")}
+            <span className="quick-state">{active ? (connected ? "В эфире" : "Выбрана") : ""}</span>
+          </span>}
+          <strong className={"quick-value" + (quickLabel(entry.frequency).replace(" MHz", "").length > 7 ? " quick-value-precise" : "")}>{quickLabel(entry.frequency).replace(" MHz", "")}<small>MHz</small></strong>
+          <span className="quick-title" title={entry.name}>{entry.name}</span>
+          <span className="quick-meta"><span>{dxBand(entry.frequency) ?? (entry.frequency < 3000 ? "ДВ / СВ" : "КВ")}</span><span className="quick-mode">{entry.mode}</span></span>
         </button>
-        <button
-          className="quick-action"
-          aria-label={
-            pinned
-              ? `Убрать из быстрой настройки ${entry.name}`
-              : `Закрепить ${entry.name}`
+        {pinned ? <details className="quick-menu" onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
+        }} onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.currentTarget.open = false;
+            event.currentTarget.querySelector("summary")?.focus();
           }
-          onClick={() =>
-            pinned
-              ? setSaved((list) =>
-                  list.filter((v) => quickKey(v) !== quickKey(entry)),
-                )
-              : save(entry, true)
-          }
-        >
-          {pinned ? "×" : "☆"}
-        </button>
+        }}>
+          <summary aria-label={`Меню станции ${entry.name}`} title="Действия со станцией">⋯</summary>
+          <button type="button" onClick={() => setSaved((list) => list.filter((v) => quickKey(v) !== quickKey(entry)))}
+            aria-label={`Убрать из быстрой настройки ${entry.name}`}>Удалить из памяти</button>
+        </details> : <button type="button" className="quick-action" aria-label={`Закрепить ${entry.name}`}
+          onClick={() => save(entry, true)}>☆</button>}
       </div>
     );
   }
@@ -119,7 +113,7 @@ export function QuickTune({
       <div className="quick-heading">
         <div>
           <span className="eyebrow">ВАШИ ЧАСТОТЫ</span>
-          <h3>Быстрая настройка</h3>
+          <h3>MEMORY BANK <span className="quick-count">{String(saved.length).padStart(2, "0")} / 24</span></h3>
         </div>
         <button
           className="quick-save"
@@ -132,7 +126,7 @@ export function QuickTune({
         </button>
       </div>
       <div className="quick-list" aria-label="Закреплённые частоты">
-        {saved.map((v) => card(v, true))}
+        {saved.map((v, index) => card(v, true, index))}
       </div>
       {!saved.length && (
         <p className="quick-hint">
@@ -222,18 +216,17 @@ export function QuickTune({
           {notice}
         </p>
       )}
+      <div className="quick-recent">
       <div className="quick-recent-heading">
         <h4>Недавние</h4>
         {recent.length > 0 && (
           <button onClick={() => setRecent([])}>Очистить историю</button>
         )}
       </div>
-      <p className="quick-hint">
-        Последние 6 частот сохраняются автоматически через 2 секунды после
-        настройки. ☆ — закрепить.
-      </p>
-      <div className="quick-list" aria-label="Недавние частоты">
-        {recent.map((v) => card(v, false))}
+      {!recent.length && <p className="quick-hint">Здесь появятся последние частоты после настройки.</p>}
+      <div className="quick-recent-list" aria-label="Недавние частоты">
+        {recent.map((v, index) => card(v, false, index))}
+      </div>
       </div>
     </section>
   );
