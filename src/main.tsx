@@ -16,6 +16,7 @@ import "./brand.css";
 import "./console.css";
 import "./features.css";
 import "./control-panel.css";
+import "./ocean-controls.css";
 import {
   parseFrequency,
   MODE_STEP,
@@ -90,6 +91,10 @@ type View = {
 };
 function App() {
   const recording = useWavRecording();
+  const originalControls = useRef<HTMLElement>(null);
+  function launchExistingControl(selector: string) {
+    originalControls.current?.querySelector<HTMLButtonElement>(selector)?.click();
+  }
   const [waterfallTheme,setWaterfallTheme]=useStoredState<WaterfallTheme>(WATERFALL_THEME_KEY,readWaterfallTheme(),validWaterfallTheme);
   const [waterfallDisplay,setWaterfallDisplay]=useStoredState("ur4mtn.waterfall-display.v1",DEFAULT_WATERFALL_DISPLAY,validWaterfallDisplay);
   const ft8Decoder = useRef<Ft8Receiver | null>(null);
@@ -1209,6 +1214,7 @@ function App() {
           </div>
         )}
         <section
+          ref={originalControls}
           className={"control-panel panel" + (connected ? " receiving" : "")}
           onKeyDown={(e) => {
             if (
@@ -1311,12 +1317,7 @@ function App() {
                 />
                 <span>kHz</span>
               </form>
-              <FrequencyNudges
-                onNudge={(deltaHz) => {
-                  tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
-                  manager.current?.flushTune();
-                }}
-              />
+
             </div>
             <VfoDial
               frequencyHz={frequencyHz}
@@ -1326,6 +1327,12 @@ function App() {
               onTune={(hz) => tune(hz / 1000)}
               onEnd={() => manager.current?.flushTune()}
             />
+              <FrequencyNudges
+                onNudge={(deltaHz) => {
+                  tune(Math.max(0, Math.min(30000000, frequencyHz + deltaHz)) / 1000);
+                  manager.current?.flushTune();
+                }}
+              />
             <SMeter rssi={rssi} />
             <div
               className="signal-settings"
@@ -1706,6 +1713,10 @@ function App() {
             </span>
           </div>
         </section>
+        <nav className="ocean-tools panel" aria-label="Инструменты приёма">
+          {[['DX CLUSTER','.dx-launch'],['CW DECODER','.cw-dec-launch'],['FT8 PRO','.ft8-launch'],['DSP LAB','.dsp-lab-launch']].map(([label,selector]) =>
+            <button type="button" key={label} aria-label={`Открыть ${label} под водопадом`} onClick={()=>launchExistingControl(selector)}><span className="ocean-tool-dot" aria-hidden="true"/>{label}<span className="ocean-tool-open" aria-hidden="true">↗</span></button>)}
+        </nav>
         <div
           className="precision-controls panel"
           role="group"
@@ -1723,7 +1734,19 @@ function App() {
             maxZoom={maxZoom}
             onRecenter={() => changeView(frequency, zoom)}
             onZoom={changeZoom}
-          />
+          >
+            <div className="ocean-af-controls" role="group" aria-label="Обработка возле малого валкодера">
+              <button type="button" aria-label="EQ возле малого валкодера" aria-pressed={eqSettings.enabled} onClick={()=>launchExistingControl('.eq-launch')}>EQ <small>{eqSettings.enabled?'ON':'OFF'}</small></button>
+              <button type="button" aria-label="NOTCH возле малого валкодера" aria-pressed={notchEnabled} onClick={()=>launchExistingControl('.notch-widget > button')}>NOTCH <small>{notchEnabled?'ON':'OFF'}</small></button>
+              <button type="button" aria-label="NR возле малого валкодера" aria-pressed={nrEnabled} onClick={()=>launchExistingControl('.nr-widget > button')}>NR <small>{nrEnabled?'ON':'OFF'}</small></button>
+              <button type="button" aria-label="FILTER возле малого валкодера" title={`Полоса ${cuts.highCut-cuts.lowCut} Hz`} onClick={()=>{
+                const control=originalControls.current?.querySelector<HTMLInputElement>('.filter-control input');
+                control?.scrollIntoView({behavior:'smooth',block:'center'});
+                control?.focus({preventScroll:true});
+              }}>FILTER <small>ON · {cuts.highCut-cuts.lowCut} Hz</small></button>
+              <button type="button" className="ocean-log" aria-label="LOG возле малого валкодера" onClick={()=>launchExistingControl('.log-launch')}>LOG <small>↗ Журнал</small></button>
+            </div>
+          </FineTune>
         </div>
         <BandSelector
           tune={(f, m) => tune(f, m, Math.min(6, maxZoom), widths[m], f)}

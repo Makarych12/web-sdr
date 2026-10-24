@@ -103,13 +103,8 @@ try {
         );
     }
     assert.equal(await buttons.count(), 6);
-    assert.deepEqual(await buttons.allTextContents(), [
-      "---",
-      "--",
-      "-",
-      "+",
-      "++",
-      "+++",
+    assert.deepEqual(await buttons.locator('span').allTextContents(), [
+      "10 kHz", "1 kHz", "100 Hz", "100 Hz", "1 kHz", "10 kHz",
     ]);
     const checks = [];
     for (let i = 0; i < deltas.length; i++) {

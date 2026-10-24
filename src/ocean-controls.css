@@ -1,0 +1,29 @@
+/* Layout and shortcuts only; all receivers, dialogs and signal states are shared. */
+.control-panel.panel > .tuner { grid-template-areas:"dial frequency meter" "dial frequency signal" "nudges frequency signal"; }
+.control-panel.panel > .tuner > .frequency-nudges { grid-area:nudges; align-self:start; margin:0 auto; }
+.ocean-tools.panel { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; padding:10px 12px; margin:0 0 10px; border:1px solid #294359; border-radius:10px; background:linear-gradient(110deg,#10263a,#0b1a2b); }
+.ocean-tools button { display:flex; align-items:center; justify-content:center; gap:9px; min-width:0; min-height:40px; padding:8px 10px; border:1px solid #2e4b63; border-radius:6px; background:#102337; color:#a9c8dc; font:10px ui-monospace,monospace; letter-spacing:.04em; }
+.ocean-tool-dot { width:4px; height:4px; border-radius:50%; background:#67a9c0; flex-shrink:0; }
+.ocean-tool-open { color:#648ba4; font-size:13px; }
+.ocean-tools button:hover { border-color:#5995ab; color:#d0f1f4; background:#163449; }
+.ocean-tools button:focus-visible,.ocean-af-controls button:focus-visible { outline:2px solid #73cbdc; outline-offset:2px; }
+.ocean-tools + .precision-controls { min-width:0; padding:12px 20px; margin-bottom:14px; border-top:1px solid #26466b; }
+.ocean-af-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; min-width:0; }
+.ocean-af-controls button { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; min-height:34px; padding:6px 8px; border:1px solid #2b475f; border-radius:5px; background:#102438; color:#a9c5d9; font:10px ui-monospace,monospace; }
+.ocean-af-controls button small { color:#7896ac; font:8px ui-monospace,monospace; white-space:nowrap; }
+.ocean-af-controls button[aria-pressed="true"] { border-color:#467b8d; color:#b3e5ed; background:#143344; }
+.ocean-af-controls button[aria-pressed="true"] small { color:#82d6dc; }
+.ocean-af-controls .ocean-log { grid-column:1/-1; min-height:28px; background:#0c1c2e; color:#8daabe; }
+@media(max-width:900px) {
+ .control-panel.panel > .tuner { grid-template-areas:"frequency" "dial" "nudges" "meter" "signal"; }
+ .ocean-tools + .precision-controls { padding:14px 12px; }
+ .ocean-tools.panel { padding:8px; gap:6px; }
+ .ocean-af-controls button { flex-wrap:wrap; gap:3px; }
+}
+@media(max-width:600px) {
+ .ocean-tools.panel { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .ocean-tools button { min-height:38px; font-size:10px; }
+ .ocean-tools + .precision-controls .fine-tune { column-gap:10px; }
+ .ocean-af-controls button { padding:6px; font-size:9px; }
+ .ocean-af-controls button small { font-size:8px; }
+}
