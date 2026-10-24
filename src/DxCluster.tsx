@@ -1,23 +1,82 @@
 import { useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
-import { dxAvailable, dxBand, freshDx, projectDx, type DxRange, type DxSpot } from "./dxCluster";
+import { BANDS, dxAvailable, dxBand, freshDx, projectDx, type DxRange, type DxSpot } from "./dxCluster";
 import { MODES, type Mode } from "./radio";
 import type { DxFeed } from "./useDxCluster";
 import "./dx-cluster.css";
+
 export type DxClusterHandle = { open: () => void };
-type Props = { openRef?: Ref<DxClusterHandle>; feed: DxFeed; frequency: number; range: DxRange; currentBandOnly: boolean; onBandOnly: (value: boolean) => void; onTune: (spot: DxSpot) => void };
+type Props = {
+  openRef?: Ref<DxClusterHandle>;
+  feed: DxFeed;
+  frequency: number;
+  range: DxRange;
+  currentBandOnly: boolean;
+  onBandOnly: (value: boolean) => void;
+  onTune: (spot: DxSpot) => void;
+};
+
 const utc = (time: number) => new Date(time).toISOString().slice(11,19);
+
 export function DxClusterPanel(props: Props) {
   const { feed, frequency, range, currentBandOnly, onBandOnly, onTune } = props;
+  const [selectedBand, setSelectedBand] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const open = () => { feed.enable(); if (!dialog.current?.open) dialog.current?.showModal(); };
   useImperativeHandle(props.openRef, () => ({ open }));
   const band = dxBand(frequency);
-  const spots = currentBandOnly && !band ? [] : freshDx(feed.spots, feed.now, currentBandOnly ? band : null);
+  const activeBand = currentBandOnly ? (band ?? "__none__") : selectedBand;
+  const spots = activeBand === "__none__" ? [] : freshDx(feed.spots, feed.now, activeBand);
+
   return <>
     <button type="button" className="dx-launch" aria-label="Открыть DX CLUSTER" title="DX Cluster · реальные споты HamQTH" onClick={open}>DX CLUSTER</button>
     <dialog className="dx-panel" ref={dialog} aria-labelledby="dx-title" onKeyDown={e => e.stopPropagation()}>
-      <header><strong id="dx-title">DX CLUSTER</strong><button type="button" aria-label="Закрыть DX CLUSTER" onClick={() => dialog.current?.close()}>×</button></header>
-      <label><input type="checkbox" checked={currentBandOnly} onChange={e => onBandOnly(e.target.checked)} />Текущий диапазон{band ? ` · ${band}` : " · вне любительских КВ-диапазонов"}</label>
+      <header>
+        <strong id="dx-title">DX CLUSTER</strong>
+        <div className="dx-header-actions">
+          <button type="button" className="dx-refresh" aria-label="Обновить DX spots" title="Обновить споты HamQTH" onClick={() => feed.refresh()}>⟳</button>
+          <button type="button" aria-label="Закрыть DX CLUSTER" onClick={() => dialog.current?.close()}>×</button>
+        </div>
+      </header>
+
+      <div className="dx-band-selector" role="group" aria-label="Фильтр по диапазону">
+        <button
+          type="button"
+          className={!currentBandOnly && !selectedBand ? "active" : ""}
+          onClick={() => { setSelectedBand(null); onBandOnly(false); }}
+        >
+          Все
+        </button>
+        {BANDS.map(([b]) => (
+          <button
+            type="button"
+            key={b}
+            className={(!currentBandOnly && selectedBand === b) || (currentBandOnly && band === b) ? "active" : ""}
+            onClick={() => {
+              if (selectedBand === b && !currentBandOnly) {
+                setSelectedBand(null);
+              } else {
+                setSelectedBand(b);
+                onBandOnly(false);
+              }
+            }}
+          >
+            {b}
+          </button>
+        ))}
+      </div>
+
+      <label>
+        <input
+          type="checkbox"
+          checked={currentBandOnly}
+          onChange={e => {
+            onBandOnly(e.target.checked);
+            if (e.target.checked) setSelectedBand(null);
+          }}
+        />
+        Текущий диапазон{band ? ` · ${band}` : " · вне любительских КВ-диапазонов"}
+      </label>
+
       <small>Последние 200 сообщений, не старше 30 минут. Обновление раз в 60 с при видимой вкладке.</small>
       {feed.error && <p role="alert">{feed.error} Метки скрыты; список — последнее полученное состояние.</p>}
       {!range && <p>Диапазон приёмника пока неизвестен; переход по частоте недоступен.</p>}
@@ -34,6 +93,7 @@ export function DxClusterPanel(props: Props) {
     </dialog>
   </>;
 }
+
 export function DxMarkers({ spots, view, range, onTune, waterfall = false }: { spots: DxSpot[]; view: { start: number; span: number }; range: DxRange; onTune: (spot: DxSpot) => void; waterfall?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const [width,setWidth] = useState(0);

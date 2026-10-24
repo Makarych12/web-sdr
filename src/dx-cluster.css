@@ -1,9 +1,15 @@
 .control-panel .dx-launch { position: absolute; bottom: -14px; left: 10px; width: 88px; white-space: nowrap; z-index: 20; min-height: 28px; padding: 3px 7px; font-size: 11px; background: #0b1726; }
 .dx-panel { width: min(440px,calc(100vw - 24px)); max-height: 82dvh; overflow: auto; box-sizing: border-box; padding: 14px; color: #dcecff; background: #0b1726; border: 1px solid #26466b; border-radius: 10px; }
 .dx-panel::backdrop { background: #0008; }
-.dx-panel header { display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px; }
+.dx-panel header { display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px; }
+.dx-header-actions { display:flex; gap:6px; align-items:center; }
+.dx-header-actions button { min-height:26px; padding:2px 8px; font-size:13px; }
+.dx-band-selector { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0; }
+.dx-band-selector button { flex:1 0 auto; min-height:24px; padding:2px 6px; font-size:11px; background:#112338; border:1px solid #234261; border-radius:4px; color:#9ec5e8; cursor:pointer; }
+.dx-band-selector button:hover { background:#163250; border-color:#3a6a9b; color:#c7e6ff; }
+.dx-band-selector button.active { background:#1b4a70; border-color:#65b8f5; color:#ffffff; font-weight:bold; }
 .dx-panel button { min-height: 30px; padding: 4px 8px; font-size: 12px; }
-.dx-panel label { display:flex; align-items:center; gap:6px; margin:10px 0; font-size:12px; }
+.dx-panel label { display:flex; align-items:center; gap:6px; margin:8px 0; font-size:12px; }
 .dx-panel label input { width:auto; }
 .dx-panel small,.dx-panel p { display:block; color:#9eb4cc; font-size:11px; overflow-wrap:anywhere; }
 .dx-panel a { color:#76e4ff; }

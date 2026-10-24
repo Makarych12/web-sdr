@@ -180,7 +180,8 @@ export function useSpectrumGesture(options: Options) {
         g.intent = "horizontal";
       }
     }
-    if (Math.max(dx, dy) > 5) g.moved = true;
+    const slop = e.pointerType === "touch" ? 12 : 5;
+    if (Math.max(dx, dy) > slop) g.moved = true;
     if (!g.moved) return;
     if (g.mode === "band") {
       const cuts = g.cuts!;
@@ -240,18 +241,25 @@ export function useSpectrumGesture(options: Options) {
         cancelAnimationFrame(frame.current);
         frame.current = 0;
         lastTap.current.at = 0;
-      } else flush();
+      } else if (g.moved) {
+        flush();
+      } else {
+        pending.current = null;
+        cancelAnimationFrame(frame.current);
+        frame.current = 0;
+      }
       if (!cancelled && !scrolled && !g.pinched) {
-        if (
-          (!g.moved && g.mode !== "low" && g.mode !== "high") ||
-          g.mode === "tune"
-        )
+        if (!g.moved && g.mode !== "low" && g.mode !== "high") {
+          const tapFreq = Math.round(position(g, g.startX) * 1000) / 1000;
+          latest.current.onTune(tapFreq, g.view.start + g.view.span / 2);
+        } else if (g.mode === "tune") {
           latest.current.onTune(
-            g.moved && g.mode === "tune"
+            g.moved
               ? g.frequency + ((e.clientX - g.startX) / g.width) * g.view.span
-              : position(g, e.clientX),
+              : position(g, g.startX),
             g.view.start + g.view.span / 2,
           );
+        }
       }
       if (
         !cancelled &&
@@ -265,7 +273,7 @@ export function useSpectrumGesture(options: Options) {
           now - lastTap.current.at < 320 &&
           Math.abs(e.clientX - lastTap.current.x) < 20
         ) {
-          const f = position(g, e.clientX);
+          const f = Math.round(position(g, g.startX) * 1000) / 1000;
           latest.current.onTune(f, f);
           lastTap.current = { at: 0, x: e.clientX };
         } else lastTap.current = { at: now, x: e.clientX };
